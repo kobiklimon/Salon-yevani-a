@@ -91,8 +91,10 @@
         let allBranches = [];
         let monthEvents = [];
         let isAdmin = false;
+        let isBranchManager = false;
         let currentUserPhone = '';
         let currentUserName = '';
+        let userManagedBranchId = '';
 
         const defaultColors = ['#d4af37', '#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
 
@@ -185,6 +187,17 @@
                 isAdmin = true;
             } else {
                 isAdmin = false;
+            }
+
+            // Check if user is a branch manager for any branch
+            const managedBranch = allBranches.find(b => cleanPhone(b.managerPhone) === currentUserPhone || (matched && matched.role === "מנהל סניף" && matched.branchName === b.name));
+            if (managedBranch) {
+                isBranchManager = true;
+                userManagedBranchId = managedBranch.id;
+            } else if (matched && matched.role === "מנהל סניף") {
+                isBranchManager = true;
+            } else {
+                isBranchManager = false;
             }
 
             const adminTabBtn = document.getElementById('btn-tab-admin');
@@ -441,16 +454,16 @@
             monthEvents = [];
             snap.forEach(d => {
                 const eventData = d.data();
-                if (isAdmin) {
+                
+                // SHOW EVENT IF: Admin OR Selected Branch OR User is assigned OR User manages this branch
+                const isBranchManagerForEvent = isBranchManager && (userManagedBranchId === eventData.branchId || !userManagedBranchId);
+                const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
+                    const lowerStaff = staffStr.toLowerCase();
+                    return lowerStaff.includes(currentUserName.toLowerCase()) || lowerStaff.includes(currentUserPhone);
+                });
+
+                if (isAdmin || isBranchManagerForEvent || isUserAssigned) {
                     monthEvents.push({ id: d.id, ...eventData });
-                } else {
-                    const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
-                        const lowerStaff = staffStr.toLowerCase();
-                        return lowerStaff.includes(currentUserName.toLowerCase()) || lowerStaff.includes(currentUserPhone);
-                    });
-                    if (isUserAssigned) {
-                        monthEvents.push({ id: d.id, ...eventData });
-                    }
                 }
             });
 
@@ -470,7 +483,7 @@
                 <div class="cal-day-name">א'</div><div class="cal-day-name">ב'</div>
                 <div class="cal-day-name">ג'</div><div class="cal-day-name">ד'</div>
                 <div class="cal-day-name">ה'</div><div class="cal-day-name">ו'</div>
-                <div class="cal-day-name">开拓'</div>
+                <div class="cal-day-name">ש'</div>
             `;
 
             for (let i = 0; i < firstDay; i++) {
@@ -488,7 +501,7 @@
                     return `<div class="cal-event-badge" style="background-color:${bColor};">${e.time} ${bName ? `- ${bName}` : ''}</div>`;
                 }).join('');
 
-                const canClick = isAdmin || dayEvents.length > 0;
+                const canClick = isAdmin || isBranchManager || dayEvents.length > 0;
                 const clickAttr = canClick ? `onclick="openDayModal('${dateStr}')"` : '';
 
                 gridHTML += `
@@ -511,6 +524,7 @@
             rosterContainer.innerHTML = '';
             
             if (!isAdmin || !currentBranchId) {
+                // HIDE SCHEDULING FORM FOR NON-ADMINS (BRANCH MANAGERS / MUSICIANS)
                 document.getElementById('save-event-form').classList.add('hidden');
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
@@ -1133,6 +1147,3 @@
 
 </body>
 </html>
-
-
-
