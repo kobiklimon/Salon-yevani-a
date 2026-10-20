@@ -174,17 +174,19 @@
             loadAdminData();
         });
 
-        // Add Musician with Email field
+        // Add Musician with Email & Phone fields
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
             const name = document.getElementById('musician-name').value;
             const role = document.getElementById('musician-role').value;
             const email = document.getElementById('musician-email').value.trim().toLowerCase();
+            const phone = document.getElementById('musician-phone').value.trim();
 
-            await addDoc(collection(db, "musicians"), { name, role, email });
+            await addDoc(collection(db, "musicians"), { name, role, email, phone });
             document.getElementById('musician-name').value = '';
             document.getElementById('musician-email').value = '';
+            document.getElementById('musician-phone').value = '';
             alert("איש צוות נוסף בהצלחה!");
             await loadMusiciansData();
             loadAdminData();
@@ -212,7 +214,7 @@
             mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים וזמרים:</h4>';
             allMusicians.forEach(m => {
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; margin:5px 0; align-items:center;">
-                    <span>🎵 ${m.name} (${m.role})<br><small style="color:var(--text-muted);">${m.email || 'ללא אימייל'}</small></span>
+                    <span>🎵 ${m.name} (${m.role})<br><small style="color:var(--text-muted);">📧 ${m.email || 'אין אימייל'} | 📱 ${m.phone || 'אין טלפון'}</small></span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                 </div>`;
             });
@@ -253,7 +255,6 @@
             const snap = await getDocs(q);
             
             const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
-            // מציאת איש הצוות התואם לפי כתובת האימייל שהוזנה בהגדרות
             const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
 
             monthEvents = [];
@@ -511,7 +512,8 @@
                             <option value="גיטרה">גיטרה</option>
                             <option value="סאונד">טכנאי סאונד</option>
                         </select>
-                        <input type="email" id="musician-email" placeholder="אימייל הנגן (למשל: test@gmail.com)" required>
+                        <input type="email" id="musician-email" placeholder="אימייל (למשל: test@gmail.com)" required>
+                        <input type="tel" id="musician-phone" placeholder="מספר טלפון (למשל: 050-1234567)" required>
                         <button type="submit">הוסף איש צוות</button>
                     </form>
                     <div id="musicians-list"></div>
