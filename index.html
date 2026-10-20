@@ -94,13 +94,8 @@
             if(tabName === 'admin' && isAdmin) loadAdminData();
         };
 
-        // Auth State Observer with Safety Fallback Timeout
-        let authResolved = false;
-
+        // Auth State Observer - instantly shows correct section without hanging
         onAuthStateChanged(auth, async (user) => {
-            authResolved = true;
-            document.getElementById('loading-spinner').classList.add('hidden');
-
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
@@ -114,14 +109,6 @@
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
-
-        // Fallback: If auth takes more than 1.5s, force show login screen
-        setTimeout(() => {
-            if (!authResolved) {
-                document.getElementById('loading-spinner').classList.add('hidden');
-                document.getElementById('auth-section').classList.remove('hidden');
-            }
-        }, 1500);
 
         async function checkUserAdminStatus(user) {
             if (user.email.toLowerCase() === "kobiklimon@gmail.com") {
@@ -506,12 +493,6 @@
                 return;
             }
 
-            if(assignedStaff.length === 0) && isAdmin { // Safeguard
-                alert("נא לבחור לפחות איש צוות אחד להופעה.");
-                return;
-            }
-
-            // Fixed small typo check:
             if(assignedStaff.length === 0) {
                 alert("נא לבחור לפחות איש צוות אחד להופעה.");
                 return;
@@ -539,13 +520,8 @@
 
     <div class="container">
         
-        <!-- Loading Spinner State -->
-        <div id="loading-spinner" class="card" style="text-align: center; padding: 40px;">
-            <h3 style="color: var(--accent-gold);">טוענת נתונים...</h3>
-            <p style="color: var(--text-muted); margin-top: 10px; font-size: 0.9rem;">אנא המתן רגע קט</p>
-        </div>
-
-        <div id="auth-section" class="card hidden">
+        <!-- Default visible auth-section so the screen is NEVER blank -->
+        <div id="auth-section" class="card">
             <h2 style="margin-bottom: 15px; text-align: center;">התחברות / הרשמה</h2>
             <form id="login-form" onsubmit="return false;">
                 <input type="email" id="login-email" required placeholder="אימייל">
