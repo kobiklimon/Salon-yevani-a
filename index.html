@@ -470,7 +470,7 @@
                 <div class="cal-day-name">א'</div><div class="cal-day-name">ב'</div>
                 <div class="cal-day-name">ג'</div><div class="cal-day-name">ד'</div>
                 <div class="cal-day-name">ה'</div><div class="cal-day-name">ו'</div>
-                <div class="cal-day-name">ש'</div>
+                <div class="cal-day-name">开拓'</div>
             `;
 
             for (let i = 0; i < firstDay; i++) {
@@ -502,7 +502,7 @@
             document.getElementById('calendar-grid').innerHTML = gridHTML;
         }
 
-        window.openDayModal = (dateStr) => {
+        window.openDayModal = async (dateStr) => {
             document.getElementById('event-date-input').value = dateStr;
             document.getElementById('event-time-input').value = "20:00";
             document.getElementById('modal-date-title').textContent = `הופעות/שיבוצים לתאריך: ${dateStr}`;
@@ -515,17 +515,43 @@
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
                 
-                // FILTER ONLY MUSICIANS AND SINGERS (EXCLUDE BRANCH MANAGERS FROM ROSTER)
+                // 1. Fetch ALL shows across ALL branches on this specific date to find busy musicians
+                const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
+                const busyMap = {}; // musicianName -> branchName
+
+                dayEventsSnap.forEach(docSnap => {
+                    const evData = docSnap.data();
+                    const bObj = allBranches.find(b => b.id === evData.branchId);
+                    const bName = bObj ? bObj.name : 'סניף אחר';
+                    
+                    if (evData.assignedStaff) {
+                        evData.assignedStaff.forEach(staffStr => {
+                            allMusicians.forEach(m => {
+                                if (staffStr.toLowerCase().includes(m.name.toLowerCase())) {
+                                    busyMap[m.name.toLowerCase()] = bName;
+                                }
+                            });
+                        });
+                    }
+                });
+
+                // 2. Filter active musicians and singers (exclude branch managers)
                 const activeMusiciansAndSingers = allMusicians.filter(m => m.status !== "inactive" && m.role !== "מנהל סניף");
 
                 if (activeMusiciansAndSingers.length === 0) {
                     rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים פעילים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
                 } else {
                     activeMusiciansAndSingers.forEach(m => {
+                        const busyBranch = busyMap[m.name.toLowerCase()];
+                        const isBusyOtherBranch = !!busyBranch;
+
                         rosterContainer.innerHTML += `
-                            <div class="roster-item" id="item-m-${m.id}">
-                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" onchange="updateRoleDisabling()">
-                                <label for="m-${m.id}">${m.name} <span class="badge">${m.role}</span></label>
+                            <div class="roster-item ${isBusyOtherBranch ? 'disabled-role' : ''}" id="item-m-${m.id}">
+                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" ${isBusyOtherBranch ? 'disabled' : ''} onchange="updateRoleDisabling()">
+                                <label for="m-${m.id}">
+                                    ${m.name} <span class="badge">${m.role}</span>
+                                    ${isBusyOtherBranch ? `<br><small style="color:var(--danger); font-size:0.7rem;">(תפוס ב: ${busyBranch})</small>` : ''}
+                                </label>
                             </div>
                         `;
                     });
@@ -549,7 +575,7 @@
                 if (!cb.checked && selectedRoles.includes(role)) {
                     cb.disabled = true;
                     if(parentDiv) parentDiv.classList.add('disabled-role');
-                } else {
+                } else if (!cb.disabled) {
                     cb.disabled = false;
                     if(parentDiv) parentDiv.classList.remove('disabled-role');
                 }
@@ -813,7 +839,7 @@
             const cancellingMusician = allMusicians.find(m => m.name.toLowerCase() === cancellingMusicianName.toLowerCase());
             const roleNeeded = cancellingMusician ? cancellingMusician.role : null;
 
-            const q = query(collection(db, "events"), where("date", "==", eventDate), where("time", "==", eventTime));
+            const q = query(collection(db, "events"), where("date", "==", eventDate));
             const busySnap = await getDocs(q);
 
             const busyMusicianNames = [];
@@ -1107,3 +1133,6 @@
 
 </body>
 </html>
+
+
+
