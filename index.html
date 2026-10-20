@@ -90,6 +90,7 @@
         let allMusicians = [];
         let allBranches = [];
         let monthEvents = [];
+        let allCancellationRequests = [];
         let isAdmin = false;
         let isBranchManager = false;
         let currentUserPhone = '';
@@ -189,7 +190,6 @@
                 isAdmin = false;
             }
 
-            // Check if user is a branch manager for any branch
             const managedBranch = allBranches.find(b => cleanPhone(b.managerPhone) === currentUserPhone || (matched && matched.role === "מנהל סניף" && matched.branchName === b.name));
             if (managedBranch) {
                 isBranchManager = true;
@@ -455,7 +455,6 @@
             snap.forEach(d => {
                 const eventData = d.data();
                 
-                // SHOW EVENT IF: Admin OR Selected Branch OR User is assigned OR User manages this branch
                 const isBranchManagerForEvent = isBranchManager && (userManagedBranchId === eventData.branchId || !userManagedBranchId);
                 const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
                     const lowerStaff = staffStr.toLowerCase();
@@ -524,14 +523,12 @@
             rosterContainer.innerHTML = '';
             
             if (!isAdmin || !currentBranchId) {
-                // HIDE SCHEDULING FORM FOR NON-ADMINS (BRANCH MANAGERS / MUSICIANS)
                 document.getElementById('save-event-form').classList.add('hidden');
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
                 
-                // 1. Fetch ALL shows across ALL branches on this specific date to find busy musicians
                 const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
-                const busyMap = {}; // musicianName -> branchName
+                const busyMap = {}; 
 
                 dayEventsSnap.forEach(docSnap => {
                     const evData = docSnap.data();
@@ -549,7 +546,6 @@
                     }
                 });
 
-                // 2. Filter active musicians and singers (exclude branch managers)
                 const activeMusiciansAndSingers = allMusicians.filter(m => m.status !== "inactive" && m.role !== "מנהל סניף");
 
                 if (activeMusiciansAndSingers.length === 0) {
@@ -561,7 +557,7 @@
 
                         rosterContainer.innerHTML += `
                             <div class="roster-item ${isBusyOtherBranch ? 'disabled-role' : ''}" id="item-m-${m.id}">
-                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" ${isBusyOtherBranch ? 'disabled' : ''} onchange="updateRoleDisabling()">
+                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-busy="${isBusyOtherBranch ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isBusyOtherBranch ? 'disabled' : ''} onchange="updateRoleDisabling()">
                                 <label for="m-${m.id}">
                                     ${m.name} <span class="badge">${m.role}</span>
                                     ${isBusyOtherBranch ? `<br><small style="color:var(--danger); font-size:0.7rem;">(תפוס ב: ${busyBranch})</small>` : ''}
@@ -584,12 +580,16 @@
 
             document.querySelectorAll('.musician-checkbox').forEach(cb => {
                 const role = cb.getAttribute('data-role');
+                const isBusy = cb.getAttribute('data-busy') === 'true';
                 const parentDiv = document.getElementById(`item-${cb.id}`);
                 
-                if (!cb.checked && selectedRoles.includes(role)) {
+                if (isBusy) {
                     cb.disabled = true;
                     if(parentDiv) parentDiv.classList.add('disabled-role');
-                } else if (!cb.disabled) {
+                } else if (!cb.checked && selectedRoles.includes(role)) {
+                    cb.disabled = true;
+                    if(parentDiv) parentDiv.classList.add('disabled-role');
+                } else {
                     cb.disabled = false;
                     if(parentDiv) parentDiv.classList.remove('disabled-role');
                 }
@@ -614,13 +614,29 @@
                     return lower.includes(currentUserName.toLowerCase()) || lower.includes(currentUserPhone);
                 });
 
+                // CHECK PENDING CANCELLATION REQUEST FOR THIS EVENT AND THIS USER
+                const pendingRequest = allCancellationRequests.find(req => 
+                    req.eventId === e.id && 
+                    req.musicianPhone === currentUserPhone && 
+                    req.status === 'pending'
+                );
+
+                let cancelBtnHTML = '';
+                if (isUserInEvent) {
+                    if (pendingRequest) {
+                        cancelBtnHTML = `<button type="button" disabled style="width:100%; margin-top:10px; background-color:#ffa726; color:#000; cursor:not-allowed; opacity:0.9;">⏳ בקשה לביטול נשלחה</button>`;
+                    } else {
+                        cancelBtnHTML = `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}', '${e.branchId}')">🚨 בקש ביטול הופעה</button>`;
+                    }
+                }
+
                 return `
                 <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:4px solid ${bColor};">
                     <strong>📍 ${bName} | 🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
                     ${isAdmin ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
-                    ${isUserInEvent ? `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}', '${e.branchId}')">🚨 בקש ביטול הופעה</button>` : ''}
+                    ${cancelBtnHTML}
                 </div>
             `;}).join('');
         }
@@ -651,9 +667,12 @@
             const q = collection(db, "cancellation_requests");
             onSnapshot(q, (snapshot) => {
                 let pendingCount = 0;
+                allCancellationRequests = [];
 
                 snapshot.forEach(docSnap => {
-                    const data = docSnap.data();
+                    const data = { id: docSnap.id, ...docSnap.data() };
+                    allCancellationRequests.push(data);
+
                     if (isAdmin && data.status === "pending") {
                         pendingCount++;
                     } else if (!isAdmin && data.musicianPhone === currentUserPhone) {
