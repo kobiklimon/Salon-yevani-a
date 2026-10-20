@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>סלון יווני - ניהול סניפים והופעות</title>
+    <title>סלון יווני - ניהול הופעות וסניפים</title>
     
     <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogI9eo15DXqSAtINeh15z115Ug16nXldeg15kiLAogICJzaG9ydF9uYW1lIjogI9eo15DXqSIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMWExYTFhIiwKICAidGhlbWVfY29sb3IiOiAiI2Q0YWYzNyIKfQ==">
     <meta name="theme-color" content="#d4af37">
@@ -24,12 +24,12 @@
         body { background-color: var(--bg-color); color: var(--text-color); direction: rtl; padding-bottom: 40px; }
 
         header { background: linear-gradient(180deg, #1f1f1f 0%, #121212 100%); padding: 15px; text-align: center; border-bottom: 2px solid var(--accent-gold); position: sticky; top: 0; z-index: 100; }
-        header h1 { color: var(--accent-gold); font-size: 1.4rem; }
+        header h1 { color: var(--accent-gold); font-size: 1.3rem; }
 
         .container { max-width: 700px; margin: 0 auto; padding: 12px; }
 
-        .nav-tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
-        .tab-btn { flex: 1; padding: 10px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+        .nav-tabs { display: flex; gap: 8px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 12px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; cursor: pointer; text-align: center; }
         .tab-btn.active { background: var(--accent-gold); color: #000; border-color: var(--accent-gold); }
 
         .card { background-color: var(--card-bg); border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--border-color); }
@@ -42,21 +42,21 @@
         .hidden { display: none !important; }
 
         /* Calendar Styles */
-        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
         .cal-day-name { font-weight: bold; font-size: 0.8rem; color: var(--accent-gold); padding: 4px; }
-        .cal-cell { background: #252525; border-radius: 6px; min-height: 55px; padding: 4px; font-size: 0.8rem; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; border: 1px solid transparent; }
+        .cal-cell { background: #252525; border-radius: 6px; min-height: 60px; padding: 4px; font-size: 0.8rem; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; border: 1px solid transparent; }
         .cal-cell:hover { border-color: var(--accent-gold); }
         .cal-cell.empty { background: transparent; cursor: default; }
         .cal-cell .day-num { font-weight: bold; text-align: right; }
         .cal-event-badge { background: var(--accent-gold); color: #000; border-radius: 4px; font-size: 0.65rem; padding: 2px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
 
         /* Roster Checkboxes */
-        .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
-        .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
-        .roster-item input { width: auto; margin: 0; }
+        .roster-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 10px 0; }
+        .roster-item { display: flex; align-items: center; gap: 10px; background: #2a2a2a; padding: 10px; border-radius: 6px; }
+        .roster-item input { width: auto; margin: 0; transform: scale(1.3); }
 
-        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
     </style>
 
     <script type="module">
@@ -122,7 +122,7 @@
         // Load Branches Select Dropdown
         async function loadBranchesSelect() {
             const select = document.getElementById('branch-select');
-            select.innerHTML = '<option value="">בחר סניף...</option>';
+            select.innerHTML = '<option value="">-- בחר סניף להצגת יומן --</option>';
             const snap = await getDocs(collection(db, "branches"));
             snap.forEach(d => {
                 select.innerHTML += `<option value="${d.id}">${d.data().name}</option>`;
@@ -165,19 +165,19 @@
             const bList = document.getElementById('branches-list');
             bList.innerHTML = '<h4>סניפים קיימים:</h4>';
             bSnap.forEach(d => {
-                bList.innerHTML += `<div style="display:flex; justify:space-between; margin:5px 0;">
+                bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0; background:#2a2a2a; padding:8px; border-radius:6px;">
                     <span>📍 ${d.data().name}</span>
-                    <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
+                    <button class="btn-danger" style="width:auto; padding:4px 10px; margin:0;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
                 </div>`;
             });
 
             // Musicians list
             const mList = document.getElementById('musicians-list');
-            mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים וזמרים:</h4>';
+            mList.innerHTML = '<h4 style="margin-top:12px;">צוות נגנים וזמרים:</h4>';
             allMusicians.forEach(m => {
-                mList.innerHTML += `<div style="display:flex; justify:space-between; margin:5px 0;">
-                    <span>🎵 ${m.name} (${m.role})</span>
-                    <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
+                mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0; background:#2a2a2a; padding:8px; border-radius:6px;">
+                    <span>🎵 ${m.name} <span class="badge">${m.role}</span></span>
+                    <button class="btn-danger" style="width:auto; padding:4px 10px; margin:0;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                 </div>`;
             });
         }
@@ -185,17 +185,18 @@
         window.deleteItem = async (col, id) => {
             if(confirm("למחוק פריט זה?")) {
                 await deleteDoc(doc(db, col, id));
-                loadMusiciansData();
-                loadAdminData();
-                loadBranchesSelect();
+                await loadMusiciansData();
+                await loadAdminData();
+                await loadBranchesSelect();
+                if(currentBranchId) loadCalendarView();
             }
         };
 
-        // Calendar Logic
-        document.getElementById('branch-select').addEventListener('change', (e) => {
-            currentBranchId = e.target.value;
-            if(currentBranchId) loadCalendarView();
-        });
+        // Branch Selection Event
+        window.onBranchChanged = () => {
+            currentBranchId = document.getElementById('branch-select').value;
+            loadCalendarView();
+        };
 
         window.changeMonth = (dir) => {
             currentMonth += dir;
@@ -205,13 +206,18 @@
         };
 
         async function loadCalendarView() {
+            const container = document.getElementById('calendar-container');
             if (!currentBranchId) {
-                document.getElementById('calendar-container').innerHTML = '<p style="text-align:center;">נא לבחור סניף מראש העמוד</p>';
+                container.classList.add('hidden');
+                document.getElementById('no-branch-msg').classList.remove('hidden');
                 return;
             }
 
+            container.classList.remove('hidden');
+            document.getElementById('no-branch-msg').classList.add('hidden');
+
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
-            document.getElementById('cal-month-title').textContent = `${monthNames[currentMonth]} ${currentYear}`;
+            document.getElementById('cal-month-title').textContent = `${monthNames[currentMonth]}${currentYear}`;
 
             // Load Events for Branch
             const q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
@@ -238,7 +244,7 @@
                 const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const dayEvents = monthEvents.filter(e => e.date === dateStr);
 
-                let eventBadges = dayEvents.map(e => `<div class="cal-event-badge">${e.time} - הופעה</div>`).join('');
+                let eventBadges = dayEvents.map(e => `<div class="cal-event-badge">${e.time} הופעה</div>`).join('');
 
                 gridHTML += `
                     <div class="cal-cell" onclick="openDayModal('${dateStr}')">
@@ -254,7 +260,7 @@
         // Modal / Event Creation & Shift Roster
         window.openDayModal = (dateStr) => {
             document.getElementById('event-date-input').value = dateStr;
-            document.getElementById('modal-date-title').textContent = `הוספת/שיבוץ הופעה לתאריך: ${dateStr}`;
+            document.getElementById('modal-date-title').textContent = `שיבוץ הופעה לתאריך: ${dateStr}`;
             
             // Build Musician Roster Checkboxes
             const rosterContainer = document.getElementById('musicians-roster');
@@ -266,158 +272,25 @@
                     rosterContainer.innerHTML += `
                         <div class="roster-item">
                             <input type="checkbox" id="m-${m.id}" value="${m.name} (${m.role})">
-                            <label for="m-${m.id}">${m.name} <span class="badge">${m.role}</span></label>
+                            <label for="m-${m.id}" style="cursor:pointer; width:100\%;">${m.name} <span class="badge">${m.role}</span></label>
                         </div>
                     `;
                 });
             }
 
             // Show existing events on this day
-            const existingList = document.getElementById('existing-day-events');
-            const dayEvents = monthEvents.filter(e => e.date === dateStr);
-            existingList.innerHTML = dayEvents.map(e => `
-                <div style="background:#2a2a2a; padding:8px; margin-top:8px; border-radius:6px; font-size:0.85rem;">
-                    <strong>🕒 שעה: ${e.time}</strong><br>
-                    👥 צוות: ${e.assignedStaff ? e.assignedStaff.join(', ') : 'לא שובצו'}<br>
-                    <button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:5px;" onclick="deleteItem('events', '${e.id}')">מחק הופעה</button>
-                </div>
-            `).join('');
+            renderExistingDayEvents(dateStr);
 
             document.getElementById('event-modal').classList.remove('hidden');
         };
 
-        window.closeModal = () => document.getElementById('event-modal').classList.add('hidden');
-
-        // Save Event
-        document.getElementById('save-event-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const date = document.getElementById('event-date-input').value;
-            const time = document.getElementById('event-time-input').value;
-            
-            // Get Selected Staff
-            const assignedStaff = [];
-            allMusicians.forEach(m => {
-                const cb = document.getElementById(`m-${m.id}`);
-                if (cb && cb.checked) assignedStaff.push(cb.value);
-            });
-
-            await addDoc(collection(db, "events"), {
-                branchId: currentBranchId,
-                date,
-                time,
-                assignedStaff,
-                createdAt: new Date()
-            });
-
-            closeModal();
-            loadCalendarView();
-        });
-
-    </script>
-</head>
-<body>
-
-    <header>
-        <h1>🏛️ סלון יווני - ניהול הופעות וסניפים</h1>
-    </header>
-
-    <div class="container">
-        
-        <!-- Auth View -->
-        <div id="auth-section" class="card">
-            <h2 style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
-            <form id="login-form">
-                <input type="email" id="login-email" required placeholder="אימייל מנהל">
-                <input type="password" id="login-password" required placeholder="סיסמה">
-                <button type="submit">התחבר</button>
-            </form>
-        </div>
-
-        <!-- Main Dashboard View -->
-        <div id="main-app" class="hidden">
-            
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <span style="font-size:0.85rem; color:var(--text-muted);">מחובר: <strong id="user-email"></strong></span>
-                <button id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
-            </div>
-
-            <!-- Branch Selector TopBar -->
-            <div class="card" style="padding:10px; margin-bottom:10px;">
-                <label style="font-weight:bold; color:var(--accent-gold);">בחירת סניף פעיל:</label>
-                <select id="branch-select" style="margin-bottom:0; margin-top:5px;"></select>
-            </div>
-
-            <!-- Tabs Navigation -->
-            <div class="nav-tabs">
-                <button id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
-                <button id="btn-tab-admin" class="tab-btn" onclick="switchTab('admin')">⚙️ תפריט מנהל (סניפים וצוות)</button>
-            </div>
-
-            <!-- TAB 1: CALENDAR VIEW -->
-            <div id="tab-calendar" class="tab-content">
-                <div class="card" id="calendar-container">
-                    <div class="calendar-header">
-                        <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
-                        <h3 id="cal-month-title" style="color:var(--accent-gold);">--</h3>
-                        <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">חודש הבא ▶</button>
-                    </div>
-                    <div id="calendar-grid" class="calendar-grid"></div>
-                </div>
-            </div>
-
-            <!-- TAB 2: ADMIN MENU -->
-            <div id="tab-admin" class="tab-content hidden">
-                <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">1. ניהול סניפים</h3>
-                    <form id="add-branch-form">
-                        <input type="text" id="new-branch-name" placeholder="שם הסניף החדש (למשל: סניף אשדוד)" required>
-                        <button type="submit">הוסף סניף</button>
-                    </form>
-                    <div id="branches-list"></div>
-                </div>
-
-                <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">2. ניהול צוות נגנים וזמרים</h3>
-                    <form id="add-musician-form">
-                        <input type="text" id="musician-name" placeholder="שם מלא" required>
-                        <select id="musician-role">
-                            <option value="זמר/ת">זמר/ת</option>
-                            <option value="בוזוקי">בוזוקי</option>
-                            <option value="קלידים">קלידים</option>
-                            <option value="דרבוקה/תופים">דרבוקה/תופים</option>
-                            <option value="גיטרה">גיטרה</option>
-                            <option value="סאונד">טכנאי סאונד</option>
-                        </select>
-                        <button type="submit">הוסף איש צוות</button>
-                    </form>
-                    <div id="musicians-list"></div>
-                </div>
-            </div>
-
-            <!-- MODAL: ADD / EDIT SHOW FOR SPECIFIC DAY -->
-            <div id="event-modal" class="card hidden" style="position:fixed; top:5%; left:5%; right:5%; bottom:5%; z-index:1000; overflow-y:auto; border:2px solid var(--accent-gold);">
-                <h3 id="modal-date-title" style="color:var(--accent-gold); margin-bottom:10px;"></h3>
-                
-                <form id="save-event-form">
-                    <input type="hidden" id="event-date-input">
-                    <label>שעת הופעה:</label>
-                    <input type="time" id="event-time-input" required value="21:00">
-
-                    <label style="font-weight:bold; display:block; margin-top:10px;">שיבוץ נגנים וזמרים להופעה זו:</label>
-                    <div id="musicians-roster" class="roster-grid"></div>
-
-                    <button type="submit" style="margin-top:15px;">שמור הופעה ושיבוץ צוות</button>
-                    <button type="button" class="btn-secondary" onclick="closeModal()">סגור / ביטול</button>
-                </form>
-
-                <hr style="margin:15px 0; border-color:#444;">
-                <h4>הופעות קיימות ביום זה:</h4>
-                <div id="existing-day-events"></div>
-            </div>
-
-        </div>
-
-    </div>
-
-</body>
-</html>
+        function renderExistingDayEvents(dateStr) {
+            const existingList = document.getElementById('existing-day-events');
+            const dayEvents = monthEvents.filter(e => e.date === dateStr);
+            if(dayEvents.length === 0) {
+                existingList.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">אין הופעות רשומות ביום זה.</p>';
+            } else {
+                existingList.innerHTML = dayEvents.map(e => `
+                    <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:3px solid var(--accent-gold);">
+                        <strong>🕒 שעה: ${e.time}</strong><br>
+                        👥 <strong>צוות משובץ:</strong><br> ${e.assignedStaff && e.assignedStaff.length ?
