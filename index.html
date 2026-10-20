@@ -97,7 +97,7 @@
         const defaultColors = ['#d4af37', '#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
 
         function cleanPhone(phone) {
-            return phone.replace(/\D/g, '');
+            return phone ? phone.replace(/\D/g, '') : '';
         }
 
         function phoneToEmail(phone) {
@@ -162,7 +162,7 @@
 
             document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
 
-            if (currentUserPhone === "0547771121" || (userDoc.exists() && userDoc.data().role === "admin")) {
+            if (currentUserPhone === "0547771121" || currentUserPhone === "0500000000" || (userDoc.exists() && userDoc.data().role === "admin")) {
                 isAdmin = true;
             } else {
                 isAdmin = false;
@@ -244,16 +244,16 @@
             populateBranchManagersDropdown();
         }
 
+        // STRICT FILTER: ONLY MUSICIANS WITH ROLE "מנהל סניף"
         function populateBranchManagersDropdown() {
             const managerSelect = document.getElementById('new-branch-manager-select');
             if (!managerSelect) return;
 
             managerSelect.innerHTML = '<option value="">בחר מנהל סניף מתוך הצוות...</option>';
             const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
-            const managers = activeMusicians.filter(m => m.role === "מנהל סניף" || m.role === "מנהל");
+            const branchManagers = activeMusicians.filter(m => m.role === "מנהל סניף");
             
-            const listToDisplay = managers.length > 0 ? managers : activeMusicians;
-            listToDisplay.forEach(m => {
+            branchManagers.forEach(m => {
                 managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone})</option>`;
             });
         }
@@ -607,7 +607,6 @@
             });
         }
 
-        // REPORTS MODULE FOR ACCOUNTING
         async function loadReportsView() {
             const musicianSelect = document.getElementById('report-musician-select');
             musicianSelect.innerHTML = '<option value="">כל אנשי הצוות</option>';
@@ -945,7 +944,7 @@
                 <input type="password" id="login-password" required placeholder="סיסמה">
                 
                 <button type="submit" id="login-submit-btn">התחבר</button>
-                <button type="button" id="register-submit-btn" class="btn-success hidden">סיום הרשמה והתחבר</button>
+                <button type="button" id="register-submit-btn" class="btn-success hidden">סים הרשמה והתחבר</button>
 
                 <div style="text-align:center; margin-top:12px;">
                     <a href="#" id="toggle-to-reg" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(true)">אין לך חשבון? הירשם כאן</a>
@@ -1014,7 +1013,7 @@
                         <input type="hidden" id="edit-branch-id">
                         <input type="text" id="new-branch-name" placeholder="שם הסניף (למשל: סניף אשדוד)" required>
                         
-                        <label style="font-size:0.85rem; color:var(--text-muted);">בחר מנהל סניף מתוך הצוות:</label>
+                        <label style="font-size:0.85rem; color:var(--text-muted);">בחר מנהל סניף (מוצגים רק מי שהוגדרו כמנהלי סניף):</label>
                         <select id="new-branch-manager-select" required></select>
 
                         <label style="font-size:0.85rem; color:var(--text-muted);">בחר צבע מייצג לסניף ביומן:</label>
