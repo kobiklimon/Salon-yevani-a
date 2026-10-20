@@ -484,7 +484,6 @@
             `;}).join('');
         }
 
-        // Direct Cancellation Request without requiring reason
         window.requestCancellation = async (eventId, eventDate, eventTime, branchId) => {
             if (!confirm("האם אתה בטוח שברצונך לשלוח בקשת ביטול להופעה זו?")) return;
 
@@ -801,11 +800,9 @@
                         <input type="text" id="musician-name" placeholder="שם מלא (למשל: ישראל ישראלי)" required>
                         <select id="musician-role">
                             <option value="זמר/ת">זמר/ת</option>
-                            <option value="בוזוקי">בוזוקי</option>
                             <option value="קלידים">קלידים</option>
-                            <option value="דרבוקה/תופים">דרבוקה/תופים</option>
-                            <option value="גיטרה">גיטרה</option>
-                            <option value="סאונד">טכנאי סאונד</option>
+                            <option value="בוזוקי">בוזוקי</option>
+                            <option value="מנהל סניף">מנהל סניף</option>
                         </select>
                         <input type="email" id="musician-email" placeholder="אימייל (למשל: test@gmail.com)" required>
                         <input type="tel" id="musician-phone" placeholder="מספר טלפון (למשל: 050-1234567)" required>
