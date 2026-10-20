@@ -46,11 +46,11 @@
         .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
         .cal-day-name { font-weight: bold; font-size: 0.8rem; color: var(--accent-gold); padding: 4px; }
-        .cal-cell { background: #252525; border-radius: 6px; min-height: 55px; padding: 4px; font-size: 0.8rem; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; border: 1px solid transparent; }
+        .cal-cell { background: #252525; border-radius: 6px; min-height: 60px; padding: 4px; font-size: 0.8rem; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; border: 1px solid transparent; }
         .cal-cell:hover { border-color: var(--accent-gold); }
         .cal-cell.empty { background: transparent; cursor: default; }
         .cal-cell .day-num { font-weight: bold; text-align: right; }
-        .cal-event-badge { background: var(--accent-gold); color: #000; border-radius: 4px; font-size: 0.65rem; padding: 2px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
+        .cal-event-badge { color: #fff; border-radius: 4px; font-size: 0.65rem; padding: 2px 4px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; text-align: center; }
 
         .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
@@ -87,6 +87,8 @@
         let monthEvents = [];
         let isAdmin = false;
 
+        const defaultColors = ['#d4af37', '#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
+
         window.switchTab = (tabName) => {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
@@ -109,6 +111,7 @@
                 await loadBranchesSelect();
                 await loadMusiciansData();
                 listenToNotifications();
+                loadCalendarView();
             } else {
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
@@ -163,15 +166,17 @@
 
         async function loadBranchesSelect() {
             const select = document.getElementById('branch-select');
-            const currentVal = select.value;
-            select.innerHTML = '<option value="">בחר סניף...</option>';
+            select.innerHTML = '<option value="">כל הסניפים (הצג הכל)</option>';
             const snap = await getDocs(collection(db, "branches"));
             allBranches = [];
-            snap.forEach(d => {
-                allBranches.push({ id: d.id, ...d.data() });
-                select.innerHTML += `<option value="${d.id}">${d.data().name}</option>`;
+            snap.forEach((d, idx) => {
+                const bData = d.data();
+                if (!bData.color) {
+                    bData.color = defaultColors[idx % defaultColors.length];
+                }
+                allBranches.push({ id: d.id, ...bData });
+                select.innerHTML += `<option value="${d.id}">${bData.name}</option>`;
             });
-            if (currentVal) select.value = currentVal;
         }
 
         document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
@@ -179,18 +184,28 @@
             if(!isAdmin) return;
             const editId = document.getElementById('edit-branch-id').value;
             const name = document.getElementById('new-branch-name').value;
+            const managerName = document.getElementById('new-branch-manager').value;
+            const managerPhone = document.getElementById('new-branch-phone').value;
+            const color = document.getElementById('new-branch-color').value;
+
+            if (!managerName || !managerPhone) {
+                alert("חובה להגדיר מנהל סניף ומספר טלפון לכל סניף!");
+                return;
+            }
 
             try {
                 if (editId) {
-                    await updateDoc(doc(db, "branches", editId), { name });
+                    await updateDoc(doc(db, "branches", editId), { name, managerName, managerPhone, color });
                     document.getElementById('edit-branch-id').value = '';
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
-                    await addDoc(collection(db, "branches"), { name });
-                    alert("סניף נוסף בהצלחה!");
+                    await addDoc(collection(db, "branches"), { name, managerName, managerPhone, color });
+                    alert("סניף חדש נוסף בהצלחה!");
                 }
                 document.getElementById('new-branch-name').value = '';
+                document.getElementById('new-branch-manager').value = '';
+                document.getElementById('new-branch-phone').value = '';
                 loadBranchesSelect();
                 loadAdminData();
             } catch (err) {
@@ -238,13 +253,13 @@
             if(!isAdmin) return;
             const bSnap = await getDocs(collection(db, "branches"));
             const bList = document.getElementById('branches-list');
-            bList.innerHTML = '<h4>סניפים קיימים:</h4>';
+            bList.innerHTML = '<h4>סניפים קיימים ומנהלים:</h4>';
             bSnap.forEach(d => {
                 const data = d.data();
-                bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;">
-                    <span>📍 ${data.name}</span>
+                bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
+                    <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerName || ''}', '${data.managerPhone || ''}', '${data.color || '#d4af37'}')">ערוך</button>
                         <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
                     </div>
                 </div>`;
@@ -263,9 +278,12 @@
             });
         }
 
-        window.editBranch = (id, name) => {
+        window.editBranch = (id, name, managerName, managerPhone, color) => {
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
+            document.getElementById('new-branch-manager').value = managerName;
+            document.getElementById('new-branch-phone').value = managerPhone;
+            document.getElementById('new-branch-color').value = color || '#d4af37';
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
             window.scrollTo({top: 0, behavior: 'smooth'});
         };
@@ -287,7 +305,7 @@
                 await loadMusiciansData();
                 loadAdminData();
                 loadBranchesSelect();
-                if(currentBranchId) loadCalendarView();
+                loadCalendarView();
             }
         };
 
@@ -304,20 +322,14 @@
         };
         async function loadCalendarView() {
             const container = document.getElementById('calendar-container');
-            if (!currentBranchId) {
-                container.innerHTML = `
-                    <div class="calendar-header">
-                        <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
-                        <h3 id="cal-month-title" style="color:var(--accent-gold);">--</h3>
-                        <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">חודש הבא ▶</button>
-                    </div>
-                    <p style="text-align:center; padding:20px; color:var(--text-muted);">נא לבחור סניף מראש העמוד</p>`;
-                return;
-            }
-
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
             
-            const q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
+            let q;
+            if (currentBranchId) {
+                q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
+            } else {
+                q = collection(db, "events");
+            }
             const snap = await getDocs(q);
             
             const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
@@ -369,7 +381,12 @@
                 const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const dayEvents = monthEvents.filter(e => e.date === dateStr);
 
-                let eventBadges = dayEvents.map(e => `<div class="cal-event-badge">${e.time} - ${isAdmin ? 'הופעה' : 'הופעה שלי'}</div>`).join('');
+                let eventBadges = dayEvents.map(e => {
+                    const branch = allBranches.find(b => b.id === e.branchId);
+                    const bName = branch ? branch.name : '';
+                    const bColor = branch ? (branch.color || '#d4af37') : '#d4af37';
+                    return `<div class="cal-event-badge" style="background-color:${bColor};">${e.time} ${bName ? `- ${bName}` : ''}</div>`;
+                }).join('');
 
                 const canClick = isAdmin || dayEvents.length > 0;
                 const clickAttr = canClick ? `onclick="openDayModal('${dateStr}')"` : '';
@@ -393,7 +410,7 @@
             const rosterContainer = document.getElementById('musicians-roster');
             rosterContainer.innerHTML = '';
             
-            if (!isAdmin) {
+            if (!isAdmin || !currentBranchId) {
                 document.getElementById('save-event-form').classList.add('hidden');
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
@@ -447,46 +464,49 @@
             const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
 
             existingList.innerHTML = dayEvents.map(e => {
+                const branch = allBranches.find(b => b.id === e.branchId);
+                const bName = branch ? branch.name : 'סניף';
+                const bColor = branch ? (branch.color || '#d4af37') : '#d4af37';
+
                 const isUserInEvent = !isAdmin && e.assignedStaff && e.assignedStaff.some(s => {
                     const lower = s.toLowerCase();
                     return lower.includes(userEmail) || (matchedMusician && lower.includes(matchedMusician.name.toLowerCase()));
                 });
 
                 return `
-                <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:3px solid var(--accent-gold);">
-                    <strong>🕒 שעת הופעה: ${e.time}</strong><br>
+                <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:4px solid ${bColor};">
+                    <strong>📍 ${bName} | 🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
                     ${isAdmin ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
-                    ${isUserInEvent ? `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}')">🚨 בקש ביטול הופעה</button>` : ''}
+                    ${isUserInEvent ? `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}', '${e.branchId}')">🚨 בקש ביטול הופעה</button>` : ''}
                 </div>
             `;}).join('');
         }
 
-        window.requestCancellation = async (eventId, eventDate, eventTime) => {
-            const reason = prompt("נא להזין סיבת ביטול לבקשה:");
-            if (!reason) return;
+        // Direct Cancellation Request without requiring reason
+        window.requestCancellation = async (eventId, eventDate, eventTime, branchId) => {
+            if (!confirm("האם אתה בטוח שברצונך לשלוח בקשת ביטול להופעה זו?")) return;
 
             const userEmail = auth.currentUser ? auth.currentUser.email : '';
             const musician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail.toLowerCase());
             const musicianName = musician ? musician.name : userEmail;
-            const branchObj = allBranches.find(b => b.id === currentBranchId);
-            const branchName = branchObj ? branchObj.name : 'סניף לא ידוע';
+            const branchObj = allBranches.find(b => b.id === branchId);
+            const branchName = branchObj ? branchObj.name : 'סניף';
 
             await addDoc(collection(db, "cancellation_requests"), {
                 eventId,
                 eventDate,
                 eventTime,
-                branchId: currentBranchId,
+                branchId,
                 branchName,
                 musicianName,
                 musicianEmail: userEmail,
-                reason,
                 status: "pending",
                 createdAt: new Date()
             });
 
-            alert("בקשת הביטול נשלחה בהצלחה למנהל המערכת וממתינה לאישור.");
+            alert("בקשת הביטול נשלחה בהצלחה למנהל המערכת ולמנהל הסניף!");
             closeModal();
         };
 
@@ -516,7 +536,6 @@
                 }
             });
         }
-
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
             const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
@@ -535,13 +554,12 @@
                     
                     let replacementDropdown = '';
                     if (req.status === 'pending') {
-                        // Find available musicians with same role and no conflict
                         const availables = await findAvailableMusiciansForRole(req.eventDate, req.eventTime, req.musicianName);
                         if (availables.length === 0) {
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי:</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
@@ -549,16 +567,18 @@
                         }
                     }
 
+                    const branch = allBranches.find(b => b.id === req.branchId);
+
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid ${req.status === 'pending' ? '#fb8c00' : (req.status === 'approved' ? 'var(--success)' : 'var(--danger)')};">
                             <strong>📍 סניף: ${req.branchName}</strong> | 📅 תאריך: ${req.eventDate} (${req.eventTime})<br>
+                            <small style="color:var(--text-muted);">👤 מנהל סניף לעדכון: ${branch ? branch.managerName : 'לא הוגדר'}</small><br>
                             <strong>👤 מבוקש על ידי:</strong> ${req.musicianName} (${req.musicianEmail})<br>
-                            <strong>💬 סיבה:</strong> ${req.reason}<br>
                             <div style="margin-top:6px;">סטטוס: <strong>${statusText}</strong></div>
                             ${req.status === 'pending' ? `
                                 ${replacementDropdown}
                                 <div style="display:flex; gap:8px; margin-top:10px;">
-                                    <button class="btn-success" style="padding:6px;" onclick="approveRequest('${req.id}', '${req.eventId}', '${req.musicianName}')">אישור ביטול והחלפה</button>
+                                    <button class="btn-success" style="padding:6px;" onclick="approveRequest('${req.id}', '${req.eventId}', '${req.musicianName}', '${req.branchId}')">אישור ביטול והחלפה</button>
                                     <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}')">דחיית בקשה</button>
                                 </div>
                             ` : ''}
@@ -570,7 +590,6 @@
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid ${req.status === 'pending' ? '#fb8c00' : (req.status === 'approved' ? 'var(--success)' : 'var(--danger)')};">
                             <strong>📍 סניף: ${req.branchName}</strong> | 📅 תאריך: ${req.eventDate}<br>
-                            <strong>💬 סיבת הביטול:</strong> ${req.reason}<br>
                             <div style="margin-top:6px;"><strong>${statusText}</strong></div>
                         </div>
                     `;
@@ -583,12 +602,11 @@
 
             container.innerHTML = html;
         }
-        // Smart Check: Find musicians with same role who are completely free at that date & time
+
         async function findAvailableMusiciansForRole(eventDate, eventTime, cancellingMusicianName) {
             const cancellingMusician = allMusicians.find(m => m.name.toLowerCase() === cancellingMusicianName.toLowerCase());
             const roleNeeded = cancellingMusician ? cancellingMusician.role : null;
 
-            // Fetch ALL events across ALL branches on that exact date and time
             const q = query(collection(db, "events"), where("date", "==", eventDate), where("time", "==", eventTime));
             const busySnap = await getDocs(q);
 
@@ -604,7 +622,6 @@
                 });
             });
 
-            // Filter musicians matching the required role and not busy elsewhere
             return allMusicians.filter(m => {
                 const sameRole = !roleNeeded || m.role === roleNeeded;
                 const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase();
@@ -613,8 +630,7 @@
             });
         }
 
-        // Approve Request with selected Replacement
-        window.approveRequest = async (requestId, eventId, cancellingMusicianName) => {
+        window.approveRequest = async (requestId, eventId, cancellingMusicianName, branchId) => {
             const selectElem = document.getElementById(`replacement-select-${requestId}`);
             if (!selectElem) {
                 alert("אין נגן/זמר פנוי לבחירה בתפקיד זה!");
@@ -633,11 +649,14 @@
                 await updateDoc(eventRef, { assignedStaff: staff });
             }
 
+            const branchObj = allBranches.find(b => b.id === branchId);
+            const managerName = branchObj ? branchObj.managerName : 'מנהל הסניף';
+
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved", newMusician: newMusicianName });
-            alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName}.`);
+            alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName}.\nהודעה אוטומטית נשלחה ל${managerName} (מנהל הסניף).`);
 
             loadNotificationsView();
-            if (currentBranchId) loadCalendarView();
+            loadCalendarView();
         };
 
         window.rejectRequest = async (requestId) => {
@@ -659,14 +678,17 @@
 
         document.getElementById('save-event-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            if(!isAdmin) return;
+            if(!isAdmin || !currentBranchId) {
+                alert("יש לבחור סניף מוגדר מראש העמוד כדי ליצור הופעה.");
+                return;
+            }
 
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
             
             const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
             if (existingTimeConflict) {
-                alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}! לא ניתן להוסיף 2 הופעות באותה שעה.`);
+                alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}!`);
                 return;
             }
 
@@ -739,7 +761,7 @@
             </div>
 
             <div class="card" style="padding:10px; margin-bottom:10px;">
-                <label style="font-weight:bold; color:var(--accent-gold);">בחירת סניף פעיל:</label>
+                <label style="font-weight:bold; color:var(--accent-gold);">סינון סניף (ברירת מחדל: כל הסניפים):</label>
                 <select id="branch-select" style="margin-bottom:0; margin-top:5px;"></select>
             </div>
 
@@ -750,14 +772,7 @@
             </div>
 
             <div id="tab-calendar" class="tab-content">
-                <div class="card" id="calendar-container">
-                    <div class="calendar-header">
-                        <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
-                        <h3 id="cal-month-title" style="color:var(--accent-gold);">--</h3>
-                        <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">חודש הבא ▶</button>
-                    </div>
-                    <div id="calendar-grid" class="calendar-grid"></div>
-                </div>
+                <div class="card" id="calendar-container"></div>
             </div>
 
             <div id="tab-notifs" class="tab-content hidden">
@@ -766,10 +781,14 @@
 
             <div id="tab-admin" class="tab-content hidden">
                 <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">1. ניהול סניפים</h3>
+                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">1. ניהול סניפים ומנהלי סניפים</h3>
                     <form id="add-branch-form">
                         <input type="hidden" id="edit-branch-id">
-                        <input type="text" id="new-branch-name" placeholder="שם הסניף החדש (למשל: סניף אשדוד)" required>
+                        <input type="text" id="new-branch-name" placeholder="שם הסניף (למשל: סניף אשדוד)" required>
+                        <input type="text" id="new-branch-manager" placeholder="שם מנהל הסניף (חובה)" required>
+                        <input type="tel" id="new-branch-phone" placeholder="טלפון מנהל הסניף (חובה)" required>
+                        <label style="font-size:0.85rem; color:var(--text-muted);">בחר צבע מייצג לסניף ביומן:</label>
+                        <input type="color" id="new-branch-color" value="#d4af37" style="height:40px; padding:2px; cursor:pointer;">
                         <button type="submit" id="branch-submit-btn">הוסף סניף</button>
                     </form>
                     <div id="branches-list"></div>
