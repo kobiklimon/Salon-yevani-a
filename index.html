@@ -60,7 +60,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCis-H1d8436iH6vBkNfGWoy3ekkIDSflU",
@@ -80,6 +80,7 @@
         let currentMonth = new Date().getMonth();
         let allMusicians = [];
         let monthEvents = [];
+        let isAdmin = false;
 
         window.switchTab = (tabName) => {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -89,21 +90,44 @@
             document.getElementById(`tab-${tabName}`).classList.remove('hidden');
 
             if(tabName === 'calendar') loadCalendarView();
-            if(tabName === 'admin') loadAdminData();
+            if(tabName === 'admin' && isAdmin) loadAdminData();
         };
 
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
                 document.getElementById('user-email').textContent = user.email;
+
+                await checkUserAdminStatus(user);
                 loadBranchesSelect();
-                loadMusiciansData();
+                await loadMusiciansData();
             } else {
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
+
+        async function checkUserAdminStatus(user) {
+            if (user.email.toLowerCase() === "kobiklimon@gmail.com") {
+                isAdmin = true;
+            } else {
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists() && userDoc.data().role === "admin") {
+                    isAdmin = true;
+                } else {
+                    isAdmin = false;
+                }
+            }
+
+            const adminTabBtn = document.getElementById('btn-tab-admin');
+            if (isAdmin) {
+                adminTabBtn.classList.remove('hidden');
+            } else {
+                adminTabBtn.classList.add('hidden');
+                switchTab('calendar');
+            }
+        }
 
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -125,6 +149,7 @@
 
         document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if(!isAdmin) return;
             const name = document.getElementById('new-branch-name').value;
             await addDoc(collection(db, "branches"), { name });
             document.getElementById('new-branch-name').value = '';
@@ -135,6 +160,7 @@
 
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if(!isAdmin) return;
             const name = document.getElementById('musician-name').value;
             const role = document.getElementById('musician-role').value;
             await addDoc(collection(db, "musicians"), { name, role });
@@ -151,6 +177,7 @@
         }
 
         async function loadAdminData() {
+            if(!isAdmin) return;
             const bSnap = await getDocs(collection(db, "branches"));
             const bList = document.getElementById('branches-list');
             bList.innerHTML = '<h4>סניפים קיימים:</h4>';
@@ -172,6 +199,7 @@
         }
 
         window.deleteItem = async (col, id) => {
+            if(!isAdmin) return;
             if(confirm("למחוק פריט זה?")) {
                 await deleteDoc(doc(db, col, id));
                 await loadMusiciansData();
@@ -192,7 +220,6 @@
             if (currentMonth < 0) { currentMonth = 11; currentYear--; }
             loadCalendarView();
         };
-
         async function loadCalendarView() {
             if (!currentBranchId) {
                 document.getElementById('calendar-container').innerHTML = '<p style="text-align:center;">נא לבחור סניף מראש העמוד</p>';
@@ -204,8 +231,25 @@
 
             const q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
             const snap = await getDocs(q);
+            
+            const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
+            const userPrefix = userEmail.split('@')[0];
+
             monthEvents = [];
-            snap.forEach(d => monthEvents.push({ id: d.id, ...d.data() }));
+            snap.forEach(d => {
+                const eventData = d.data();
+                if (isAdmin) {
+                    monthEvents.push({ id: d.id, ...eventData });
+                } else {
+                    const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
+                        const lowerStaff = staffStr.toLowerCase();
+                        return lowerStaff.includes(userEmail) || lowerStaff.includes(userPrefix);
+                    });
+                    if (isUserAssigned) {
+                        monthEvents.push({ id: d.id, ...eventData });
+                    }
+                }
+            });
 
             const firstDay = new Date(currentYear, currentMonth, 1).getDay();
             const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -225,10 +269,13 @@
                 const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const dayEvents = monthEvents.filter(e => e.date === dateStr);
 
-                let eventBadges = dayEvents.map(e => `<div class="cal-event-badge">${e.time} - הופעה</div>`).join('');
+                let eventBadges = dayEvents.map(e => `<div class="cal-event-badge">${e.time} - ${isAdmin ? 'הופעה' : 'הופעה שלי'}</div>`).join('');
+
+                const canClick = isAdmin || dayEvents.length > 0;
+                const clickAttr = canClick ? `onclick="openDayModal('${dateStr}')"` : '';
 
                 gridHTML += `
-                    <div class="cal-cell" onclick="openDayModal('${dateStr}')">
+                    <div class="cal-cell" ${clickAttr} style="${!canClick ? 'opacity:0.4; cursor:default;' : ''}">
                         <div class="day-num">${day}</div>
                         <div>${eventBadges}</div>
                     </div>
@@ -240,22 +287,28 @@
 
         window.openDayModal = (dateStr) => {
             document.getElementById('event-date-input').value = dateStr;
-            document.getElementById('event-time-input').value = "20:00"; // Default time set to 20:00
-            document.getElementById('modal-date-title').textContent = `הוספת/שיבוץ הופעה לתאריך: ${dateStr}`;
+            document.getElementById('event-time-input').value = "20:00";
+            document.getElementById('modal-date-title').textContent = `הופעות/שיבוצים לתאריך: ${dateStr}`;
             
             const rosterContainer = document.getElementById('musicians-roster');
             rosterContainer.innerHTML = '';
-            if (allMusicians.length === 0) {
-                rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
+            
+            if (!isAdmin) {
+                document.getElementById('save-event-form').classList.add('hidden');
             } else {
-                allMusicians.forEach(m => {
-                    rosterContainer.innerHTML += `
-                        <div class="roster-item" id="item-m-${m.id}">
-                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" onchange="updateRoleDisabling()">
-                            <label for="m-${m.id}">${m.name} <span class="badge">${m.role}</span></label>
-                        </div>
-                    `;
-                });
+                document.getElementById('save-event-form').classList.remove('hidden');
+                if (allMusicians.length === 0) {
+                    rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
+                } else {
+                    allMusicians.forEach(m => {
+                        rosterContainer.innerHTML += `
+                            <div class="roster-item" id="item-m-${m.id}">
+                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" onchange="updateRoleDisabling()">
+                                <label for="m-${m.id}">${m.name} <span class="badge">${m.role}</span></label>
+                            </div>
+                        `;
+                    });
+                }
             }
 
             renderExistingEvents(dateStr);
@@ -290,15 +343,17 @@
                 return;
             }
             existingList.innerHTML = dayEvents.map(e => `
-                <div style="background:#2a2a2a; padding:8px; margin-top:8px; border-radius:6px; font-size:0.85rem;">
-                    <strong>🕒 שעה: ${e.time}</strong><br>
-                    👥 צוות: ${e.assignedStaff ? e.assignedStaff.join(', ') : 'לא שובצו'}<br>
-                    <button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:5px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>
+                <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:3px solid var(--accent-gold);">
+                    <strong>🕒 שעת הופעה: ${e.time}</strong><br>
+                    <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
+                    <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
+                    ${isAdmin ? `<button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
                 </div>
             `).join('');
         }
 
         window.deleteShow = async (id, dateStr) => {
+            if(!isAdmin) return;
             if(confirm("למחוק הופעה זו?")) {
                 await deleteDoc(doc(db, "events", id));
                 await loadCalendarView();
@@ -310,17 +365,17 @@
 
         document.getElementById('save-event-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if(!isAdmin) return;
+
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
             
-            // Check for duplicate show at same time in this branch
             const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
             if (existingTimeConflict) {
                 alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}! לא ניתן להוסיף 2 הופעות באותה שעה.`);
                 return;
             }
 
-            // Check roles
             const assignedStaff = [];
             const selectedRoles = [];
             let duplicateRoleFound = false;
@@ -375,7 +430,7 @@
         <div id="auth-section" class="card">
             <h2 style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
             <form id="login-form">
-                <input type="email" id="login-email" required placeholder="אימייל מנהל">
+                <input type="email" id="login-email" required placeholder="אימייל להתחברות">
                 <input type="password" id="login-password" required placeholder="סיסמה">
                 <button type="submit">התחבר</button>
             </form>
@@ -395,7 +450,7 @@
 
             <div class="nav-tabs">
                 <button id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
-                <button id="btn-tab-admin" class="tab-btn" onclick="switchTab('admin')">⚙️ תפריט מנהל (סניפים וצוות)</button>
+                <button id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
             </div>
 
             <div id="tab-calendar" class="tab-content">
@@ -449,8 +504,9 @@
                     <div id="musicians-roster" class="roster-grid"></div>
 
                     <button type="submit" style="margin-top:15px;">שמור הופעה ושיבוץ צוות</button>
-                    <button type="button" class="btn-secondary" onclick="closeModal()">סגור / ביטול</button>
                 </form>
+
+                <button type="button" class="btn-secondary" onclick="closeModal()" style="margin-top:10px;">סגור</button>
 
                 <hr style="margin:15px 0; border-color:#444;">
                 <h4>הופעות קיימות ביום זה:</h4>
