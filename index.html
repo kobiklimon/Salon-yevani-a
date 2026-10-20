@@ -129,7 +129,6 @@
             }
         }
 
-        // Login Handler
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
@@ -137,7 +136,6 @@
             } catch (err) { alert("שגיאה בהתחברות: " + err.message); }
         });
 
-        // Register Handler
         document.getElementById('register-btn').addEventListener('click', async () => {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
@@ -147,7 +145,6 @@
             }
             try {
                 const userCred = await createUserWithEmailAndPassword(auth, email, password);
-                // Register user in Firestore as regular user
                 await setDoc(doc(db, "users", userCred.user.uid), { email: email, role: "user" });
                 alert("המשתמש נוצר והתחבר בהצלחה!");
             } catch (err) {
@@ -177,13 +174,17 @@
             loadAdminData();
         });
 
+        // Add Musician with Email field
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
             const name = document.getElementById('musician-name').value;
             const role = document.getElementById('musician-role').value;
-            await addDoc(collection(db, "musicians"), { name, role });
+            const email = document.getElementById('musician-email').value.trim().toLowerCase();
+
+            await addDoc(collection(db, "musicians"), { name, role, email });
             document.getElementById('musician-name').value = '';
+            document.getElementById('musician-email').value = '';
             alert("איש צוות נוסף בהצלחה!");
             await loadMusiciansData();
             loadAdminData();
@@ -210,8 +211,8 @@
             const mList = document.getElementById('musicians-list');
             mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים וזמרים:</h4>';
             allMusicians.forEach(m => {
-                mList.innerHTML += `<div style="display:flex; justify-content:space-between; margin:5px 0;">
-                    <span>🎵 ${m.name} (${m.role})</span>
+                mList.innerHTML += `<div style="display:flex; justify-content:space-between; margin:5px 0; align-items:center;">
+                    <span>🎵 ${m.name} (${m.role})<br><small style="color:var(--text-muted);">${m.email || 'ללא אימייל'}</small></span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                 </div>`;
             });
@@ -252,7 +253,8 @@
             const snap = await getDocs(q);
             
             const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
-            const userPrefix = userEmail.split('@')[0];
+            // מציאת איש הצוות התואם לפי כתובת האימייל שהוזנה בהגדרות
+            const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
 
             monthEvents = [];
             snap.forEach(d => {
@@ -262,7 +264,10 @@
                 } else {
                     const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
                         const lowerStaff = staffStr.toLowerCase();
-                        return lowerStaff.includes(userEmail) || lowerStaff.includes(userPrefix);
+                        if (matchedMusician && lowerStaff.includes(matchedMusician.name.toLowerCase())) {
+                            return true;
+                        }
+                        return lowerStaff.includes(userEmail);
                     });
                     if (isUserAssigned) {
                         monthEvents.push({ id: d.id, ...eventData });
@@ -497,7 +502,7 @@
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">2. ניהול צוות נגנים וזמרים</h3>
                     <form id="add-musician-form">
-                        <input type="text" id="musician-name" placeholder="שם מלא" required>
+                        <input type="text" id="musician-name" placeholder="שם מלא (למשל: ישראל ישראלי)" required>
                         <select id="musician-role">
                             <option value="זמר/ת">זמר/ת</option>
                             <option value="בוזוקי">בוזוקי</option>
@@ -506,6 +511,7 @@
                             <option value="גיטרה">גיטרה</option>
                             <option value="סאונד">טכנאי סאונד</option>
                         </select>
+                        <input type="email" id="musician-email" placeholder="אימייל הנגן (למשל: test@gmail.com)" required>
                         <button type="submit">הוסף איש צוות</button>
                     </form>
                     <div id="musicians-list"></div>
