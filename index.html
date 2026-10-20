@@ -104,7 +104,7 @@
                 await loadBranchesSelect();
                 await loadMusiciansData();
             } else {
-                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
@@ -166,32 +166,29 @@
             if (currentVal) select.value = currentVal;
         }
 
-        // Add/Edit Branch Handler
+        // Add Branch Form
         document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
             const editId = document.getElementById('edit-branch-id').value;
             const name = document.getElementById('new-branch-name').value;
 
-            try {
-                if (editId) {
-                    await updateDoc(doc(db, "branches", editId), { name });
-                    document.getElementById('edit-branch-id').value = '';
-                    document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
-                    alert("הסניף עודכן בהצלחה!");
-                } else {
-                    await addDoc(collection(db, "branches"), { name });
-                    alert("סניף נוסף בהצלחה!");
-                }
-                document.getElementById('new-branch-name').value = '';
-                loadBranchesSelect();
-                loadAdminData();
-            } catch (err) {
-                alert("שגיאה בשמירת סניף: " + err.message);
+            if (editId) {
+                await updateDoc(doc(db, "branches", editId), { name });
+                document.getElementById('edit-branch-id').value = '';
+                document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
+                alert("הסניף עודכן בהצלחה!");
+            } else {
+                await addDoc(collection(db, "branches"), { name });
+                alert("סניף נוסף בהצלחה!");
             }
+
+            document.getElementById('new-branch-name').value = '';
+            loadBranchesSelect();
+            loadAdminData();
         });
 
-        // Add/Edit Musician Handler
+        // Add/Edit Musician Form
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
@@ -201,25 +198,21 @@
             const email = document.getElementById('musician-email').value.trim().toLowerCase();
             const phone = document.getElementById('musician-phone').value.trim();
 
-            try {
-                if (editId) {
-                    await updateDoc(doc(db, "musicians", editId), { name, role, email, phone });
-                    document.getElementById('edit-musician-id').value = '';
-                    document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
-                    alert("איש הצוות עודכן בהצלחה!");
-                } else {
-                    await addDoc(collection(db, "musicians"), { name, role, email, phone });
-                    alert("איש צוות נוסף בהצלחה!");
-                }
-
-                document.getElementById('musician-name').value = '';
-                document.getElementById('musician-email').value = '';
-                document.getElementById('musician-phone').value = '';
-                await loadMusiciansData();
-                loadAdminData();
-            } catch (err) {
-                alert("שגיאה בשמירת איש צוות: " + err.message);
+            if (editId) {
+                await updateDoc(doc(db, "musicians", editId), { name, role, email, phone });
+                document.getElementById('edit-musician-id').value = '';
+                document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
+                alert("איש הצוות עודכן בהצלחה!");
+            } else {
+                await addDoc(collection(db, "musicians"), { name, role, email, phone });
+                alert("איש צוות נוסף בהצלחה!");
             }
+
+            document.getElementById('musician-name').value = '';
+            document.getElementById('musician-email').value = '';
+            document.getElementById('musician-phone').value = '';
+            await loadMusiciansData();
+            loadAdminData();
         });
 
         async function loadMusiciansData() {
@@ -238,8 +231,8 @@
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;">
                     <span>📍 ${data.name}</span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}')">ערוך</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
+                        <button class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}')">ערוך</button>
+                        <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
                     </div>
                 </div>`;
             });
@@ -250,8 +243,8 @@
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;">
                     <span>🎵 ${m.name} (${m.role})<br><small style="color:var(--text-muted);">📧 ${m.email || 'אין אימייל'} | 📱 ${m.phone || 'אין טלפון'}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.email || ''}', '${m.phone || ''}')">ערוך</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
+                        <button class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.email || ''}', '${m.phone || ''}')">ערוך</button>
+                        <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                     </div>
                 </div>`;
             });
@@ -271,7 +264,7 @@
             document.getElementById('musician-email').value = email;
             document.getElementById('musician-phone').value = phone;
             document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
-            window.scrollTo({top: 250, behavior: 'smooth'});
+            window.scrollTo({top: 200, behavior: 'smooth'});
         };
 
         window.deleteItem = async (col, id) => {
@@ -285,6 +278,7 @@
             }
         };
 
+        // Fix branch change to immediately load calendar view
         document.getElementById('branch-select').addEventListener('change', (e) => {
             currentBranchId = e.target.value;
             loadCalendarView();
@@ -336,6 +330,7 @@
                 }
             });
 
+            // Re-draw standard calendar layout
             container.innerHTML = `
                 <div class="calendar-header">
                     <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
@@ -441,7 +436,7 @@
                     <strong>🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
-                    ${isAdmin ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
+                    ${isAdmin ? `<button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
                 </div>
             `).join('');
         }
@@ -535,7 +530,7 @@
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <span style="font-size:0.85rem; color:var(--text-muted);">מחובר: <strong id="user-email"></strong></span>
-                <button type="button" id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
+                <button id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
             </div>
 
             <div class="card" style="padding:10px; margin-bottom:10px;">
@@ -544,8 +539,8 @@
             </div>
 
             <div class="nav-tabs">
-                <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
-                <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
+                <button id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
+                <button id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
             </div>
 
             <div id="tab-calendar" class="tab-content">
