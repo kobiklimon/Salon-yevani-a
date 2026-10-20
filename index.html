@@ -59,7 +59,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -129,11 +129,30 @@
             }
         }
 
+        // Login Handler
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
                 await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value);
             } catch (err) { alert("שגיאה בהתחברות: " + err.message); }
+        });
+
+        // Register Handler
+        document.getElementById('register-btn').addEventListener('click', async () => {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            if (!email || !password) {
+                alert("נא להזין אימייל וסיסמה להרשמה.");
+                return;
+            }
+            try {
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                // Register user in Firestore as regular user
+                await setDoc(doc(db, "users", userCred.user.uid), { email: email, role: "user" });
+                alert("המשתמש נוצר והתחבר בהצלחה!");
+            } catch (err) {
+                alert("שגיאה בהרשמה: " + err.message);
+            }
         });
 
         document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
@@ -428,11 +447,12 @@
     <div class="container">
         
         <div id="auth-section" class="card">
-            <h2 style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
-            <form id="login-form">
-                <input type="email" id="login-email" required placeholder="אימייל להתחברות">
+            <h2 style="margin-bottom: 15px; text-align: center;">התחברות / הרשמה</h2>
+            <form id="login-form" onsubmit="return false;">
+                <input type="email" id="login-email" required placeholder="אימייל">
                 <input type="password" id="login-password" required placeholder="סיסמה">
                 <button type="submit">התחבר</button>
+                <button type="button" id="register-btn" class="btn-secondary" style="margin-top:8px;">הירשם כמשתמש חדש</button>
             </form>
         </div>
 
