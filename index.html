@@ -104,7 +104,7 @@
                 await loadBranchesSelect();
                 await loadMusiciansData();
             } else {
-                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
@@ -166,29 +166,32 @@
             if (currentVal) select.value = currentVal;
         }
 
-        // Add Branch Form
+        // Add/Edit Branch Handler
         document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
             const editId = document.getElementById('edit-branch-id').value;
             const name = document.getElementById('new-branch-name').value;
 
-            if (editId) {
-                await updateDoc(doc(db, "branches", editId), { name });
-                document.getElementById('edit-branch-id').value = '';
-                document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
-                alert("הסניף עודכן בהצלחה!");
-            } else {
-                await addDoc(collection(db, "branches"), { name });
-                alert("סניף נוסף בהצלחה!");
+            try {
+                if (editId) {
+                    await updateDoc(doc(db, "branches", editId), { name });
+                    document.getElementById('edit-branch-id').value = '';
+                    document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
+                    alert("הסניף עודכן בהצלחה!");
+                } else {
+                    await addDoc(collection(db, "branches"), { name });
+                    alert("סניף נוסף בהצלחה!");
+                }
+                document.getElementById('new-branch-name').value = '';
+                loadBranchesSelect();
+                loadAdminData();
+            } catch (err) {
+                alert("שגיאה בשמירת סניף: " + err.message);
             }
-
-            document.getElementById('new-branch-name').value = '';
-            loadBranchesSelect();
-            loadAdminData();
         });
 
-        // Add/Edit Musician Form
+        // Add/Edit Musician Handler
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
@@ -198,21 +201,25 @@
             const email = document.getElementById('musician-email').value.trim().toLowerCase();
             const phone = document.getElementById('musician-phone').value.trim();
 
-            if (editId) {
-                await updateDoc(doc(db, "musicians", editId), { name, role, email, phone });
-                document.getElementById('edit-musician-id').value = '';
-                document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
-                alert("איש הצוות עודכן בהצלחה!");
-            } else {
-                await addDoc(collection(db, "musicians"), { name, role, email, phone });
-                alert("איש צוות נוסף בהצלחה!");
-            }
+            try {
+                if (editId) {
+                    await updateDoc(doc(db, "musicians", editId), { name, role, email, phone });
+                    document.getElementById('edit-musician-id').value = '';
+                    document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
+                    alert("איש הצוות עודכן בהצלחה!");
+                } else {
+                    await addDoc(collection(db, "musicians"), { name, role, email, phone });
+                    alert("איש צוות נוסף בהצלחה!");
+                }
 
-            document.getElementById('musician-name').value = '';
-            document.getElementById('musician-email').value = '';
-            document.getElementById('musician-phone').value = '';
-            await loadMusiciansData();
-            loadAdminData();
+                document.getElementById('musician-name').value = '';
+                document.getElementById('musician-email').value = '';
+                document.getElementById('musician-phone').value = '';
+                await loadMusiciansData();
+                loadAdminData();
+            } catch (err) {
+                alert("שגיאה בשמירת איש צוות: " + err.message);
+            }
         });
 
         async function loadMusiciansData() {
@@ -231,8 +238,8 @@
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;">
                     <span>📍 ${data.name}</span>
                     <div style="display:flex; gap:5px;">
-                        <button class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}')">ערוך</button>
-                        <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}')">ערוך</button>
+                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
                     </div>
                 </div>`;
             });
@@ -243,8 +250,8 @@
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;">
                     <span>🎵 ${m.name} (${m.role})<br><small style="color:var(--text-muted);">📧 ${m.email || 'אין אימייל'} | 📱 ${m.phone || 'אין טלפון'}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.email || ''}', '${m.phone || ''}')">ערוך</button>
-                        <button class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.email || ''}', '${m.phone || ''}')">ערוך</button>
+                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                     </div>
                 </div>`;
             });
@@ -264,7 +271,7 @@
             document.getElementById('musician-email').value = email;
             document.getElementById('musician-phone').value = phone;
             document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
-            window.scrollTo({top: 200, behavior: 'smooth'});
+            window.scrollTo({top: 250, behavior: 'smooth'});
         };
 
         window.deleteItem = async (col, id) => {
@@ -278,7 +285,6 @@
             }
         };
 
-        // Fix branch change to immediately load calendar view
         document.getElementById('branch-select').addEventListener('change', (e) => {
             currentBranchId = e.target.value;
             loadCalendarView();
@@ -291,19 +297,24 @@
             loadCalendarView();
         };
         async function loadCalendarView() {
+            const container = document.getElementById('calendar-container');
             if (!currentBranchId) {
-                document.getElementById('calendar-container').innerHTML = '<p style="text-align:center;">נא לבחור סניף מראש העמוד</p>';
+                container.innerHTML = `
+                    <div class="calendar-header">
+                        <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
+                        <h3 id="cal-month-title" style="color:var(--accent-gold);">--</h3>
+                        <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">חודש הבא ▶</button>
+                    </div>
+                    <p style="text-align:center; padding:20px; color:var(--text-muted);">נא לבחור סניף מראש העמוד</p>`;
                 return;
             }
 
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
-            document.getElementById('cal-month-title').textContent = `${monthNames[currentMonth]} ${currentYear}`;
-
+            
             const q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
             const snap = await getDocs(q);
             
             const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
-            // מציאת איש הצוות התואם לפי כתובת האימייל שהוזנה בהגדרות
             const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
 
             monthEvents = [];
@@ -324,6 +335,15 @@
                     }
                 }
             });
+
+            container.innerHTML = `
+                <div class="calendar-header">
+                    <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
+                    <h3 id="cal-month-title" style="color:var(--accent-gold);">${monthNames[currentMonth]} ${currentYear}</h3>
+                    <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">חודש הבא ▶</button>
+                </div>
+                <div id="calendar-grid" class="calendar-grid"></div>
+            `;
 
             const firstDay = new Date(currentYear, currentMonth, 1).getDay();
             const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -421,7 +441,7 @@
                     <strong>🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
-                    ${isAdmin ? `<button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
+                    ${isAdmin ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
                 </div>
             `).join('');
         }
@@ -515,7 +535,7 @@
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <span style="font-size:0.85rem; color:var(--text-muted);">מחובר: <strong id="user-email"></strong></span>
-                <button id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
+                <button type="button" id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
             </div>
 
             <div class="card" style="padding:10px; margin-bottom:10px;">
@@ -524,8 +544,8 @@
             </div>
 
             <div class="nav-tabs">
-                <button id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
-                <button id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
+                <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
+                <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
             </div>
 
             <div id="tab-calendar" class="tab-content">
@@ -543,8 +563,9 @@
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">1. ניהול סניפים</h3>
                     <form id="add-branch-form">
+                        <input type="hidden" id="edit-branch-id">
                         <input type="text" id="new-branch-name" placeholder="שם הסניף החדש (למשל: סניף אשדוד)" required>
-                        <button type="submit">הוסף סניף</button>
+                        <button type="submit" id="branch-submit-btn">הוסף סניף</button>
                     </form>
                     <div id="branches-list"></div>
                 </div>
@@ -552,6 +573,7 @@
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">2. ניהול צוות נגנים וזמרים</h3>
                     <form id="add-musician-form">
+                        <input type="hidden" id="edit-musician-id">
                         <input type="text" id="musician-name" placeholder="שם מלא (למשל: ישראל ישראלי)" required>
                         <select id="musician-role">
                             <option value="זמר/ת">זמר/ת</option>
@@ -561,8 +583,9 @@
                             <option value="גיטרה">גיטרה</option>
                             <option value="סאונד">טכנאי סאונד</option>
                         </select>
-                        <input type="email" id="musician-email" placeholder="אימייל הנגן (למשל: test@gmail.com)" required>
-                        <button type="submit">הוסף איש צוות</button>
+                        <input type="email" id="musician-email" placeholder="אימייל (למשל: test@gmail.com)" required>
+                        <input type="tel" id="musician-phone" placeholder="מספר טלפון (למשל: 050-1234567)" required>
+                        <button type="submit" id="musician-submit-btn">הוסף איש צוות</button>
                     </form>
                     <div id="musicians-list"></div>
                 </div>
