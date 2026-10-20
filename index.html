@@ -16,6 +16,7 @@
             --text-color: #e0e0e0;
             --text-muted: #a0a0a0;
             --danger: #e53935;
+            --success: #43a047;
             --border-color: #333;
         }
 
@@ -28,7 +29,7 @@
         .container { max-width: 700px; margin: 0 auto; padding: 12px; }
 
         .nav-tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
-        .tab-btn { flex: 1; padding: 10px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+        .tab-btn { flex: 1; padding: 10px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; position: relative; }
         .tab-btn.active { background: var(--accent-gold); color: #000; border-color: var(--accent-gold); }
 
         .card { background-color: var(--card-bg); border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--border-color); }
@@ -36,6 +37,7 @@
         input, select, button, textarea { width: 100%; padding: 10px; margin-top: 6px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #444; background-color: #2a2a2a; color: #fff; font-size: 0.95rem; }
         button { background-color: var(--accent-gold); color: #000; font-weight: bold; border: none; cursor: pointer; }
         .btn-danger { background-color: var(--danger); color: white; }
+        .btn-success { background-color: var(--success); color: white; }
         .btn-secondary { background-color: #444; color: white; }
         .btn-edit { background-color: #fb8c00; color: white; }
 
@@ -56,12 +58,13 @@
         .roster-item.disabled-role { opacity: 0.35; }
 
         .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
+        .notif-badge { position: absolute; top: 2px; right: 2px; background: var(--danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; }
     </style>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCis-H1d8436iH6vBkNfGWoy3ekkIDSflU",
@@ -80,6 +83,7 @@
         let currentYear = new Date().getFullYear();
         let currentMonth = new Date().getMonth();
         let allMusicians = [];
+        let allBranches = [];
         let monthEvents = [];
         let isAdmin = false;
 
@@ -92,9 +96,9 @@
 
             if(tabName === 'calendar') loadCalendarView();
             if(tabName === 'admin' && isAdmin) loadAdminData();
+            if(tabName === 'notifs') loadNotificationsView();
         };
 
-        // Auth State Observer - instantly shows correct section without hanging
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
@@ -104,6 +108,7 @@
                 await checkUserAdminStatus(user);
                 await loadBranchesSelect();
                 await loadMusiciansData();
+                listenToNotifications();
             } else {
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
@@ -161,7 +166,9 @@
             const currentVal = select.value;
             select.innerHTML = '<option value="">בחר סניף...</option>';
             const snap = await getDocs(collection(db, "branches"));
+            allBranches = [];
             snap.forEach(d => {
+                allBranches.push({ id: d.id, ...d.data() });
                 select.innerHTML += `<option value="${d.id}">${d.data().name}</option>`;
             });
             if (currentVal) select.value = currentVal;
@@ -435,15 +442,209 @@
                 existingList.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">אין הופעות שנקבעו ליום זה.</p>';
                 return;
             }
-            existingList.innerHTML = dayEvents.map(e => `
+
+            const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
+            const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
+
+            existingList.innerHTML = dayEvents.map(e => {
+                const isUserInEvent = !isAdmin && e.assignedStaff && e.assignedStaff.some(s => {
+                    const lower = s.toLowerCase();
+                    return lower.includes(userEmail) || (matchedMusician && lower.includes(matchedMusician.name.toLowerCase()));
+                });
+
+                return `
                 <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:3px solid var(--accent-gold);">
                     <strong>🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
                     ${isAdmin ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
+                    ${isUserInEvent ? `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}')">🚨 בקש ביטול הופעה</button>` : ''}
                 </div>
-            `).join('');
+            `;}).join('');
         }
+
+        window.requestCancellation = async (eventId, eventDate, eventTime) => {
+            const reason = prompt("נא להזין סיבת ביטול לבקשה:");
+            if (!reason) return;
+
+            const userEmail = auth.currentUser ? auth.currentUser.email : '';
+            const musician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail.toLowerCase());
+            const musicianName = musician ? musician.name : userEmail;
+            const branchObj = allBranches.find(b => b.id === currentBranchId);
+            const branchName = branchObj ? branchObj.name : 'סניף לא ידוע';
+
+            await addDoc(collection(db, "cancellation_requests"), {
+                eventId,
+                eventDate,
+                eventTime,
+                branchId: currentBranchId,
+                branchName,
+                musicianName,
+                musicianEmail: userEmail,
+                reason,
+                status: "pending",
+                createdAt: new Date()
+            });
+
+            alert("בקשת הביטול נשלחה בהצלחה למנהל המערכת וממתינה לאישור.");
+            closeModal();
+        };
+
+        function listenToNotifications() {
+            const q = collection(db, "cancellation_requests");
+            onSnapshot(q, (snapshot) => {
+                let pendingCount = 0;
+                const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
+
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    if (isAdmin && data.status === "pending") {
+                        pendingCount++;
+                    } else if (!isAdmin && data.musicianEmail.toLowerCase() === userEmail) {
+                        if (data.status === "approved" || data.status === "rejected") {
+                            pendingCount++;
+                        }
+                    }
+                });
+
+                const badge = document.getElementById('notif-count-badge');
+                if (pendingCount > 0) {
+                    badge.textContent = pendingCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            });
+        }
+
+        async function loadNotificationsView() {
+            const container = document.getElementById('notifs-container');
+            const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
+            const snap = await getDocs(collection(db, "cancellation_requests"));
+
+            let html = '<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול</h3>';
+
+            let count = 0;
+            const allRequests = [];
+            snap.forEach(d => allRequests.push({ id: d.id, ...d.data() }));
+
+            for (const req of allRequests) {
+                if (isAdmin) {
+                    count++;
+                    const statusText = req.status === 'pending' ? '⏳ ממתין לאישור מנהל' : (req.status === 'approved' ? '✅ אושר' : '❌ נדחה');
+                    
+                    let replacementDropdown = '';
+                    if (req.status === 'pending') {
+                        // Find available musicians with same role and no conflict
+                        const availables = await findAvailableMusiciansForRole(req.eventDate, req.eventTime, req.musicianName);
+                        if (availables.length === 0) {
+                            replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
+                        } else {
+                            replacementDropdown = `
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי:</label>
+                                <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
+                                    ${availables.map(m => `<option value="${m.name}">${m.name} (${m.role})</option>`).join('')}
+                                </select>
+                            `;
+                        }
+                    }
+
+                    html += `
+                        <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid ${req.status === 'pending' ? '#fb8c00' : (req.status === 'approved' ? 'var(--success)' : 'var(--danger)')};">
+                            <strong>📍 סניף: ${req.branchName}</strong> | 📅 תאריך: ${req.eventDate} (${req.eventTime})<br>
+                            <strong>👤 מבוקש על ידי:</strong> ${req.musicianName} (${req.musicianEmail})<br>
+                            <strong>💬 סיבה:</strong> ${req.reason}<br>
+                            <div style="margin-top:6px;">סטטוס: <strong>${statusText}</strong></div>
+                            ${req.status === 'pending' ? `
+                                ${replacementDropdown}
+                                <div style="display:flex; gap:8px; margin-top:10px;">
+                                    <button class="btn-success" style="padding:6px;" onclick="approveRequest('${req.id}', '${req.eventId}', '${req.musicianName}')">אישור ביטול והחלפה</button>
+                                    <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}')">דחיית בקשה</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else if (req.musicianEmail.toLowerCase() === userEmail) {
+                    count++;
+                    const statusText = req.status === 'pending' ? '⏳ הבקשה שלך ממתינה לאישור מנהל' : (req.status === 'approved' ? '✅ הבקשה אושרה והוסרת מההופעה' : '❌ הבקשה נדחתה על ידי המנהל');
+                    html += `
+                        <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid ${req.status === 'pending' ? '#fb8c00' : (req.status === 'approved' ? 'var(--success)' : 'var(--danger)')};">
+                            <strong>📍 סניף: ${req.branchName}</strong> | 📅 תאריך: ${req.eventDate}<br>
+                            <strong>💬 סיבת הביטול:</strong> ${req.reason}<br>
+                            <div style="margin-top:6px;"><strong>${statusText}</strong></div>
+                        </div>
+                    `;
+                }
+            }
+
+            if (count === 0) {
+                html += '<p style="color:var(--text-muted);">אין התראות או בקשות פתוחות כרגע.</p>';
+            }
+
+            container.innerHTML = html;
+        }
+        // Smart Check: Find musicians with same role who are completely free at that date & time
+        async function findAvailableMusiciansForRole(eventDate, eventTime, cancellingMusicianName) {
+            const cancellingMusician = allMusicians.find(m => m.name.toLowerCase() === cancellingMusicianName.toLowerCase());
+            const roleNeeded = cancellingMusician ? cancellingMusician.role : null;
+
+            // Fetch ALL events across ALL branches on that exact date and time
+            const q = query(collection(db, "events"), where("date", "==", eventDate), where("time", "==", eventTime));
+            const busySnap = await getDocs(q);
+
+            const busyMusicianNames = [];
+            busySnap.forEach(d => {
+                const staffList = d.data().assignedStaff || [];
+                staffList.forEach(s => {
+                    allMusicians.forEach(m => {
+                        if (s.toLowerCase().includes(m.name.toLowerCase())) {
+                            busyMusicianNames.push(m.name.toLowerCase());
+                        }
+                    });
+                });
+            });
+
+            // Filter musicians matching the required role and not busy elsewhere
+            return allMusicians.filter(m => {
+                const sameRole = !roleNeeded || m.role === roleNeeded;
+                const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase();
+                const isNotBusy = !busyMusicianNames.includes(m.name.toLowerCase());
+                return sameRole && notCancelling && isNotBusy;
+            });
+        }
+
+        // Approve Request with selected Replacement
+        window.approveRequest = async (requestId, eventId, cancellingMusicianName) => {
+            const selectElem = document.getElementById(`replacement-select-${requestId}`);
+            if (!selectElem) {
+                alert("אין נגן/זמר פנוי לבחירה בתפקיד זה!");
+                return;
+            }
+
+            const newMusicianName = selectElem.value;
+            if (!newMusicianName) return;
+
+            const eventRef = doc(db, "events", eventId);
+            const eventDoc = await getDoc(eventRef);
+            
+            if (eventDoc.exists()) {
+                let staff = eventDoc.data().assignedStaff || [];
+                staff = staff.map(s => s.toLowerCase().includes(cancellingMusicianName.toLowerCase()) ? `${newMusicianName} (${selectElem.options[selectElem.selectedIndex].text.split('(')[1] || 'ממלא מקום'}` : s);
+                await updateDoc(eventRef, { assignedStaff: staff });
+            }
+
+            await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved", newMusician: newMusicianName });
+            alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName}.`);
+
+            loadNotificationsView();
+            if (currentBranchId) loadCalendarView();
+        };
+
+        window.rejectRequest = async (requestId) => {
+            await updateDoc(doc(db, "cancellation_requests", requestId), { status: "rejected" });
+            alert("בקשת הביטול נדחתה.");
+            loadNotificationsView();
+        };
 
         window.deleteShow = async (id, dateStr) => {
             if(!isAdmin) return;
@@ -520,7 +721,6 @@
 
     <div class="container">
         
-        <!-- Default visible auth-section so the screen is NEVER blank -->
         <div id="auth-section" class="card">
             <h2 style="margin-bottom: 15px; text-align: center;">התחברות / הרשמה</h2>
             <form id="login-form" onsubmit="return false;">
@@ -544,7 +744,8 @@
             </div>
 
             <div class="nav-tabs">
-                <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן חודשי ושיוכים</button>
+                <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
+                <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
                 <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
             </div>
 
@@ -557,6 +758,10 @@
                     </div>
                     <div id="calendar-grid" class="calendar-grid"></div>
                 </div>
+            </div>
+
+            <div id="tab-notifs" class="tab-content hidden">
+                <div class="card" id="notifs-container"></div>
             </div>
 
             <div id="tab-admin" class="tab-content hidden">
@@ -618,3 +823,6 @@
 
 </body>
 </html>
+
+
+
