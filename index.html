@@ -133,14 +133,33 @@
             }
         };
 
+        window.onRoleChange = () => {
+            const role = document.getElementById('reg-role').value;
+            const branchContainer = document.getElementById('reg-branch-container');
+            if (role === "מנהל סניף") {
+                branchContainer.classList.remove('hidden');
+                populateRegisterBranchSelect();
+            } else {
+                branchContainer.classList.add('hidden');
+            }
+        };
+
+        function populateRegisterBranchSelect() {
+            const select = document.getElementById('reg-branch-select');
+            select.innerHTML = '<option value="">בחר סניף שברשותך...</option>';
+            allBranches.forEach(b => {
+                select.innerHTML += `<option value="${b.name}">${b.name}</option>`;
+            });
+        }
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
 
+                await loadBranchesSelect();
                 await loadMusiciansData();
                 await checkUserAdminStatus(user);
-                await loadBranchesSelect();
                 listenToNotifications();
                 loadCalendarView();
             } else {
@@ -196,9 +215,15 @@
             const password = document.getElementById('login-password').value;
             const name = document.getElementById('reg-name').value.trim();
             const role = document.getElementById('reg-role').value;
+            const branchName = document.getElementById('reg-branch-select').value;
 
             if (!phone || !password || !name) {
                 alert("נא למלא שם מלא, מספר טלפון וסיסמה להרשמה.");
+                return;
+            }
+
+            if (role === "מנהל סניף" && !branchName) {
+                alert("חובה לבחור את שם הסניף שעבורו הוגדרת מנהל.");
                 return;
             }
 
@@ -206,7 +231,7 @@
 
             try {
                 const userCred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
-                await setDoc(doc(db, "users", userCred.user.uid), { phone, role: "user", name });
+                await setDoc(doc(db, "users", userCred.user.uid), { phone, role: "user", name, branchName: branchName || '' });
                 
                 const cleaned = cleanPhone(phone);
                 const existingM = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
@@ -215,6 +240,7 @@
                         name,
                         role,
                         phone,
+                        branchName: branchName || '',
                         status: "active"
                     });
                 }
@@ -244,7 +270,6 @@
             populateBranchManagersDropdown();
         }
 
-        // STRICT FILTER: ONLY MUSICIANS WITH ROLE "מנהל סניף"
         function populateBranchManagersDropdown() {
             const managerSelect = document.getElementById('new-branch-manager-select');
             if (!managerSelect) return;
@@ -254,7 +279,7 @@
             const branchManagers = activeMusicians.filter(m => m.role === "מנהל סניף");
             
             branchManagers.forEach(m => {
-                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone})</option>`;
+                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone}) ${m.branchName ? `- ${m.branchName}` : ''}</option>`;
             });
         }
 
@@ -351,7 +376,7 @@
             allMusicians.forEach(m => {
                 const isInactive = m.status === 'inactive';
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
-                    <span>🎵 ${m.name} (${m.role}) <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? 'לא פעיל' : 'פעיל'}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
+                    <span>🎵 ${m.name} (${m.role}) ${m.branchName ? `<small>| סניף: ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? 'לא פעיל' : 'פעיל'}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
                     <div style="display:flex; gap:5px;">
                         <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">ערוך</button>
                         <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
@@ -490,12 +515,13 @@
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
                 
-                const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
+                // FILTER ONLY MUSICIANS AND SINGERS (EXCLUDE BRANCH MANAGERS FROM ROSTER)
+                const activeMusiciansAndSingers = allMusicians.filter(m => m.status !== "inactive" && m.role !== "מנהל סניף");
 
-                if (activeMusicians.length === 0) {
+                if (activeMusiciansAndSingers.length === 0) {
                     rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים פעילים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
                 } else {
-                    activeMusicians.forEach(m => {
+                    activeMusiciansAndSingers.forEach(m => {
                         rosterContainer.innerHTML += `
                             <div class="roster-item" id="item-m-${m.id}">
                                 <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" onchange="updateRoleDisabling()">
@@ -804,10 +830,11 @@
 
             return allMusicians.filter(m => {
                 const isActive = m.status !== "inactive";
+                const isNotManager = m.role !== "מנהל סניף";
                 const sameRole = !roleNeeded || m.role === roleNeeded;
                 const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase();
                 const isNotBusy = !busyMusicianNames.includes(m.name.toLowerCase());
-                return isActive && sameRole && notCancelling && isNotBusy;
+                return isActive && isNotManager && sameRole && notCancelling && isNotBusy;
             });
         }
 
@@ -933,12 +960,17 @@
                 <div id="register-fields" class="hidden">
                     <input type="text" id="reg-name" placeholder="שם מלא (למשל: ישראל ישראלי)">
                     <label style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד במערכת:</label>
-                    <select id="reg-role">
+                    <select id="reg-role" onchange="onRoleChange()">
                         <option value="זמר/ת">זמר/ת</option>
                         <option value="קלידים">קלידים</option>
                         <option value="בוזוקי">בוזוקי</option>
                         <option value="מנהל סניף">מנהל סניף</option>
                     </select>
+
+                    <div id="reg-branch-container" class="hidden">
+                        <label style="font-size:0.85rem; color:var(--text-muted);">בחר את הסניף שברשותך:</label>
+                        <select id="reg-branch-select"></select>
+                    </div>
                 </div>
 
                 <input type="password" id="login-password" required placeholder="סיסמה">
