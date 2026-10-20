@@ -58,7 +58,12 @@
         .roster-item.disabled-role { opacity: 0.35; }
 
         .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
+        .badge-inactive { background: var(--danger); color: white; }
         .notif-badge { position: absolute; top: 2px; right: 2px; background: var(--danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; }
+
+        .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+        .report-table th, .report-table td { border: 1px solid #444; padding: 8px; text-align: right; }
+        .report-table th { background-color: #2a2a2a; color: var(--accent-gold); }
     </style>
 
     <script type="module">
@@ -86,8 +91,18 @@
         let allBranches = [];
         let monthEvents = [];
         let isAdmin = false;
+        let currentUserPhone = '';
+        let currentUserName = '';
 
         const defaultColors = ['#d4af37', '#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
+
+        function cleanPhone(phone) {
+            return phone.replace(/\D/g, '');
+        }
+
+        function phoneToEmail(phone) {
+            return `user_${cleanPhone(phone)}@salonyevani.local`;
+        }
 
         window.switchTab = (tabName) => {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -98,18 +113,34 @@
 
             if(tabName === 'calendar') loadCalendarView();
             if(tabName === 'admin' && isAdmin) loadAdminData();
+            if(tabName === 'reports' && isAdmin) loadReportsView();
             if(tabName === 'notifs') loadNotificationsView();
+        };
+
+        window.toggleAuthMode = (isRegister) => {
+            if(isRegister) {
+                document.getElementById('register-fields').classList.remove('hidden');
+                document.getElementById('login-submit-btn').classList.add('hidden');
+                document.getElementById('register-submit-btn').classList.remove('hidden');
+                document.getElementById('toggle-to-reg').classList.add('hidden');
+                document.getElementById('toggle-to-login').classList.remove('hidden');
+            } else {
+                document.getElementById('register-fields').classList.add('hidden');
+                document.getElementById('login-submit-btn').classList.remove('hidden');
+                document.getElementById('register-submit-btn').classList.add('hidden');
+                document.getElementById('toggle-to-reg').classList.remove('hidden');
+                document.getElementById('toggle-to-login').classList.add('hidden');
+            }
         };
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
-                document.getElementById('user-email').textContent = user.email;
 
+                await loadMusiciansData();
                 await checkUserAdminStatus(user);
                 await loadBranchesSelect();
-                await loadMusiciansData();
                 listenToNotifications();
                 loadCalendarView();
             } else {
@@ -119,44 +150,76 @@
         });
 
         async function checkUserAdminStatus(user) {
-            if (user.email.toLowerCase() === "kobiklimon@gmail.com") {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            let rawPhone = '';
+            if (userDoc.exists()) {
+                rawPhone = userDoc.data().phone || '';
+            }
+
+            currentUserPhone = cleanPhone(rawPhone);
+            const matched = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
+            currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
+
+            document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
+
+            if (currentUserPhone === "0500000000" || (userDoc.exists() && userDoc.data().role === "admin")) {
                 isAdmin = true;
             } else {
-                const userDoc = await getDoc(doc(db, "users", user.uid));
-                if (userDoc.exists() && userDoc.data().role === "admin") {
-                    isAdmin = true;
-                } else {
-                    isAdmin = false;
-                }
+                isAdmin = false;
             }
 
             const adminTabBtn = document.getElementById('btn-tab-admin');
+            const reportsTabBtn = document.getElementById('btn-tab-reports');
             if (isAdmin) {
                 adminTabBtn.classList.remove('hidden');
+                reportsTabBtn.classList.remove('hidden');
             } else {
                 adminTabBtn.classList.add('hidden');
+                reportsTabBtn.classList.add('hidden');
                 switchTab('calendar');
             }
         }
 
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const phone = document.getElementById('login-phone').value.trim();
+            const password = document.getElementById('login-password').value;
+            const fakeEmail = phoneToEmail(phone);
+
             try {
-                await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value);
-            } catch (err) { alert("שגיאה בהתחברות: " + err.message); }
+                await signInWithEmailAndPassword(auth, fakeEmail, password);
+            } catch (err) { alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); }
         });
 
-        document.getElementById('register-btn').addEventListener('click', async () => {
-            const email = document.getElementById('login-email').value;
+        document.getElementById('register-submit-btn').addEventListener('click', async () => {
+            const phone = document.getElementById('login-phone').value.trim();
             const password = document.getElementById('login-password').value;
-            if (!email || !password) {
-                alert("נא להזין אימייל וסיסמה להרשמה.");
+            const name = document.getElementById('reg-name').value.trim();
+            const role = document.getElementById('reg-role').value;
+
+            if (!phone || !password || !name) {
+                alert("נא למלא שם מלא, מספר טלפון וסיסמה להרשמה.");
                 return;
             }
+
+            const fakeEmail = phoneToEmail(phone);
+
             try {
-                const userCred = await createUserWithEmailAndPassword(auth, email, password);
-                await setDoc(doc(db, "users", userCred.user.uid), { email: email, role: "user" });
-                alert("המשתמש נוצר והתחבר בהצלחה!");
+                const userCred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+                await setDoc(doc(db, "users", userCred.user.uid), { phone, role: "user", name });
+                
+                const cleaned = cleanPhone(phone);
+                const existingM = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
+                if (!existingM) {
+                    await addDoc(collection(db, "musicians"), {
+                        name,
+                        role,
+                        phone,
+                        status: "active"
+                    });
+                }
+
+                alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
             } catch (err) {
                 alert("שגיאה בהרשמה: " + err.message);
             }
@@ -177,6 +240,22 @@
                 allBranches.push({ id: d.id, ...bData });
                 select.innerHTML += `<option value="${d.id}">${bData.name}</option>`;
             });
+
+            populateBranchManagersDropdown();
+        }
+
+        function populateBranchManagersDropdown() {
+            const managerSelect = document.getElementById('new-branch-manager-select');
+            if (!managerSelect) return;
+
+            managerSelect.innerHTML = '<option value="">בחר מנהל סניף מתוך הצוות...</option>';
+            const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
+            const managers = activeMusicians.filter(m => m.role === "מנהל סניף" || m.role === "מנהל");
+            
+            const listToDisplay = managers.length > 0 ? managers : activeMusicians;
+            listToDisplay.forEach(m => {
+                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone})</option>`;
+            });
         }
 
         document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
@@ -184,28 +263,30 @@
             if(!isAdmin) return;
             const editId = document.getElementById('edit-branch-id').value;
             const name = document.getElementById('new-branch-name').value;
-            const managerName = document.getElementById('new-branch-manager').value;
-            const managerPhone = document.getElementById('new-branch-phone').value;
-            const color = document.getElementById('new-branch-color').value;
+            const managerSelect = document.getElementById('new-branch-manager-select');
+            const selectedOption = managerSelect.options[managerSelect.selectedIndex];
 
-            if (!managerName || !managerPhone) {
-                alert("חובה להגדיר מנהל סניף ומספר טלפון לכל סניף!");
+            if (!managerSelect.value) {
+                alert("חובה לבחור מנהל סניף מתוך רשימת מנהלי הסניפים!");
                 return;
             }
 
+            const managerName = selectedOption.getAttribute('data-name');
+            const managerPhone = selectedOption.getAttribute('data-phone');
+            const color = document.getElementById('new-branch-color').value;
+
             try {
                 if (editId) {
-                    await updateDoc(doc(db, "branches", editId), { name, managerName, managerPhone, color });
+                    await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone, color });
                     document.getElementById('edit-branch-id').value = '';
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
-                    await addDoc(collection(db, "branches"), { name, managerName, managerPhone, color });
+                    await addDoc(collection(db, "branches"), { name, managerId: managerSelect.value, managerName, managerPhone, color });
                     alert("סניף חדש נוסף בהצלחה!");
                 }
                 document.getElementById('new-branch-name').value = '';
-                document.getElementById('new-branch-manager').value = '';
-                document.getElementById('new-branch-phone').value = '';
+                managerSelect.value = '';
                 loadBranchesSelect();
                 loadAdminData();
             } catch (err) {
@@ -219,24 +300,24 @@
             const editId = document.getElementById('edit-musician-id').value;
             const name = document.getElementById('musician-name').value;
             const role = document.getElementById('musician-role').value;
-            const email = document.getElementById('musician-email').value.trim().toLowerCase();
             const phone = document.getElementById('musician-phone').value.trim();
+            const status = document.getElementById('musician-status').value;
 
             try {
                 if (editId) {
-                    await updateDoc(doc(db, "musicians", editId), { name, role, email, phone });
+                    await updateDoc(doc(db, "musicians", editId), { name, role, phone, status });
                     document.getElementById('edit-musician-id').value = '';
                     document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
                     alert("איש הצוות עודכן בהצלחה!");
                 } else {
-                    await addDoc(collection(db, "musicians"), { name, role, email, phone });
+                    await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active" });
                     alert("איש צוות נוסף בהצלחה!");
                 }
 
                 document.getElementById('musician-name').value = '';
-                document.getElementById('musician-email').value = '';
                 document.getElementById('musician-phone').value = '';
                 await loadMusiciansData();
+                loadBranchesSelect();
                 loadAdminData();
             } catch (err) {
                 alert("שגיאה בשמירת איש צוות: " + err.message);
@@ -259,41 +340,41 @@
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
                     <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerName || ''}', '${data.managerPhone || ''}', '${data.color || '#d4af37'}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">ערוך</button>
                         <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
                     </div>
                 </div>`;
             });
 
             const mList = document.getElementById('musicians-list');
-            mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים וזמרים:</h4>';
+            mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים, זמרים ומנהלים:</h4>';
             allMusicians.forEach(m => {
-                mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;">
-                    <span>🎵 ${m.name} (${m.role})<br><small style="color:var(--text-muted);">📧 ${m.email || 'אין אימייל'} | 📱 ${m.phone || 'אין טלפון'}</small></span>
+                const isInactive = m.status === 'inactive';
+                mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
+                    <span>🎵 ${m.name} (${m.role}) <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? 'לא פעיל' : 'פעיל'}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.email || ''}', '${m.phone || ''}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">ערוך</button>
                         <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                     </div>
                 </div>`;
             });
         }
 
-        window.editBranch = (id, name, managerName, managerPhone, color) => {
+        window.editBranch = (id, name, managerId, color) => {
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
-            document.getElementById('new-branch-manager').value = managerName;
-            document.getElementById('new-branch-phone').value = managerPhone;
+            document.getElementById('new-branch-manager-select').value = managerId || '';
             document.getElementById('new-branch-color').value = color || '#d4af37';
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
             window.scrollTo({top: 0, behavior: 'smooth'});
         };
 
-        window.editMusician = (id, name, role, email, phone) => {
+        window.editMusician = (id, name, role, phone, status) => {
             document.getElementById('edit-musician-id').value = id;
             document.getElementById('musician-name').value = name;
             document.getElementById('musician-role').value = role;
-            document.getElementById('musician-email').value = email;
             document.getElementById('musician-phone').value = phone;
+            document.getElementById('musician-status').value = status || 'active';
             document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
             window.scrollTo({top: 250, behavior: 'smooth'});
         };
@@ -331,9 +412,6 @@
                 q = collection(db, "events");
             }
             const snap = await getDocs(q);
-            
-            const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
-            const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
 
             monthEvents = [];
             snap.forEach(d => {
@@ -343,10 +421,7 @@
                 } else {
                     const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
                         const lowerStaff = staffStr.toLowerCase();
-                        if (matchedMusician && lowerStaff.includes(matchedMusician.name.toLowerCase())) {
-                            return true;
-                        }
-                        return lowerStaff.includes(userEmail);
+                        return lowerStaff.includes(currentUserName.toLowerCase()) || lowerStaff.includes(currentUserPhone);
                     });
                     if (isUserAssigned) {
                         monthEvents.push({ id: d.id, ...eventData });
@@ -414,10 +489,13 @@
                 document.getElementById('save-event-form').classList.add('hidden');
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
-                if (allMusicians.length === 0) {
-                    rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
+                
+                const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
+
+                if (activeMusicians.length === 0) {
+                    rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים פעילים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
                 } else {
-                    allMusicians.forEach(m => {
+                    activeMusicians.forEach(m => {
                         rosterContainer.innerHTML += `
                             <div class="roster-item" id="item-m-${m.id}">
                                 <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" onchange="updateRoleDisabling()">
@@ -460,9 +538,6 @@
                 return;
             }
 
-            const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
-            const matchedMusician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail);
-
             existingList.innerHTML = dayEvents.map(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
@@ -470,7 +545,7 @@
 
                 const isUserInEvent = !isAdmin && e.assignedStaff && e.assignedStaff.some(s => {
                     const lower = s.toLowerCase();
-                    return lower.includes(userEmail) || (matchedMusician && lower.includes(matchedMusician.name.toLowerCase()));
+                    return lower.includes(currentUserName.toLowerCase()) || lower.includes(currentUserPhone);
                 });
 
                 return `
@@ -487,9 +562,6 @@
         window.requestCancellation = async (eventId, eventDate, eventTime, branchId) => {
             if (!confirm("האם אתה בטוח שברצונך לשלוח בקשת ביטול להופעה זו?")) return;
 
-            const userEmail = auth.currentUser ? auth.currentUser.email : '';
-            const musician = allMusicians.find(m => m.email && m.email.toLowerCase() === userEmail.toLowerCase());
-            const musicianName = musician ? musician.name : userEmail;
             const branchObj = allBranches.find(b => b.id === branchId);
             const branchName = branchObj ? branchObj.name : 'סניף';
 
@@ -499,8 +571,8 @@
                 eventTime,
                 branchId,
                 branchName,
-                musicianName,
-                musicianEmail: userEmail,
+                musicianName: currentUserName,
+                musicianPhone: currentUserPhone,
                 status: "pending",
                 createdAt: new Date()
             });
@@ -513,13 +585,12 @@
             const q = collection(db, "cancellation_requests");
             onSnapshot(q, (snapshot) => {
                 let pendingCount = 0;
-                const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
 
                 snapshot.forEach(docSnap => {
                     const data = docSnap.data();
                     if (isAdmin && data.status === "pending") {
                         pendingCount++;
-                    } else if (!isAdmin && data.musicianEmail.toLowerCase() === userEmail) {
+                    } else if (!isAdmin && data.musicianPhone === currentUserPhone) {
                         if (data.status === "approved" || data.status === "rejected") {
                             pendingCount++;
                         }
@@ -535,9 +606,120 @@
                 }
             });
         }
+
+        // REPORTS MODULE FOR ACCOUNTING
+        async function loadReportsView() {
+            const musicianSelect = document.getElementById('report-musician-select');
+            musicianSelect.innerHTML = '<option value="">כל אנשי הצוות</option>';
+            allMusicians.forEach(m => {
+                musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
+            });
+
+            const branchSelect = document.getElementById('report-branch-select');
+            branchSelect.innerHTML = '<option value="">כל הסניפים</option>';
+            allBranches.forEach(b => {
+                branchSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`;
+            });
+        }
+
+        let currentReportData = [];
+
+        window.generateAccountingReport = async () => {
+            const selectedMusician = document.getElementById('report-musician-select').value;
+            const selectedBranch = document.getElementById('report-branch-select').value;
+            const startDate = document.getElementById('report-start-date').value;
+            const endDate = document.getElementById('report-end-date').value;
+
+            const snap = await getDocs(collection(db, "events"));
+            currentReportData = [];
+
+            snap.forEach(d => {
+                const ev = d.data();
+                
+                let matchesMusician = true;
+                if (selectedMusician) {
+                    matchesMusician = ev.assignedStaff && ev.assignedStaff.some(s => s.toLowerCase().includes(selectedMusician.toLowerCase()));
+                }
+
+                let matchesBranch = true;
+                if (selectedBranch) {
+                    matchesBranch = ev.branchId === selectedBranch;
+                }
+
+                let matchesDate = true;
+                if (startDate && ev.date < startDate) matchesDate = false;
+                if (endDate && ev.date > endDate) matchesDate = false;
+
+                if (matchesMusician && matchesBranch && matchesDate) {
+                    const branch = allBranches.find(b => b.id === ev.branchId);
+                    currentReportData.push({
+                        date: ev.date,
+                        time: ev.time,
+                        branchName: branch ? branch.name : 'סניף',
+                        staff: ev.assignedStaff ? ev.assignedStaff.join(', ') : 'ללא צוות'
+                    });
+                }
+            });
+
+            currentReportData.sort((a, b) => a.date.localeCompare(b.date));
+
+            const resultsContainer = document.getElementById('report-results');
+            if (currentReportData.length === 0) {
+                resultsContainer.innerHTML = '<p style="color:var(--text-muted); margin-top:10px;">לא נמצאו הופעות התואמות לסינון המבוקש.</p>';
+                return;
+            }
+
+            let tableHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:15px;">
+                    <h4>תוצאות הדוח (${currentReportData.length} הופעות):</h4>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-success" style="width:auto; padding:4px 10px;" onclick="exportReportToCSV()">📥 ייצוא ל-Excel/CSV</button>
+                        <button class="btn-secondary" style="width:auto; padding:4px 10px;" onclick="window.print()">🩻 הדפסה/PDF</button>
+                    </div>
+                </div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>תאריך</th>
+                            <th>שעה</th>
+                            <th>סניף</th>
+                            <th>הרכב משתתף</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentReportData.map(row => `
+                            <tr>
+                                <td>${row.date}</td>
+                                <td>${row.time}</td>
+                                <td>${row.branchName}</td>
+                                <td>${row.staff}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            resultsContainer.innerHTML = tableHTML;
+        };
+
+        window.exportReportToCSV = () => {
+            if (currentReportData.length === 0) return;
+            let csvContent = "\uFEFFתאריך,שעה,סניף,צוות משתתף\n";
+            currentReportData.forEach(r => {
+                csvContent += `"${r.date}","${r.time}","${r.branchName}","${r.staff.replace(/"/g, '""')}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `report_salon_yevani_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
-            const userEmail = auth.currentUser ? auth.currentUser.email.toLowerCase() : '';
             const snap = await getDocs(collection(db, "cancellation_requests"));
 
             let html = '<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול</h3>';
@@ -555,7 +737,7 @@
                     if (req.status === 'pending') {
                         const availables = await findAvailableMusiciansForRole(req.eventDate, req.eventTime, req.musicianName);
                         if (availables.length === 0) {
-                            replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
+                            replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
                                 <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד):</label>
@@ -571,8 +753,8 @@
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid ${req.status === 'pending' ? '#fb8c00' : (req.status === 'approved' ? 'var(--success)' : 'var(--danger)')};">
                             <strong>📍 סניף: ${req.branchName}</strong> | 📅 תאריך: ${req.eventDate} (${req.eventTime})<br>
-                            <small style="color:var(--text-muted);">👤 מנהל סניף לעדכון: ${branch ? branch.managerName : 'לא הוגדר'}</small><br>
-                            <strong>👤 מבוקש על ידי:</strong> ${req.musicianName} (${req.musicianEmail})<br>
+                            <small style="color:var(--text-muted);">👤 מנהל סניף לעדכון: ${branch ? `${branch.managerName} (${branch.managerPhone})` : 'לא הוגדר'}</small><br>
+                            <strong>👤 מבוקש על ידי:</strong> ${req.musicianName} (📱 ${req.musicianPhone})<br>
                             <div style="margin-top:6px;">סטטוס: <strong>${statusText}</strong></div>
                             ${req.status === 'pending' ? `
                                 ${replacementDropdown}
@@ -583,7 +765,7 @@
                             ` : ''}
                         </div>
                     `;
-                } else if (req.musicianEmail.toLowerCase() === userEmail) {
+                } else if (req.musicianPhone === currentUserPhone) {
                     count++;
                     const statusText = req.status === 'pending' ? '⏳ הבקשה שלך ממתינה לאישור מנהל' : (req.status === 'approved' ? '✅ הבקשה אושרה והוסרת מההופעה' : '❌ הבקשה נדחתה על ידי המנהל');
                     html += `
@@ -622,10 +804,11 @@
             });
 
             return allMusicians.filter(m => {
+                const isActive = m.status !== "inactive";
                 const sameRole = !roleNeeded || m.role === roleNeeded;
                 const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase();
                 const isNotBusy = !busyMusicianNames.includes(m.name.toLowerCase());
-                return sameRole && notCancelling && isNotBusy;
+                return isActive && sameRole && notCancelling && isNotBusy;
             });
         }
 
@@ -743,19 +926,38 @@
     <div class="container">
         
         <div id="auth-section" class="card">
-            <h2 style="margin-bottom: 15px; text-align: center;">התחברות / הרשמה</h2>
+            <h2 id="auth-title" style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
             <form id="login-form" onsubmit="return false;">
-                <input type="email" id="login-email" required placeholder="אימייל">
+                
+                <input type="tel" id="login-phone" required placeholder="מספר טלפון (למשל: 0501234567)">
+                
+                <div id="register-fields" class="hidden">
+                    <input type="text" id="reg-name" placeholder="שם מלא (למשל: ישראל ישראלי)">
+                    <label style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד במערכת:</label>
+                    <select id="reg-role">
+                        <option value="זמר/ת">זמר/ת</option>
+                        <option value="קלידים">קלידים</option>
+                        <option value="בוזוקי">בוזוקי</option>
+                        <option value="מנהל סניף">מנהל סניף</option>
+                    </select>
+                </div>
+
                 <input type="password" id="login-password" required placeholder="סיסמה">
-                <button type="submit">התחבר</button>
-                <button type="button" id="register-btn" class="btn-secondary" style="margin-top:8px;">הירשם כמשתמש חדש</button>
+                
+                <button type="submit" id="login-submit-btn">התחבר</button>
+                <button type="button" id="register-submit-btn" class="btn-success hidden">סים הרשמה והתחבר</button>
+
+                <div style="text-align:center; margin-top:12px;">
+                    <a href="#" id="toggle-to-reg" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(true)">אין לך חשבון? הירשם כאן</a>
+                    <a href="#" id="toggle-to-login" class="hidden" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(false)">רשום כבר? התחבר כאן</a>
+                </div>
             </form>
         </div>
 
         <div id="main-app" class="hidden">
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <span style="font-size:0.85rem; color:var(--text-muted);">מחובר: <strong id="user-email"></strong></span>
+                <span style="font-size:0.85rem; color:var(--text-muted);">מחובר: <strong id="user-display-phone"></strong></span>
                 <button type="button" id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
             </div>
 
@@ -767,6 +969,7 @@
             <div class="nav-tabs">
                 <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
                 <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
+                <button type="button" id="btn-tab-reports" class="tab-btn hidden" onclick="switchTab('reports')">📊 דוחות</button>
                 <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
             </div>
 
@@ -778,14 +981,42 @@
                 <div class="card" id="notifs-container"></div>
             </div>
 
+            <div id="tab-reports" class="tab-content hidden">
+                <div class="card">
+                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">📊 הפקת דוחות להנהלת חשבונות</h3>
+                    <label style="font-size:0.85rem;">סינון לפי איש צוות / נגן:</label>
+                    <select id="report-musician-select"></select>
+
+                    <label style="font-size:0.85rem;">סינון לפי סניף:</label>
+                    <select id="report-branch-select"></select>
+
+                    <div style="display:flex; gap:8px;">
+                        <div style="flex:1;">
+                            <label style="font-size:0.85rem;">מתאריך:</label>
+                            <input type="date" id="report-start-date">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:0.85rem;">עד תאריך:</label>
+                            <input type="date" id="report-end-date">
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="generateAccountingReport()">הפק דוח</button>
+                    
+                    <div id="report-results"></div>
+                </div>
+            </div>
+
             <div id="tab-admin" class="tab-content hidden">
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">1. ניהול סניפים ומנהלי סניפים</h3>
                     <form id="add-branch-form">
                         <input type="hidden" id="edit-branch-id">
                         <input type="text" id="new-branch-name" placeholder="שם הסניף (למשל: סניף אשדוד)" required>
-                        <input type="text" id="new-branch-manager" placeholder="שם מנהל הסניף (חובה)" required>
-                        <input type="tel" id="new-branch-phone" placeholder="טלפון מנהל הסניף (חובה)" required>
+                        
+                        <label style="font-size:0.85rem; color:var(--text-muted);">בחר מנהל סניף מתוך הצוות:</label>
+                        <select id="new-branch-manager-select" required></select>
+
                         <label style="font-size:0.85rem; color:var(--text-muted);">בחר צבע מייצג לסניף ביומן:</label>
                         <input type="color" id="new-branch-color" value="#d4af37" style="height:40px; padding:2px; cursor:pointer;">
                         <button type="submit" id="branch-submit-btn">הוסף סניף</button>
@@ -794,7 +1025,7 @@
                 </div>
 
                 <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">2. ניהול צוות נגנים וזמרים</h3>
+                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">2. ניהול צוות נגנים, זמרים ומנהלים</h3>
                     <form id="add-musician-form">
                         <input type="hidden" id="edit-musician-id">
                         <input type="text" id="musician-name" placeholder="שם מלא (למשל: ישראל ישראלי)" required>
@@ -804,8 +1035,14 @@
                             <option value="בוזוקי">בוזוקי</option>
                             <option value="מנהל סניף">מנהל סניף</option>
                         </select>
-                        <input type="email" id="musician-email" placeholder="אימייל (למשל: test@gmail.com)" required>
-                        <input type="tel" id="musician-phone" placeholder="מספר טלפון (למשל: 050-1234567)" required>
+                        <input type="tel" id="musician-phone" placeholder="מספר טלפון (למשל: 0501234567)" required>
+                        
+                        <label style="font-size:0.85rem; color:var(--text-muted);">סטטוס פעילות במערכת:</label>
+                        <select id="musician-status">
+                            <option value="active">פעיל (ניתן לשבץ)</option>
+                            <option value="inactive">לא פעיל (בחו"ל / מושהה)</option>
+                        </select>
+
                         <button type="submit" id="musician-submit-btn">הוסף איש צוות</button>
                     </form>
                     <div id="musicians-list"></div>
@@ -839,6 +1076,3 @@
 
 </body>
 </html>
-
-
-
