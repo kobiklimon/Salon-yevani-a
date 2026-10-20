@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>סלון יווני - ניהול הופעות</title>
+    
+    <!-- PWA Settings -->
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIjM3NTAyOCIsCiAgInNob3J0X25hbWUiOiAiI9eo15DXqSIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMWExYTFhIiwKICAidGhlbWVfY29sb3IiOiAiI2Q0YWYzNyIKfQ==">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#d4af37">
+
+    <!-- CSS Styling -->
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --accent-gold: #d4af37;
+            --text-color: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --danger: #e53935;
+            --success: #43a047;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            direction: rtl;
+            padding-bottom: 30px;
+        }
+
+        header {
+            background: linear-gradient(180deg, #1f1f1f 0%, #121212 100%);
+            padding: 20px 15px;
+            text-align: center;
+            border-bottom: 2px solid var(--accent-gold);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        header h1 {
+            color: var(--accent-gold);
+            font-size: 1.5rem;
+            letter-spacing: 1px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        .auth-card, .show-card, .form-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border: 1px solid #2d2d2d;
+        }
+
+        input, select, button, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background-color: #2a2a2a;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        button {
+            background-color: var(--accent-gold);
+            color: #000;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:active {
+            opacity: 0.8;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .show-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        .show-date {
+            color: var(--accent-gold);
+            font-weight: bold;
+        }
+
+        .show-detail {
+            margin-bottom: 5px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .user-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .user-bar button {
+            width: auto;
+            padding: 5px 12px;
+            margin: 0;
+            font-size: 0.85rem;
+        }
+    </style>
+
+    <!-- Firebase SDK Modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCis-H1d8436iH6vBkNfGWoy3ekkIDSflU",
+            authDomain: "salon-yevani-a.firebaseapp.com",
+            projectId: "salon-yevani-a",
+            storageBucket: "salon-yevani-a.firebasestorage.app",
+            messagingSenderId: "659584308438",
+            appId: "1:659584308438:web:7ee8f7bc62e1b2132c6577",
+            measurementId: "G-47TZ06HNDE"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // DOM Elements
+        const authSection = document.getElementById('auth-section');
+        const mainApp = document.getElementById('main-app');
+        const loginForm = document.getElementById('login-form');
+        const showForm = document.getElementById('show-form');
+        const showsList = document.getElementById('shows-list');
+        const userEmailSpan = document.getElementById('user-email');
+        const logoutBtn = document.getElementById('logout-btn');
+
+        // Authentication State Observer
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                authSection.classList.add('hidden');
+                mainApp.classList.remove('hidden');
+                userEmailSpan.textContent = user.email;
+                loadShows();
+            } else {
+                authSection.classList.remove('hidden');
+                mainApp.classList.add('hidden');
+            }
+        });
+
+        // Login Handler
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                loginForm.reset();
+            } catch (error) {
+                alert("שגיאה בהתחברות: " + error.message);
+            }
+        });
+
+        // Logout Handler
+        logoutBtn.addEventListener('click', () => signOut(auth));
+
+        // Add Show Handler
+        showForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const location = document.getElementById('show-location').value;
+            const date = document.getElementById('show-date').value;
+            const time = document.getElementById('show-time').value;
+            const notes = document.getElementById('show-notes').value;
+
+            try {
+                await addDoc(collection(db, "shows"), {
+                    location,
+                    date,
+                    time,
+                    notes,
+                    createdAt: new Date()
+                });
+                showForm.reset();
+                loadShows();
+            } catch (error) {
+                alert("שגיאה בהוספת הופעה: " + error.message);
+            }
+        });
+
+        // Load Shows Function
+        async function loadShows() {
+            showsList.innerHTML = '<p style="text-align:center;">טוען הופעות...</p>';
+            try {
+                const q = query(collection(db, "shows"), orderBy("date", "asc"));
+                const querySnapshot = await getDocs(q);
+                showsList.innerHTML = '';
+
+                if (querySnapshot.empty) {
+                    showsList.innerHTML = '<p style="text-align:center; color: var(--text-muted);">אין הופעות קרובות</p>';
+                    return;
+                }
+
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const card = document.createElement('div');
+                    card.className = 'show-card';
+                    card.innerHTML = `
+                        <div class="show-header">
+                            <span class="show-date">${data.date} | ${data.time}</span>
+                            <button class="btn-danger" style="width:auto; padding:4px 8px; font-size:0.8rem;" onclick="deleteShow('${docSnap.id}')">מחק</button>
+                        </div>
+                        <div class="show-detail"><strong>מיקום/מיזם:</strong> ${data.location}</div>
+                        ${data.notes ? `<div class="show-detail"><strong>הערות:</strong> ${data.notes}</div>` : ''}
+                    `;
+                    showsList.appendChild(card);
+                });
+            } catch (error) {
+                showsList.innerHTML = '<p style="text-align:center; color: var(--danger);">שגיאה שטעינת הנתונים</p>';
+            }
+        }
+
+        // Global Delete Function
+        window.deleteShow = async (id) => {
+            if (confirm("האם למחוק הופעה זו?")) {
+                try {
+                    await deleteDoc(doc(db, "shows", id));
+                    loadShows();
+                } catch (error) {
+                    alert("שגיאה במחיקה: " + error.message);
+                }
+            }
+        };
+    </script>
+</head>
+<body>
+
+    <header>
+        <h1>🏛️ סלון יווני</h1>
+    </header>
+
+    <div class="container">
+        
+        <!-- Auth Section -->
+        <div id="auth-section" class="auth-card">
+            <h2 style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
+            <form id="login-form">
+                <label>אימייל:</label>
+                <input type="email" id="login-email" required placeholder="user@salonyevani.com">
+                
+                <label>סיסמה:</label>
+                <input type="password" id="login-password" required placeholder="******">
+                
+                <button type="submit">התחבר</button>
+            </form>
+        </div>
+
+        <!-- Main App Section -->
+        <div id="main-app" class="hidden">
+            
+            <div class="user-bar">
+                <span>מחובר כ: <strong id="user-email"></strong></span>
+                <button id="logout-btn" class="btn-danger">התנתק</button>
+            </div>
+
+            <!-- New Show Form -->
+            <div class="form-card">
+                <h3 style="margin-bottom: 10px; color: var(--accent-gold);">הוספת הופעה חדשה</h3>
+                <form id="show-form">
+                    <input type="text" id="show-location" placeholder="מיקום ההופעה / שם האירוע" required>
+                    <input type="date" id="show-date" required>
+                    <input type="time" id="show-time" required>
+                    <textarea id="show-notes" placeholder="הערות נוספות (הרכב, ציוד, דגשים...)" rows="3"></textarea>
+                    <button type="submit">שמור הופעה</button>
+                </form>
+            </div>
+
+            <!-- Shows List -->
+            <h3 style="margin: 20px 0 10px 0; color: var(--accent-gold);">לוח הופעות</h3>
+            <div id="shows-list"></div>
+
+        </div>
+
+    </div>
+
+</body>
+</html>
