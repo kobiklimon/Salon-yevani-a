@@ -438,6 +438,11 @@
             if (currentMonth > 11) { currentMonth = 0; currentYear++; }
             if (currentMonth < 0) { currentMonth = 11; currentYear--; }
             loadCalendarView();
+            updateNotificationBadge();
+            const notifsTab = document.getElementById('tab-notifs');
+            if (notifsTab && !notifsTab.classList.contains('hidden')) {
+                loadNotificationsView();
+            }
         };
         async function loadCalendarView() {
             const container = document.getElementById('calendar-container');
@@ -529,9 +534,14 @@
                 
                 const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
                 const busyMap = {}; 
+                let existingEventInThisBranch = null;
 
                 dayEventsSnap.forEach(docSnap => {
-                    const evData = docSnap.data();
+                    const evData = docSnap.id ? { id: docSnap.id, ...docSnap.data() } : docSnap.data();
+                    if (evData.branchId === currentBranchId) {
+                        existingEventInThisBranch = evData;
+                    }
+
                     const bObj = allBranches.find(b => b.id === evData.branchId);
                     const bName = bObj ? bObj.name : 'סניף אחר';
                     
@@ -539,12 +549,18 @@
                         evData.assignedStaff.forEach(staffStr => {
                             allMusicians.forEach(m => {
                                 if (staffStr.toLowerCase().includes(m.name.toLowerCase())) {
-                                    busyMap[m.name.toLowerCase()] = bName;
+                                    if (!(evData.branchId === currentBranchId)) {
+                                        busyMap[m.name.toLowerCase()] = bName;
+                                    }
                                 }
                             });
                         });
                     }
                 });
+
+                if (existingEventInThisBranch) {
+                    document.getElementById('event-time-input').value = existingEventInThisBranch.time || "20:00";
+                }
 
                 const activeMusiciansAndSingers = allMusicians.filter(m => m.status !== "inactive" && m.role !== "מנהל סניף");
 
@@ -555,9 +571,14 @@
                         const busyBranch = busyMap[m.name.toLowerCase()];
                         const isBusyOtherBranch = !!busyBranch;
 
+                        let isAlreadyAssigned = false;
+                        if (existingEventInThisBranch && existingEventInThisBranch.assignedStaff) {
+                            isAlreadyAssigned = existingEventInThisBranch.assignedStaff.some(s => s.toLowerCase().includes(m.name.toLowerCase()));
+                        }
+
                         rosterContainer.innerHTML += `
                             <div class="roster-item ${isBusyOtherBranch ? 'disabled-role' : ''}" id="item-m-${m.id}">
-                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-busy="${isBusyOtherBranch ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isBusyOtherBranch ? 'disabled' : ''} onchange="updateRoleDisabling()">
+                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-busy="${isBusyOtherBranch ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} ${isBusyOtherBranch ? 'disabled' : ''} onchange="updateRoleDisabling()">
                                 <label for="m-${m.id}">
                                     ${m.name} <span class="badge">${m.role}</span>
                                     ${isBusyOtherBranch ? `<br><small style="color:var(--danger); font-size:0.7rem;">(תפוס ב: ${busyBranch})</small>` : ''}
@@ -570,6 +591,7 @@
 
             renderExistingEvents(dateStr);
             document.getElementById('event-modal').classList.remove('hidden');
+            updateRoleDisabling();
         };
 
         window.updateRoleDisabling = () => {
@@ -614,7 +636,6 @@
                     return lower.includes(currentUserName.toLowerCase()) || lower.includes(currentUserPhone);
                 });
 
-                // CHECK PENDING CANCELLATION REQUEST FOR THIS EVENT AND THIS USER
                 const pendingRequest = allCancellationRequests.find(req => 
                     req.eventId === e.id && 
                     req.musicianPhone === currentUserPhone && 
@@ -663,16 +684,19 @@
             closeModal();
         };
 
-        function listenToNotifications() {
-            const q = collection(db, "cancellation_requests");
-            onSnapshot(q, (snapshot) => {
-                let pendingCount = 0;
-                allCancellationRequests = [];
+        function isDateInCurrentMonth(dateStr) {
+            if (!dateStr) return false;
+            const parts = dateStr.split('-');
+            if (parts.length < 2) return false;
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            return year === currentYear && month === currentMonth;
+        }
 
-                snapshot.forEach(docSnap => {
-                    const data = { id: docSnap.id, ...docSnap.data() };
-                    allCancellationRequests.push(data);
-
+        function updateNotificationBadge() {
+            let pendingCount = 0;
+            allCancellationRequests.forEach(data => {
+                if (isDateInCurrentMonth(data.eventDate)) {
                     if (isAdmin && data.status === "pending") {
                         pendingCount++;
                     } else if (!isAdmin && data.musicianPhone === currentUserPhone) {
@@ -680,14 +704,30 @@
                             pendingCount++;
                         }
                     }
+                }
+            });
+
+            const badge = document.getElementById('notif-count-badge');
+            if (pendingCount > 0) {
+                badge.textContent = pendingCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        function listenToNotifications() {
+            const q = collection(db, "cancellation_requests");
+            onSnapshot(q, (snapshot) => {
+                allCancellationRequests = [];
+                snapshot.forEach(docSnap => {
+                    allCancellationRequests.push({ id: docSnap.id, ...docSnap.data() });
                 });
 
-                const badge = document.getElementById('notif-count-badge');
-                if (pendingCount > 0) {
-                    badge.textContent = pendingCount;
-                    badge.classList.remove('hidden');
-                } else {
-                    badge.classList.add('hidden');
+                updateNotificationBadge();
+                const notifsTab = document.getElementById('tab-notifs');
+                if (notifsTab && !notifsTab.classList.contains('hidden')) {
+                    loadNotificationsView();
                 }
             });
         }
@@ -804,15 +844,16 @@
         };
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
-            const snap = await getDocs(collection(db, "cancellation_requests"));
+            const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
 
-            let html = '<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול</h3>';
+            let html = `<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול לחודש ${monthNames[currentMonth]} ${currentYear}</h3>`;
 
             let count = 0;
-            const allRequests = [];
-            snap.forEach(d => allRequests.push({ id: d.id, ...d.data() }));
+            
+            // FILTER NOTIFICATIONS ONLY FOR THE CURRENT DISPLAYED MONTH & YEAR
+            const filteredRequests = allCancellationRequests.filter(req => isDateInCurrentMonth(req.eventDate));
 
-            for (const req of allRequests) {
+            for (const req of filteredRequests) {
                 if (isAdmin) {
                     count++;
                     const statusText = req.status === 'pending' ? '⏳ ממתין לאישור מנהל' : (req.status === 'approved' ? '✅ אושר' : '❌ נדחה');
@@ -862,7 +903,7 @@
             }
 
             if (count === 0) {
-                html += '<p style="color:var(--text-muted);">אין התראות או בקשות פתוחות כרגע.</p>';
+                html += `<p style="color:var(--text-muted);">אין התראות או בקשות פתוחות בחודש ${monthNames[currentMonth]} ${currentYear}.</p>`;
             }
 
             container.innerHTML = html;
@@ -953,12 +994,6 @@
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
             
-            const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
-            if (existingTimeConflict) {
-                alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}!`);
-                return;
-            }
-
             const assignedStaff = [];
             const selectedRoles = [];
             let duplicateRoleFound = false;
@@ -988,13 +1023,30 @@
                 return;
             }
 
-            await addDoc(collection(db, "events"), {
-                branchId: currentBranchId,
-                date,
-                time,
-                assignedStaff,
-                createdAt: new Date()
-            });
+            const existingEvent = monthEvents.find(ev => ev.date === date && ev.branchId === currentBranchId);
+
+            if (existingEvent) {
+                await updateDoc(doc(db, "events", existingEvent.id), {
+                    time,
+                    assignedStaff
+                });
+                alert("ההופעה והשיבוצים עודכנו בהצלחה!");
+            } else {
+                const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
+                if (existingTimeConflict) {
+                    alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}!`);
+                    return;
+                }
+
+                await addDoc(collection(db, "events"), {
+                    branchId: currentBranchId,
+                    date,
+                    time,
+                    assignedStaff,
+                    createdAt: new Date()
+                });
+                alert("הופעה חדשה נשמרה בהצלחה!");
+            }
 
             closeModal();
             loadCalendarView();
