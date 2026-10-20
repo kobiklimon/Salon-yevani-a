@@ -52,6 +52,7 @@
         .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
         .roster-item input { width: auto; margin: 0; }
+        .roster-item.disabled-role { opacity: 0.4; }
 
         .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
     </style>
@@ -239,6 +240,7 @@
 
         window.openDayModal = (dateStr) => {
             document.getElementById('event-date-input').value = dateStr;
+            document.getElementById('event-time-input').value = "20:00"; // Default time set to 20:00
             document.getElementById('modal-date-title').textContent = `הוספת/שיבוץ הופעה לתאריך: ${dateStr}`;
             
             const rosterContainer = document.getElementById('musicians-roster');
@@ -248,42 +250,81 @@
             } else {
                 allMusicians.forEach(m => {
                     rosterContainer.innerHTML += `
-                        <div class="roster-item">
-                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})">
+                        <div class="roster-item" id="item-m-${m.id}">
+                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" value="${m.name} (${m.role})" onchange="updateRoleDisabling()">
                             <label for="m-${m.id}">${m.name} <span class="badge">${m.role}</span></label>
                         </div>
                     `;
                 });
             }
 
+            renderExistingEvents(dateStr);
+            document.getElementById('event-modal').classList.remove('hidden');
+        };
+
+        // Real-time Role Disabling
+        window.updateRoleDisabling = () => {
+            const selectedRoles = [];
+            document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
+                selectedRoles.push(cb.getAttribute('data-role'));
+            });
+
+            document.querySelectorAll('.musician-checkbox').forEach(cb => {
+                const role = cb.getAttribute('data-role');
+                const parentDiv = document.getElementById(`item-${cb.id}`);
+                
+                if (!cb.checked && selectedRoles.includes(role)) {
+                    cb.disabled = true;
+                    if(parentDiv) parentDiv.classList.add('disabled-role');
+                } else {
+                    cb.disabled = false;
+                    if(parentDiv) parentDiv.classList.remove('disabled-role');
+                }
+            });
+        };
+
+        function renderExistingEvents(dateStr) {
             const existingList = document.getElementById('existing-day-events');
             const dayEvents = monthEvents.filter(e => e.date === dateStr);
             existingList.innerHTML = dayEvents.map(e => `
                 <div style="background:#2a2a2a; padding:8px; margin-top:8px; border-radius:6px; font-size:0.85rem;">
                     <strong>🕒 שעה: ${e.time}</strong><br>
                     👥 צוות: ${e.assignedStaff ? e.assignedStaff.join(', ') : 'לא שובצו'}<br>
-                    <button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:5px;" onclick="deleteItem('events', '${e.id}')">מחק הופעה</button>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; margin-top:5px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>
                 </div>
             `).join('');
+        }
 
-            document.getElementById('event-modal').classList.remove('hidden');
+        window.deleteShow = async (id, dateStr) => {
+            if(confirm("למחוק הופעה זו?")) {
+                await deleteDoc(doc(db, "events", id));
+                await loadCalendarView();
+                renderExistingEvents(dateStr);
+            }
         };
 
         window.closeModal = () => document.getElementById('event-modal').classList.add('hidden');
 
-        // Save Event with Strict Role Validation
+        // Save Event with Dual Validation: Duplicate Time & Duplicate Roles
         document.getElementById('save-event-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
             
+            // 1. Check if an event already exists at the exact same time on this day in this branch
+            const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
+            if (existingTimeConflict) {
+                alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}! לא ניתן להוסיף 2 הופעות באותה שעה.`);
+                return;
+            }
+
+            // 2. Validate Roles (Maximum 1 per role)
             const assignedStaff = [];
             const selectedRoles = [];
             let duplicateRoleFound = false;
             let duplicateRoleName = '';
 
             const checkboxes = document.querySelectorAll('.musician-checkbox:checked');
-            
             checkboxes.forEach(cb => {
                 const role = cb.getAttribute('data-role');
                 const name = cb.getAttribute('data-name');
@@ -299,6 +340,11 @@
 
             if (duplicateRoleFound) {
                 alert(`שגיאה: לא ניתן לשבץ יותר מאיש צוות אחד בתפקיד "${duplicateRoleName}" באותה הופעה!`);
+                return;
+            }
+
+            if(assignedStaff.length === 0) {
+                alert("נא לבחור לפחות איש צוות אחד להופעה.");
                 return;
             }
 
@@ -395,7 +441,7 @@
                 <form id="save-event-form">
                     <input type="hidden" id="event-date-input">
                     <label>שעת הופעה:</label>
-                    <input type="time" id="event-time-input" required value="21:00">
+                    <input type="time" id="event-time-input" required value="20:00">
 
                     <label style="font-weight:bold; display:block; margin-top:10px;">שיבוץ נגנים וזמרים להופעה זו (לכל היותר 1 מכל תפקיד):</label>
                     <div id="musicians-roster" class="roster-grid"></div>
