@@ -52,7 +52,7 @@
         .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
         .roster-item input { width: auto; margin: 0; }
-        .roster-item.disabled-role { opacity: 0.4; }
+        .roster-item.disabled-role { opacity: 0.35; }
 
         .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
     </style>
@@ -262,7 +262,6 @@
             document.getElementById('event-modal').classList.remove('hidden');
         };
 
-        // Real-time Role Disabling
         window.updateRoleDisabling = () => {
             const selectedRoles = [];
             document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
@@ -286,6 +285,10 @@
         function renderExistingEvents(dateStr) {
             const existingList = document.getElementById('existing-day-events');
             const dayEvents = monthEvents.filter(e => e.date === dateStr);
+            if(dayEvents.length === 0) {
+                existingList.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">אין הופעות שנקבעו ליום זה.</p>';
+                return;
+            }
             existingList.innerHTML = dayEvents.map(e => `
                 <div style="background:#2a2a2a; padding:8px; margin-top:8px; border-radius:6px; font-size:0.85rem;">
                     <strong>🕒 שעה: ${e.time}</strong><br>
@@ -305,20 +308,19 @@
 
         window.closeModal = () => document.getElementById('event-modal').classList.add('hidden');
 
-        // Save Event with Dual Validation: Duplicate Time & Duplicate Roles
         document.getElementById('save-event-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
             
-            // 1. Check if an event already exists at the exact same time on this day in this branch
+            // Check for duplicate show at same time in this branch
             const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
             if (existingTimeConflict) {
                 alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}! לא ניתן להוסיף 2 הופעות באותה שעה.`);
                 return;
             }
 
-            // 2. Validate Roles (Maximum 1 per role)
+            // Check roles
             const assignedStaff = [];
             const selectedRoles = [];
             let duplicateRoleFound = false;
