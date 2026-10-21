@@ -244,7 +244,6 @@
                 alert("שגיאה בעדכון מצב נעילה: " + err.message);
             }
         };
-
         async function logAction(actionType, details, category = "כללי") {
             try {
                 await addDoc(collection(db, "audit_logs"), {
@@ -670,7 +669,6 @@
             allMusicians = [];
             snap.forEach(d => allMusicians.push({ id: d.id, ...d.data() }));
         }
-
         async function loadAdminData() {
             if(!isAdmin) return;
             const bSnap = await getDocs(collection(db, "branches"));
@@ -1130,7 +1128,6 @@
                 }
             });
         };
-
         function renderExistingEvents(dateStr) {
             const existingList = document.getElementById('existing-day-events');
             const dayEvents = monthEvents.filter(e => e.date === dateStr);
@@ -1489,7 +1486,7 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוي (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
