@@ -117,7 +117,7 @@
             return `user_${cleanPhone(phone)}@salonyevani.local`;
         }
 
-        async function logAction(actionType, details) {
+        async function logAction(actionType, details, category = "כללי") {
             try {
                 await addDoc(collection(db, "audit_logs"), {
                     timestamp: new Date(),
@@ -125,6 +125,7 @@
                     userPhone: currentUserPhone,
                     userName: currentUserName,
                     actionType,
+                    category,
                     details
                 });
             } catch (e) {
@@ -290,8 +291,11 @@
 
             try {
                 await signInWithEmailAndPassword(auth, fakeEmail, password);
-                logAction("התחברות", "משתמש התחבר למערכת");
-            } catch (err) { alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); }
+                logAction("התחברות", "משתמש התחבר בהצלחה למערכת", "אבטחה והתחברות");
+            } catch (err) {
+                logAction("כשל בהתחברות", `ניסיון התחברות שנכשל עבור טלפון: ${phone}`, "אבטחה והתחברות");
+                alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); 
+            }
         });
 
         document.getElementById('register-submit-btn').addEventListener('click', async () => {
@@ -330,14 +334,14 @@
                 }
 
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
-                logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`);
+                logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות");
             } catch (err) {
                 alert("שגיאה בהרשמה: " + err.message);
             }
         });
 
         document.getElementById('logout-btn').addEventListener('click', () => {
-            logAction("התנתקות", "משתמש התנתק מהמערכת");
+            logAction("התנתקות", "משתמש התנתק מהמערכת", "אבטחה והתחברות");
             signOut(auth);
         });
 
@@ -392,13 +396,13 @@
             try {
                 if (editId) {
                     await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone, color });
-                    logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`);
+                    logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
                     document.getElementById('edit-branch-id').value = '';
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "branches"), { name, managerId: managerSelect.value, managerName, managerPhone, color });
-                    logAction("הוספת סניף", `נוסף סניף חדש: ${name}, מנהל: ${managerName}`);
+                    logAction("הוספת סניף", `נוסף סניף חדש: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
                     alert("סניף חדש נוסף בהצלחה!");
                 }
                 document.getElementById('new-branch-name').value = '';
@@ -448,7 +452,7 @@
             try {
                 if (editId) {
                     await updateDoc(doc(db, "musicians", editId), { name, role, status });
-                    logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`);
+                    logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`, "ניהול סניפים וצוות");
                     document.getElementById('edit-musician-id').value = '';
                     document.getElementById('musician-phone').disabled = false;
                     document.getElementById('phone-edit-note').classList.add('hidden');
@@ -456,7 +460,7 @@
                     alert("איש הצוות עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active" });
-                    logAction("הוספת איש צוות", `נוסף איש צוות: ${name} (${role}), טלפון: ${phone}`);
+                    logAction("הוספת איש צוות", `נוסף איש צוות: ${name} (${role}), טלפון: ${phone}`, "ניהול סניפים וצוות");
                     alert("איש צוות נוסף בהצלחה!");
                 }
 
@@ -534,7 +538,7 @@
             const confirmVal = prompt(`כדי למחוק את סניף "${name}", הקלד את המילה: מחיקה`);
             if (confirmVal === "מחיקה") {
                 await deleteDoc(doc(db, "branches", id));
-                logAction("מחיקת סניף", `נמחק סניף: ${name}`);
+                logAction("מחיקת סניף", `נמחק סניף: ${name}`, "ניהול סניפים וצוות");
                 await loadMusiciansData();
                 loadAdminData();
                 loadBranchesSelect();
@@ -566,7 +570,7 @@
                 downloadAnchor.click();
                 downloadAnchor.remove();
 
-                logAction("גיבוי מערכת", "הורד קובץ גיבוי נתונים מלא (JSON)");
+                logAction("גיבוי מערכת", "הורד קובץ גיבוי נתונים מלא (JSON)", "כללי");
             } catch (err) {
                 alert("שגיאה ביצירת גיבוי: " + err.message);
             }
@@ -606,7 +610,7 @@
                 const unavailDeletes = unavailSnap.docs.map(d => deleteDoc(doc(db, "unavailabilities", d.id)));
                 await Promise.all(unavailDeletes);
 
-                logAction("אתחול מערכת", "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת");
+                logAction("אתחול מערכת", "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת", "כללי");
 
                 alert("✅ המערכת אופסה בהצלחה ונוקתה לחלוטין מנתונים!");
                 window.location.reload();
@@ -617,6 +621,8 @@
 
         document.getElementById('branch-select').addEventListener('change', (e) => {
             currentBranchId = e.target.value;
+            const branchObj = allBranches.find(b => b.id === currentBranchId);
+            logAction("סינון סניף", `שונה סינון סניפים ראשי ל: ${branchObj ? branchObj.name : 'כל הסניפים'}`, "כללי");
             loadCalendarView();
         });
 
@@ -624,6 +630,7 @@
             currentMonth += dir;
             if (currentMonth > 11) { currentMonth = 0; currentYear++; }
             if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            logAction("שינוי חודש תצוגה", `מעבר לצפייה בחודש: ${currentMonth + 1}/${currentYear}`, "הופעות ושיבוצים");
             loadCalendarView();
             updateNotificationBadge();
             const notifsTab = document.getElementById('tab-notifs');
@@ -741,7 +748,7 @@
             for (let day = 1; day <= daysInMonth; day++) {
                 const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 
-                const isUnavail = userUnavailabilities.some(u => u.phone === currentUserPhone && u.date === dateStr);
+                const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
 
                 gridHTML += `
                     <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})" style="cursor:pointer;">
@@ -757,11 +764,39 @@
         }
 
         window.toggleDayUnavailability = async (dateStr, isCurrentlyUnavail) => {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            if (dateStr < todayStr) {
+                alert("לא ניתן לעדכן אי-זמינות לתאריכי עבר.");
+                return;
+            }
+
+            const eventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
+            let isUserAlreadyAssigned = false;
+            let assignedBranchName = '';
+
+            eventsSnap.forEach(d => {
+                const ev = d.data();
+                if (ev.assignedStaff) {
+                    ev.assignedStaff.forEach(s => {
+                        if (s.toLowerCase().includes(currentUserName.toLowerCase()) || s.includes(currentUserPhone)) {
+                            isUserAlreadyAssigned = true;
+                            const bObj = allBranches.find(b => b.id === ev.branchId);
+                            assignedBranchName = bObj ? bObj.name : 'סניף';
+                        }
+                    });
+                }
+            });
+
+            if (isUserAlreadyAssigned && !isCurrentlyUnavail) {
+                alert(`⚠️ אינך יכול לסמן אי-זמינות בתאריך ${dateStr}!\nאתה כבר משובץ להופעה בסניף "${assignedBranchName}" בתאריך זה.\n\nכדי לבטל את הגעתך, עליך לשלוח בקשת ביטול מוסדרת בלשונית "יומן הופעות".`);
+                return;
+            }
+
             if (isCurrentlyUnavail) {
-                const record = userUnavailabilities.find(u => u.phone === currentUserPhone && u.date === dateStr);
+                const record = userUnavailabilities.find(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
                 if (record) {
                     await deleteDoc(doc(db, "unavailabilities", record.id));
-                    logAction("זמינות", `ביטול חסימת תאריך ${dateStr}`);
+                    logAction("ביטול אי-זמינות", `ביטול חסימת תאריך ${dateStr}`, "אי-זמינות צוות");
                 }
             } else {
                 await addDoc(collection(db, "unavailabilities"), {
@@ -770,13 +805,24 @@
                     date: dateStr,
                     createdAt: new Date()
                 });
-                logAction("זמינות", `סימון אי-זמינות בתאריך ${dateStr}`);
+                logAction("סימון אי-זמינות", `סימון אי-זמינות בתאריך ${dateStr}`, "אי-זמינות צוות");
             }
 
             loadUnavailabilityCalendar();
         };
 
         window.openDayModal = async (dateStr) => {
+            const today = new Date();
+            const todayStr = today.toISOString().slice(0, 10);
+            
+            const eventDateObj = new Date(dateStr);
+            const isNextMonthOrLater = eventDateObj.getFullYear() > today.getFullYear() || (eventDateObj.getFullYear() === today.getFullYear() && eventDateObj.getMonth() > today.getMonth());
+            
+            if (isNextMonthOrLater && today.getDate() < 16 && !isSuperOwner) {
+                alert("🔒 שיבוץ הופעות לחודש הבא ייפתח ב-16 בחודש, לאחר סגירת עדכוני הזמינות של הצוות.");
+                return;
+            }
+
             document.getElementById('event-date-input').value = dateStr;
             document.getElementById('event-time-input').value = "20:00";
             document.getElementById('modal-date-title').textContent = `הופעות/שיבוצים לתאריך: ${dateStr}`;
@@ -784,7 +830,6 @@
             const rosterContainer = document.getElementById('musicians-roster');
             rosterContainer.innerHTML = '';
             
-            const todayStr = new Date().toISOString().slice(0, 10);
             const isPastEvent = dateStr < todayStr;
 
             if (!isAdmin || !currentBranchId || (isPastEvent && !isSuperOwner)) {
@@ -811,9 +856,9 @@
                     if (evData.assignedStaff) {
                         evData.assignedStaff.forEach(staffStr => {
                             allMusicians.forEach(m => {
-                                if (staffStr.toLowerCase().includes(m.name.toLowerCase())) {
+                                if (staffStr.toLowerCase().includes(m.name.toLowerCase()) || cleanPhone(m.phone) === cleanPhone(currentUserPhone)) {
                                     if (!(evData.branchId === currentBranchId)) {
-                                        busyMap[m.name.toLowerCase()] = bName;
+                                        busyMap[cleanPhone(m.phone)] = bName;
                                     }
                                 }
                             });
@@ -831,14 +876,14 @@
                     rosterContainer.innerHTML = '<p style="color:var(--text-muted);">אין נגנים/זמרים פעילים במערכת. הגדר אותם בלשונית "תפריט מנהל".</p>';
                 } else {
                     activeMusiciansAndSingers.forEach(m => {
-                        const busyBranch = busyMap[m.name.toLowerCase()];
+                        const busyBranch = busyMap[cleanPhone(m.phone)];
                         const isBusyOtherBranch = !!busyBranch;
 
                         const isUserMarkedUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === cleanPhone(m.phone) && u.date === dateStr);
 
                         let isAlreadyAssigned = false;
                         if (existingEventInThisBranch && existingEventInThisBranch.assignedStaff) {
-                            isAlreadyAssigned = existingEventInThisBranch.assignedStaff.some(s => s.toLowerCase().includes(m.name.toLowerCase()));
+                            isAlreadyAssigned = existingEventInThisBranch.assignedStaff.some(s => s.toLowerCase().includes(m.name.toLowerCase()) || s.includes(m.phone));
                         }
 
                         let statusText = '';
@@ -854,7 +899,7 @@
 
                         rosterContainer.innerHTML += `
                             <div class="roster-item ${isDisabled ? 'disabled-role' : ''}" id="item-m-${m.id}">
-                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-busy="${isDisabled ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="updateRoleDisabling()">
+                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" data-busy="${isDisabled ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="updateRoleDisabling()">
                                 <label for="m-${m.id}">
                                     ${m.name} <span class="badge">${m.role}</span>
                                     ${statusText}
@@ -917,7 +962,7 @@
 
                 const pendingRequest = allCancellationRequests.find(req => 
                     req.eventId === e.id && 
-                    req.musicianPhone === currentUserPhone && 
+                    cleanPhone(req.musicianPhone) === currentUserPhone && 
                     req.status === 'pending'
                 );
 
@@ -959,7 +1004,7 @@
                 createdAt: new Date()
             });
 
-            logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`);
+            logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
             alert("בקשת הביטול נשלחה בהצלחה למנהל המערכת ולמנהל הסניף!");
             closeModal();
         };
@@ -979,7 +1024,7 @@
                 if (isDateInCurrentMonth(data.eventDate)) {
                     if (isAdmin && data.status === "pending") {
                         pendingCount++;
-                    } else if (!isAdmin && data.musicianPhone === currentUserPhone) {
+                    } else if (!isAdmin && cleanPhone(data.musicianPhone) === currentUserPhone) {
                         if (data.status === "approved" || data.status === "rejected") {
                             pendingCount++;
                         }
@@ -1036,32 +1081,66 @@
         async function loadAuditLogsView() {
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
-            container.innerHTML = '<p style="color:var(--text-muted);">טוען יומן שינויים...</p>';
+            
+            let categoryFilterHTML = `
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem; color:var(--accent-gold);">סינון לוגים לפי קטגוריה:</label>
+                    <select id="audit-category-select" style="margin-top:4px;" onchange="renderFilteredAuditLogs()">
+                        <option value="">הצג הכל (כל הקטגוריות)</option>
+                        <option value="אבטחה והתחברות">🔐 אבטחה והתחברות</option>
+                        <option value="הופעות ושיבוצים">📅 הופעות ושיבוצים</option>
+                        <option value="אי-זמינות צוות">🚫 אי-זמינות צוות</option>
+                        <option value="בקשות ביטול והחלפות">🚨 בקשות ביטול והחלפות</option>
+                        <option value="ניהול סניפים וצוות">⚙️ ניהול סניפים וצוות</option>
+                        <option value="דוחות וייצוא">📊 דוחות וייצוא</option>
+                        <option value="כללי">🌐 כללי</option>
+                    </select>
+                </div>
+                <div id="logs-list-content"><p style="color:var(--text-muted);">טוען יומן שינויים...</p></div>
+            `;
+            
+            container.innerHTML = categoryFilterHTML;
+            await renderFilteredAuditLogs();
+        }
+
+        let fetchedLogs = [];
+
+        async function renderFilteredAuditLogs() {
+            const contentDiv = document.getElementById('logs-list-content');
+            const selectedCategory = document.getElementById('audit-category-select') ? document.getElementById('audit-category-select').value : '';
 
             try {
-                const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
-                const snap = await getDocs(q);
+                if (fetchedLogs.length === 0) {
+                    const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
+                    const snap = await getDocs(q);
+                    fetchedLogs = [];
+                    snap.forEach(d => fetchedLogs.push({ id: d.id, ...d.data() }));
+                }
+
+                let filtered = fetchedLogs;
+                if (selectedCategory) {
+                    filtered = fetchedLogs.filter(l => l.category === selectedCategory);
+                }
                 
-                if (snap.empty) {
-                    container.innerHTML = '<p style="color:var(--text-muted);">אין שינויים מתוייקים בלוג.</p>';
+                if (filtered.length === 0) {
+                    contentDiv.innerHTML = '<p style="color:var(--text-muted);">אין שינויים מתוייקים בקטגוריה זו.</p>';
                     return;
                 }
 
                 let html = '<h4>📜 יומן פעולות ושינויים במערכת (Log):</h4><div style="margin-top:10px;">';
-                snap.forEach(d => {
-                    const log = d.data();
+                filtered.forEach(log => {
                     html += `
                         <div class="log-item">
-                            <strong style="color:var(--accent-gold);">${log.actionType || 'פעולה'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
+                            <strong style="color:var(--accent-gold);">${log.actionType || 'פעולה'}</strong> | <span class="badge">${log.category || 'כללי'}</span> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
                             <span>👤 מבוצע על ידי: <strong>${log.userName || 'משתמש'}</strong> (${log.userPhone || ''})</span><br>
                             <span style="color:#fff;">📝 תיאור: ${log.details || ''}</span>
                         </div>
                     `;
                 });
                 html += '</div>';
-                container.innerHTML = html;
+                contentDiv.innerHTML = html;
             } catch (err) {
-                container.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת לוגים: ${err.message}</p>`;
+                contentDiv.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת לוגים: ${err.message}</p>`;
             }
         }
 
@@ -1111,6 +1190,8 @@
             });
 
             currentReportData.sort((a, b) => a.date.localeCompare(b.date));
+
+            logAction("הפקת דוח", `הופק דוח הנהלת חשבונות (${currentReportData.length} תוצאות) עבור ${selectedMusician || 'כל הצוות'}`, "דוחות וייצוא");
 
             const resultsContainer = document.getElementById('report-results');
             if (currentReportData.length === 0) {
@@ -1166,6 +1247,8 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+
+            logAction("ייצוא דוח CSV", `ייצוא דוח ל-Excel/CSV (${currentReportData.length} שורות)`, "דוחות וייצוא");
         };
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
@@ -1204,9 +1287,9 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
-                                    ${availables.map(m => `<option value="${m.name}">${m.name} (${m.role})</option>`).join('')}
+                                    ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
                             `;
                         }
@@ -1229,7 +1312,7 @@
                             ` : ''}
                         </div>
                     `;
-                } else if (req.musicianPhone === currentUserPhone) {
+                } else if (cleanPhone(req.musicianPhone) === currentUserPhone) {
                     count++;
                     const statusText = req.status === 'pending' ? '⏳ הבקשה שלך ממתינה לאישור מנהל' : (req.status === 'approved' ? '✅ הבקשה אושרה והוסרת מההופעה' : '❌ הבקשה נדחתה על ידי המנהל');
                     html += `
@@ -1249,19 +1332,19 @@
         }
 
         async function findAvailableMusiciansForRole(eventDate, eventTime, cancellingMusicianName) {
-            const cancellingMusician = allMusicians.find(m => m.name.toLowerCase() === cancellingMusicianName.toLowerCase());
+            const cancellingMusician = allMusicians.find(m => m.name.toLowerCase() === cancellingMusicianName.toLowerCase() || cleanPhone(m.phone) === currentUserPhone);
             const roleNeeded = cancellingMusician ? cancellingMusician.role : null;
 
             const q = query(collection(db, "events"), where("date", "==", eventDate));
             const busySnap = await getDocs(q);
 
-            const busyMusicianNames = [];
+            const busyMusicianPhones = [];
             busySnap.forEach(d => {
                 const staffList = d.data().assignedStaff || [];
                 staffList.forEach(s => {
                     allMusicians.forEach(m => {
-                        if (s.toLowerCase().includes(m.name.toLowerCase())) {
-                            busyMusicianNames.push(m.name.toLowerCase());
+                        if (s.toLowerCase().includes(m.name.toLowerCase()) || s.includes(m.phone)) {
+                            busyMusicianPhones.push(cleanPhone(m.phone));
                         }
                     });
                 });
@@ -1270,13 +1353,13 @@
             return allMusicians.filter(m => {
                 const isActive = m.status !== "inactive";
                 const isNotManager = m.role !== "מנהל סניף";
-                const sameRole = !roleNeeded || m.role === roleNeeded;
-                const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase();
-                const isNotBusy = !busyMusicianNames.includes(m.name.toLowerCase());
+                const sameRoleStrict = roleNeeded && m.role === roleNeeded;
+                const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase() && cleanPhone(m.phone) !== cleanPhone(cancellingMusician ? cancellingMusician.phone : '');
+                const isNotBusy = !busyMusicianPhones.includes(cleanPhone(m.phone));
                 
                 const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === cleanPhone(m.phone) && u.date === eventDate);
 
-                return isActive && isNotManager && sameRole && notCancelling && isNotBusy && !isUnavail;
+                return isActive && isNotManager && sameRoleStrict && notCancelling && isNotBusy && !isUnavail;
             });
         }
 
@@ -1303,7 +1386,7 @@
             const managerName = branchObj ? branchObj.managerName : 'מנהל הסניף';
 
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved", newMusician: newMusicianName });
-            logAction("אישור ביטול והחלפה", `אושרה בקשת ביטול של ${cancellingMusicianName}, שובץ חלופי: ${newMusicianName}`);
+            logAction("אישור ביטול והחלפה", `אושרה בקשת ביטול של ${cancellingMusicianName}, שובץ חלופי: ${newMusicianName}`, "בקשות ביטול והחלפות");
             
             alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName}.\nהודעה אוטומטית נשלחה ל${managerName} (מנהל הסניף).`);
 
@@ -1313,7 +1396,7 @@
 
         window.rejectRequest = async (requestId) => {
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "rejected" });
-            logAction("דחיית בקשת ביטול", `נדחתה בקשת ביטול (ID: ${requestId})`);
+            logAction("דחיית בקשת ביטול", `נדחתה בקשת ביטול (ID: ${requestId})`, "בקשות ביטול והחלפות");
             alert("בקשת הביטול נדחתה.");
             loadNotificationsView();
         };
@@ -1322,7 +1405,7 @@
             if(!isAdmin) return;
             if(confirm(`האם אתה בטוח שברצונך למחוק את ההופעה בתאריך ${dateStr}?`)) {
                 await deleteDoc(doc(db, "events", id));
-                logAction("מחיקת הופעה", `נמחקה הופעה בתאריך ${dateStr} בסניף ${branchName || ''}`);
+                logAction("מחיקת הופעה", `נמחקה הופעה בתאריך ${dateStr} בסניף ${branchName || ''}`, "הופעות ושיבוצים");
                 await loadCalendarView();
                 renderExistingEvents(dateStr);
             }
@@ -1342,6 +1425,7 @@
             
             const assignedStaff = [];
             const selectedRoles = [];
+            const selectedPhones = [];
             let duplicateRoleFound = false;
             let duplicateRoleName = '';
 
@@ -1349,18 +1433,45 @@
             checkboxes.forEach(cb => {
                 const role = cb.getAttribute('data-role');
                 const name = cb.getAttribute('data-name');
+                const phone = cb.getAttribute('data-phone');
                 
                 if (selectedRoles.includes(role)) {
                     duplicateRoleFound = true;
                     duplicateRoleName = role;
                 } else {
                     selectedRoles.push(role);
+                    selectedPhones.push(cleanPhone(phone));
                     assignedStaff.push(`${name} (${role})`);
                 }
             });
 
             if (duplicateRoleFound) {
                 alert(`שגיאה: לא ניתן לשבץ יותר מאיש צוות אחד בתפקיד "${duplicateRoleName}" באותה הופעה!`);
+                return;
+            }
+
+            const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", date)));
+            let doubleBookingConflict = false;
+            let doubleBookingDetails = '';
+
+            dayEventsSnap.forEach(d => {
+                const ev = d.data();
+                if (ev.branchId !== currentBranchId && ev.assignedStaff) {
+                    ev.assignedStaff.forEach(staffStr => {
+                        allMusicians.forEach(m => {
+                            const mPhone = cleanPhone(m.phone);
+                            if (selectedPhones.includes(mPhone) && (staffStr.toLowerCase().includes(m.name.toLowerCase()) || staffStr.includes(m.phone))) {
+                                doubleBookingConflict = true;
+                                const bObj = allBranches.find(b => b.id === ev.branchId);
+                                doubleBookingDetails = `${m.name} כבר משובץ/ת להופעה ב-שעה ${ev.time} בסניף "${bObj ? bObj.name : 'אחר'}"!`;
+                            }
+                        });
+                    });
+                }
+            });
+
+            if (doubleBookingConflict) {
+                alert(`⚠️ שגיאה (כפילות שיבוצים):\n${doubleBookingDetails}\n\nההופעה לא נשמרה.`);
                 return;
             }
 
@@ -1383,7 +1494,7 @@
                     time,
                     assignedStaff
                 });
-                logAction("עדכון הופעה", `עודכנה הופעה בתאריך ${date} בסניף ${branchName}, צוות: ${assignedStaff.join(', ')}`);
+                logAction("עדכון הופעה", `עודכנה הופעה בתאריך ${date} בסניף ${branchName}, צוות: ${assignedStaff.join(', ')}`, "הופעות ושיבוצים");
                 alert("ההופעה והשיבוצים עודכנו בהצלחה!");
             } else {
                 const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time && ev.branchId === currentBranchId);
@@ -1399,7 +1510,7 @@
                     assignedStaff,
                     createdAt: new Date()
                 });
-                logAction("יצירת הופעה", `נוצרה הופעה חדשה בתאריך ${date} בסניף ${branchName}, צוות: ${assignedStaff.join(', ')}`);
+                logAction("יצירת הופעה", `נוצרה הופעה חדשה בתאריך ${date} בסניף ${branchName}, צוות: ${assignedStaff.join(', ')}`, "הופעות ושיבוצים");
                 alert("הופעה חדשה נשמרה בהצלחה!");
             }
 
@@ -1611,3 +1722,7 @@
 
 </body>
 </html>
+
+
+
+
