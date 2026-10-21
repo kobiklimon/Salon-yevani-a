@@ -358,7 +358,7 @@
             populateBranchManagersDropdown();
         }
 
-        function populateBranchManagersDropdown() {
+        function populateBranchManagersDropdown(selectedManagerId = '') {
             const managerSelect = document.getElementById('new-branch-manager-select');
             if (!managerSelect) return;
 
@@ -367,7 +367,8 @@
             const branchManagers = activeMusicians.filter(m => m.role === "מנהל סניף");
             
             branchManagers.forEach(m => {
-                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone})</option>`;
+                const isSelected = m.id === selectedManagerId ? 'selected' : '';
+                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}" ${isSelected}>${m.name} (${m.phone})</option>`;
             });
         }
 
@@ -507,7 +508,7 @@
         window.editBranch = (id, name, managerId, color) => {
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
-            document.getElementById('new-branch-manager-select').value = managerId || '';
+            populateBranchManagersDropdown(managerId);
             document.getElementById('new-branch-color').value = color || '#d4af37';
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
             window.scrollTo({top: 0, behavior: 'smooth'});
@@ -1178,9 +1179,9 @@
             if (is13thDay) {
                 html += `
                     <div style="background:#2b2202; border:1px solid var(--accent-gold); padding:12px; margin-bottom:15px; border-radius:8px;">
-                        <h4 style="color:var(--accent-gold); margin-bottom:6px;">💳 תזכורת להגשת חשבונית ולעדכון זמינות</h4>
+                        <h4 style="color:var(--accent-gold); margin-bottom:6px;">💳 תזכורת להגשת חשבונות ועדכון זמינות</h4>
                         <p style="font-size:0.85rem; color:#e0e0e0; margin:0;">
-                            תזכורת: מחר (ה-14 בחודש) מבוצעת פעימת תשלום – נא להגיש חשבוניות עד סוף היום. כמו כן, נא לעבור על בלשונית "זמינות לחודש הבא" ולעדכן ימי אי-זמינות מעודכנים עבור המנהלים.
+                            תזכורת: מחר (ה-14 בחודש) מבוצעת פעימת תשלום – נא להגיש חשבוניות עד סוף היום. כמו כן, נא לעבור ללשונית "זמינות לחודש הבא" ולעדכן ימי אי-זמינות מעודכנים עבור המנהלים.
                         </p>
                     </div>
                 `;
@@ -1597,7 +1598,7 @@
             </div>
 
             <div id="invoice-reminder-modal" class="card hidden" style="position:fixed; top:20%; left:10%; right:10%; z-index:2000; border:2px solid var(--accent-gold); background:#1e1e1e; padding:20px; text-align:center;">
-                <h3 style="color:var(--accent-gold); margin-bottom:10px;">📄 תזכורת להגשת חשבוניות ועדכון זמינות!</h3>
+                <h3 style="color:var(--accent-gold); margin-bottom:10px;">📄 תזכורת להגשת חשבונות ועדכון זמינות!</h3>
                 <p style="font-size:0.95rem; margin-bottom:15px;">
                     שלום! מחר (ה-14 בחודש) מבוצעת פעימת תשלום – נא להגיש חשבוניות עד סוף היום. בנוסף, נא לעדכן את ימי האי-זמינות שלך לחודש הבא בלשונית "זמינות לחודש הבא".
                 </p>
