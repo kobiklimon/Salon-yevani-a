@@ -69,6 +69,9 @@
         .report-table th { background-color: #2a2a2a; color: var(--accent-gold); }
         
         .log-item { background: #252525; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-right: 3px solid var(--accent-gold); font-size: 0.85rem; }
+        
+        .unavail-cell { background: #3a1c1c !important; border: 1px solid var(--danger) !important; }
+        .unavail-cell .day-num { color: var(--danger); }
     </style>
 
     <script type="module">
@@ -96,6 +99,7 @@
         let allBranches = [];
         let monthEvents = [];
         let allCancellationRequests = [];
+        let userUnavailabilities = [];
         let isAdmin = false;
         let isBranchManager = false;
         let isSuperOwner = false;
@@ -136,6 +140,7 @@
             document.getElementById(`tab-${tabName}`).classList.remove('hidden');
 
             if(tabName === 'calendar') loadCalendarView();
+            if(tabName === 'unavail') loadUnavailabilityCalendar();
             if(tabName === 'admin' && isAdmin) loadAdminData();
             if(tabName === 'reports') loadReportsView();
             if(tabName === 'notifs') loadNotificationsView();
@@ -180,10 +185,8 @@
         function checkInvoiceReminder() {
             const today = new Date();
             const day = today.getDate();
-            const lastDayOfCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-            const dayBeforeLast = lastDayOfCurrentMonth - 1;
 
-            if (day === 14 || day === dayBeforeLast) {
+            if (day === 13) {
                 document.getElementById('invoice-reminder-modal').classList.remove('hidden');
             }
         }
@@ -200,6 +203,7 @@
                 await loadBranchesSelect();
                 await loadMusiciansData();
                 await checkUserAdminStatus(user);
+                await loadUnavailabilityData();
                 listenToNotifications();
                 loadCalendarView();
                 checkInvoiceReminder();
@@ -208,6 +212,12 @@
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
+        async function loadUnavailabilityData() {
+            const snap = await getDocs(collection(db, "unavailabilities"));
+            userUnavailabilities = [];
+            snap.forEach(d => userUnavailabilities.push({ id: d.id, ...d.data() }));
+        }
+
         async function checkUserAdminStatus(user) {
             const userDoc = await getDoc(doc(db, "users", user.uid));
             let rawPhone = '';
@@ -353,8 +363,6 @@
             if (!managerSelect) return;
 
             managerSelect.innerHTML = '<option value="">בחר מנהל סניף מתוך הצוות...</option>';
-            
-            // מציג את כל אנשי הצוות הפעילים שהתפקיד שלהם הוא "מנהל סניף" (כולל מנהלים של סניפים קיימים)
             const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
             const branchManagers = activeMusicians.filter(m => m.role === "מנהל סניף");
             
@@ -541,7 +549,7 @@
             try {
                 alert("מכין קובץ גיבוי נתונים...");
                 const backupData = {};
-                const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs"];
+                const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs", "unavailabilities"];
 
                 for (const colName of cols) {
                     const snap = await getDocs(collection(db, colName));
@@ -592,6 +600,10 @@
                 const reqsSnap = await getDocs(collection(db, "cancellation_requests"));
                 const reqDeletes = reqsSnap.docs.map(d => deleteDoc(doc(db, "cancellation_requests", d.id)));
                 await Promise.all(reqDeletes);
+
+                const unavailSnap = await getDocs(collection(db, "unavailabilities"));
+                const unavailDeletes = unavailSnap.docs.map(d => deleteDoc(doc(db, "unavailabilities", d.id)));
+                await Promise.all(unavailDeletes);
 
                 logAction("אתחול מערכת", "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת");
 
@@ -692,6 +704,77 @@
             document.getElementById('calendar-grid').innerHTML = gridHTML;
         }
 
+        async function loadUnavailabilityCalendar() {
+            const container = document.getElementById('unavail-calendar-container');
+            const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+            
+            const today = new Date();
+            const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+            const nextYear = nextMonthDate.getFullYear();
+            const nextMonth = nextMonthDate.getMonth();
+
+            await loadUnavailabilityData();
+
+            container.innerHTML = `
+                <h3 style="color:var(--accent-gold); margin-bottom:5px;">📅 סימון ימי אי-זמינות לחודש ${monthNames[nextMonth]} ${nextYear}</h3>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+                    📌 לחץ על ימים בחודש הבא שבהם אינך פנוי לעבוד. ניתן לעדכן ולשנות את התאריכים בכל עת בצורה חופשית.
+                </p>
+                <div class="calendar-grid" id="unavail-grid"></div>
+            `;
+
+            const firstDay = new Date(nextYear, nextMonth, 1).getDay();
+            const daysInMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
+
+            let gridHTML = `
+                <div class="cal-day-name">א'</div><div class="cal-day-name">ב'</div>
+                <div class="cal-day-name">ג'</div><div class="cal-day-name">ד'</div>
+                <div class="cal-day-name">ה'</div><div class="cal-day-name">ו'</div>
+                <div class="cal-day-name">ש'</div>
+            `;
+
+            for (let i = 0; i < firstDay; i++) {
+                gridHTML += `<div class="cal-cell empty"></div>`;
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                const isUnavail = userUnavailabilities.some(u => u.phone === currentUserPhone && u.date === dateStr);
+
+                gridHTML += `
+                    <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})" style="cursor:pointer;">
+                        <div class="day-num">${day}</div>
+                        <div style="font-size:0.65rem; color:${isUnavail ? 'var(--danger)' : 'transparent'}; font-weight:bold; margin-top:4px;">
+                            ${isUnavail ? 'לא פנוי' : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('unavail-grid').innerHTML = gridHTML;
+        }
+
+        window.toggleDayUnavailability = async (dateStr, isCurrentlyUnavail) => {
+            if (isCurrentlyUnavail) {
+                const record = userUnavailabilities.find(u => u.phone === currentUserPhone && u.date === dateStr);
+                if (record) {
+                    await deleteDoc(doc(db, "unavailabilities", record.id));
+                    logAction("זמינות", `ביטול חסימת תאריך ${dateStr}`);
+                }
+            } else {
+                await addDoc(collection(db, "unavailabilities"), {
+                    phone: currentUserPhone,
+                    name: currentUserName,
+                    date: dateStr,
+                    createdAt: new Date()
+                });
+                logAction("זמינות", `סימון אי-זמינות בתאריך ${dateStr}`);
+            }
+
+            loadUnavailabilityCalendar();
+        };
+
         window.openDayModal = async (dateStr) => {
             document.getElementById('event-date-input').value = dateStr;
             document.getElementById('event-time-input').value = "20:00";
@@ -750,17 +833,30 @@
                         const busyBranch = busyMap[m.name.toLowerCase()];
                         const isBusyOtherBranch = !!busyBranch;
 
+                        const isUserMarkedUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === cleanPhone(m.phone) && u.date === dateStr);
+
                         let isAlreadyAssigned = false;
                         if (existingEventInThisBranch && existingEventInThisBranch.assignedStaff) {
                             isAlreadyAssigned = existingEventInThisBranch.assignedStaff.some(s => s.toLowerCase().includes(m.name.toLowerCase()));
                         }
 
+                        let statusText = '';
+                        let isDisabled = false;
+
+                        if (isBusyOtherBranch) {
+                            statusText = `<br><small style="color:var(--danger); font-size:0.7rem;">(תפוס ב: ${busyBranch})</small>`;
+                            isDisabled = true;
+                        } else if (isUserMarkedUnavail) {
+                            statusText = `<br><small style="color:var(--danger); font-size:0.7rem;">(לא זמין)</small>`;
+                            isDisabled = true;
+                        }
+
                         rosterContainer.innerHTML += `
-                            <div class="roster-item ${isBusyOtherBranch ? 'disabled-role' : ''}" id="item-m-${m.id}">
-                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-busy="${isBusyOtherBranch ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} ${isBusyOtherBranch ? 'disabled' : ''} onchange="updateRoleDisabling()">
+                            <div class="roster-item ${isDisabled ? 'disabled-role' : ''}" id="item-m-${m.id}">
+                                <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-busy="${isDisabled ? 'true' : 'false'}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="updateRoleDisabling()">
                                 <label for="m-${m.id}">
                                     ${m.name} <span class="badge">${m.role}</span>
-                                    ${isBusyOtherBranch ? `<br><small style="color:var(--danger); font-size:0.7rem;">(תפוס ב: ${busyBranch})</small>` : ''}
+                                    ${statusText}
                                 </label>
                             </div>
                         `;
@@ -1073,16 +1169,24 @@
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+            
+            const today = new Date();
+            const is13thDay = today.getDate() === 13;
 
-            let html = `
-                <div style="background:#2b2202; border:1px solid var(--accent-gold); padding:12px; margin-bottom:15px; border-radius:8px;">
-                    <h4 style="color:var(--accent-gold); margin-bottom:6px;">💳 הודעת תשלומים וחשבוניות</h4>
-                    <p style="font-size:0.85rem; color:#e0e0e0; margin:0;">
-                        תזכורת: פעימות התשלום מתבצעות פעמיים בחודש – ב-15 בחודש וביום האחרון של החודש. יש להעביר חשבוניות יום לפני כל פעימה.
-                    </p>
-                </div>
-                <h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול לחודש ${monthNames[currentMonth]} ${currentYear}</h3>
-            `;
+            let html = '';
+
+            if (is13thDay) {
+                html += `
+                    <div style="background:#2b2202; border:1px solid var(--accent-gold); padding:12px; margin-bottom:15px; border-radius:8px;">
+                        <h4 style="color:var(--accent-gold); margin-bottom:6px;">💳 תזכורת להגשת חשבונית ולעדכון זמינות</h4>
+                        <p style="font-size:0.85rem; color:#e0e0e0; margin:0;">
+                            תזכורת: מחר (ה-14 בחודש) מבוצעת פעימת תשלום – נא להגיש חשבוניות עד סוף היום. כמו כן, נא לעבור על בלשונית "זמינות לחודש הבא" ולעדכן ימי אי-זמינות מעודכנים עבור המנהלים.
+                        </p>
+                    </div>
+                `;
+            }
+
+            html += `<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול לחודש ${monthNames[currentMonth]} ${currentYear}</h3>`;
 
             let count = 0;
             const filteredRequests = allCancellationRequests.filter(req => isDateInCurrentMonth(req.eventDate));
@@ -1168,7 +1272,10 @@
                 const sameRole = !roleNeeded || m.role === roleNeeded;
                 const notCancelling = m.name.toLowerCase() !== cancellingMusicianName.toLowerCase();
                 const isNotBusy = !busyMusicianNames.includes(m.name.toLowerCase());
-                return isActive && isNotManager && sameRole && notCancelling && isNotBusy;
+                
+                const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === cleanPhone(m.phone) && u.date === eventDate);
+
+                return isActive && isNotManager && sameRole && notCancelling && isNotBusy && !isUnavail;
             });
         }
 
@@ -1361,6 +1468,7 @@
 
             <div class="nav-tabs">
                 <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
+                <button type="button" id="btn-tab-unavail" class="tab-btn" onclick="switchTab('unavail')">🚫 זמינות לחודש הבא</button>
                 <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
                 <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')">📊 דוחות</button>
                 <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
@@ -1369,6 +1477,10 @@
 
             <div id="tab-calendar" class="tab-content">
                 <div class="card" id="calendar-container"></div>
+            </div>
+
+            <div id="tab-unavail" class="tab-content hidden">
+                <div class="card" id="unavail-calendar-container"></div>
             </div>
 
             <div id="tab-notifs" class="tab-content hidden">
@@ -1485,9 +1597,9 @@
             </div>
 
             <div id="invoice-reminder-modal" class="card hidden" style="position:fixed; top:20%; left:10%; right:10%; z-index:2000; border:2px solid var(--accent-gold); background:#1e1e1e; padding:20px; text-align:center;">
-                <h3 style="color:var(--accent-gold); margin-bottom:10px;">📄 תזכורת להגשת חשבונית!</h3>
+                <h3 style="color:var(--accent-gold); margin-bottom:10px;">📄 תזכורת להגשת חשבוניות ועדכון זמינות!</h3>
                 <p style="font-size:0.95rem; margin-bottom:15px;">
-                    שלום! מחר מבוצעת פעימת תשלום. נא לדאוג לשלוח חשבוניות עבור ההופעות שביצעת עד סוף היום כדי להבטיח את התשלום בזמן.
+                    שלום! מחר (ה-14 בחודש) מבוצעת פעימת תשלום – נא להגיש חשבוניות עד סוף היום. בנוסף, נא לעדכן את ימי האי-זמינות שלך לחודש הבא בלשונית "זמינות לחודש הבא".
                 </p>
                 <button type="button" class="btn-success" onclick="closeInvoiceModal()" style="padding:8px 20px;">הבנתי, תודה!</button>
             </div>
@@ -1498,7 +1610,3 @@
 
 </body>
 </html>
-
-
-
-
