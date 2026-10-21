@@ -35,6 +35,7 @@
         .card { background-color: var(--card-bg); border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--border-color); }
         
         input, select, button, textarea { width: 100%; padding: 10px; margin-top: 6px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #444; background-color: #2a2a2a; color: #fff; font-size: 0.95rem; }
+        input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; background-color: #1a1a1a; }
         button { background-color: var(--accent-gold); color: #000; font-weight: bold; border: none; cursor: pointer; }
         .btn-danger { background-color: var(--danger); color: white; }
         .btn-success { background-color: var(--success); color: white; }
@@ -343,8 +344,10 @@
 
             try {
                 if (editId) {
-                    await updateDoc(doc(db, "musicians", editId), { name, role, phone, status });
+                    await updateDoc(doc(db, "musicians", editId), { name, role, status });
                     document.getElementById('edit-musician-id').value = '';
+                    document.getElementById('musician-phone').disabled = false;
+                    document.getElementById('phone-edit-note').classList.add('hidden');
                     document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
                     alert("איש הצוות עודכן בהצלחה!");
                 } else {
@@ -411,7 +414,12 @@
             document.getElementById('edit-musician-id').value = id;
             document.getElementById('musician-name').value = name;
             document.getElementById('musician-role').value = role;
-            document.getElementById('musician-phone').value = phone;
+            
+            const phoneInput = document.getElementById('musician-phone');
+            phoneInput.value = phone;
+            phoneInput.disabled = true;
+            document.getElementById('phone-edit-note').classList.remove('hidden');
+
             document.getElementById('musician-status').value = status || 'active';
             document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
             window.scrollTo({top: 250, behavior: 'smooth'});
@@ -425,6 +433,48 @@
                 loadAdminData();
                 loadBranchesSelect();
                 loadCalendarView();
+            }
+        };
+
+        // SYSTEM RESET FUNCTIONALITY
+        window.systemReset = async () => {
+            if (!isAdmin) return;
+            const confirm1 = confirm("⚠️ אזהרה חמורה: פעולה זו תמחק את כל ההופעות, הסניפים ואנשי הצוות ממאגר המידע ב-Firebase לצמיתות! האם להמשיך?");
+            if (!confirm1) return;
+
+            const confirm2 = prompt("כדי לאמת את איפוס המערכת, הקלד את המילה: מאפס");
+            if (confirm2 !== "מאפס") {
+                alert("האיפוס בוטל (המילה שהוקלדה שגויה).");
+                return;
+            }
+
+            try {
+                alert("מבצע איפוס מוחלט, אנא המתן...");
+
+                // Delete all events
+                const eventsSnap = await getDocs(collection(db, "events"));
+                const eventDeletes = eventsSnap.docs.map(d => deleteDoc(doc(db, "events", d.id)));
+                await Promise.all(eventDeletes);
+
+                // Delete all musicians
+                const musiciansSnap = await getDocs(collection(db, "musicians"));
+                const musicianDeletes = musiciansSnap.docs.map(d => deleteDoc(doc(db, "musicians", d.id)));
+                await Promise.all(musicianDeletes);
+
+                // Delete all branches
+                const branchesSnap = await getDocs(collection(db, "branches"));
+                const branchDeletes = branchesSnap.docs.map(d => deleteDoc(doc(db, "branches", d.id)));
+                await Promise.all(branchDeletes);
+
+                // Delete all cancellation requests
+                const reqsSnap = await getDocs(collection(db, "cancellation_requests"));
+                const reqDeletes = reqsSnap.docs.map(d => deleteDoc(doc(db, "cancellation_requests", d.id)));
+                await Promise.all(reqDeletes);
+
+                alert("✅ המערכת אופסה בהצלחה ונוקתה לחלוטין מנתונים!");
+                window.location.reload();
+            } catch (err) {
+                alert("שגיאה באיפוס המערכת: " + err.message);
             }
         };
 
@@ -849,8 +899,6 @@
             let html = `<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול לחודש ${monthNames[currentMonth]} ${currentYear}</h3>`;
 
             let count = 0;
-            
-            // FILTER NOTIFICATIONS ONLY FOR THE CURRENT DISPLAYED MONTH & YEAR
             const filteredRequests = allCancellationRequests.filter(req => isDateInCurrentMonth(req.eventDate));
 
             for (const req of filteredRequests) {
@@ -1150,6 +1198,13 @@
             </div>
 
             <div id="tab-admin" class="tab-content hidden">
+                <!-- SYSTEM RESET CARD -->
+                <div class="card" style="border: 2px solid var(--danger);">
+                    <h3 style="color:var(--danger); margin-bottom:8px;">🚨 אזור סכנה - איפוס מערכת</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">מחיקה כללית של כל הנתונים, ההופעות, הסניפים ואנשי הצוות מ-Firebase כדי להתחיל מצב נקי.</p>
+                    <button type="button" class="btn-danger" onclick="systemReset()">🗑️ אתחול המערכת (מחיקת כל הנתונים)</button>
+                </div>
+
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">1. ניהול סניפים ומנהלי סניפים</h3>
                     <form id="add-branch-form">
@@ -1178,6 +1233,7 @@
                             <option value="מנהל סניף">מנהל סניף</option>
                         </select>
                         <input type="tel" id="musician-phone" placeholder="מספר טלפון (למשל: 0501234567)" required>
+                        <p id="phone-edit-note" class="hidden" style="color:var(--text-muted); font-size:0.75rem; margin-top:-8px; margin-bottom:10px;">⚠️ מספר הטלפון אינו ניתן לעריכה מכיוון שהוא מפתח הזיהוי של המשתמש. אם איש הצוות החליף מספר, יש למחוק אותו ולהירשם מחדש.</p>
                         
                         <label style="font-size:0.85rem; color:var(--text-muted);">סטטוס פעילות במערכת:</label>
                         <select id="musician-status">
