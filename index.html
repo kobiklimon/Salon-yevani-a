@@ -1305,7 +1305,8 @@
 
         async function renderFilteredAuditLogs() {
             const contentDiv = document.getElementById('logs-list-content');
-            const selectedCategory = document.getElementById('audit-category-select') ? document.getElementById('audit-category-select').value : '';
+            const selectElem = document.getElementById('audit-category-select');
+            const selectedCategory = selectElem ? selectElem.value : '';
 
             try {
                 if (fetchedLogs.length === 0) {
@@ -1317,11 +1318,13 @@
 
                 let filtered = fetchedLogs;
                 if (selectedCategory) {
-                    filtered = fetchedLogs.filter(l => l.category === selectedCategory);
+                    filtered = fetchedLogs.filter(l => {
+                        return l.category && l.category.trim() === selectedCategory.trim();
+                    });
                 }
                 
                 if (filtered.length === 0) {
-                    contentDiv.innerHTML = '<p style="color:var(--text-muted);">אין שינויים מתוייקים בקטגוריה זו.</p>';
+                    contentDiv.innerHTML = '<p style="color:var(--text-muted); margin-top:10px;">אין פעולות מתועדות בקטגוריה זו.</p>';
                     return;
                 }
 
@@ -1964,3 +1967,6 @@
 
 </body>
 </html>
+
+
+
