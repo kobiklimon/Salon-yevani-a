@@ -72,12 +72,14 @@
         
         .unavail-cell { background: #3a1c1c !important; border: 1px solid var(--danger) !important; }
         .unavail-cell .day-num { color: var(--danger); }
+        .broadcast-banner { background: #332701; border: 1px solid var(--accent-gold); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 0.9rem; }
     </style>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCis-H1d8436iH6vBkNfGWoy3ekkIDSflU",
@@ -91,6 +93,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const messaging = getMessaging(app);
 
         let currentBranchId = '';
         let currentYear = new Date().getFullYear();
@@ -115,6 +118,82 @@
 
         function phoneToEmail(phone) {
             return `user_${cleanPhone(phone)}@salonyevani.local`;
+        }
+
+        async function initPushToken(userId) {
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registration = await navigator.serviceWorker.register('/sw.js');
+                    const permission = await Notification.requestPermission();
+                    if (permission === 'granted') {
+                        const currentToken = await getToken(messaging, { 
+                            serviceWorkerRegistration: registration,
+                            vapidKey: 'BPOxK7...' 
+                        }).catch(e => console.log('Token info:', e));
+                        
+                        if (currentToken) {
+                            await setDoc(doc(db, "push_tokens", userId), {
+                                token: currentToken,
+                                userPhone: currentUserPhone,
+                                userName: currentUserName,
+                                updatedAt: new Date()
+                            }, { merge: true });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log("Push Init Info: ", err);
+            }
+        }
+
+        onMessage(messaging, (payload) => {
+            alert(`📢 הודעה חדשה:\n\n${payload.notification ? payload.notification.body : payload.data.message}`);
+        });
+
+        async function sendPushNotificationToUser(targetPhone, title, body, tabTarget = 'notifs') {
+            try {
+                const cleanTarget = cleanPhone(targetPhone);
+                const tokensSnap = await getDocs(collection(db, "push_tokens"));
+                let targetToken = '';
+                tokensSnap.forEach(d => {
+                    const data = d.data();
+                    if (cleanPhone(data.userPhone) === cleanTarget) {
+                        targetToken = data.token;
+                    }
+                });
+
+                if (targetToken) {
+                    await addDoc(collection(db, "pending_pushes"), {
+                        token: targetToken,
+                        title,
+                        body,
+                        tabTarget,
+                        createdAt: new Date()
+                    });
+                }
+            } catch (e) {
+                console.error("Error queueing push:", e);
+            }
+        }
+
+        async function sendBroadcastPushToAll(title, body) {
+            try {
+                const tokensSnap = await getDocs(collection(db, "push_tokens"));
+                tokensSnap.forEach(async (d) => {
+                    const data = d.data();
+                    if (data.token) {
+                        await addDoc(collection(db, "pending_pushes"), {
+                            token: data.token,
+                            title,
+                            body,
+                            tabTarget: 'notifs',
+                            createdAt: new Date()
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error("Error broadcast push:", e);
+            }
         }
 
         async function logAction(actionType, details, category = "כללי") {
@@ -205,14 +284,65 @@
                 await loadMusiciansData();
                 await checkUserAdminStatus(user);
                 await loadUnavailabilityData();
+                initPushToken(user.uid);
                 listenToNotifications();
+                listenToBroadcastMessages();
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
-                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
+        function listenToBroadcastMessages() {
+            const q = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"));
+            onSnapshot(q, (snapshot) => {
+                if (!snapshot.empty) {
+                    const latest = snapshot.docs[0].data();
+                    const bannerContainer = document.getElementById('broadcast-banner-container');
+                    if (bannerContainer && latest.message) {
+                        bannerContainer.innerHTML = `
+                            <div class="broadcast-banner">
+                                <strong style="color:var(--accent-gold);">📢 הודעה לכל הצוות (${latest.senderName || 'הנהלה'}):</strong><br>
+                                <span>${latest.message}</span>
+                                <br><small style="color:var(--text-muted); font-size:0.75rem;">פורסם: ${latest.dateStr || ''}</small>
+                            </div>
+                        `;
+                        bannerContainer.classList.remove('hidden');
+                    }
+                }
+            });
+        }
+
+        window.sendBroadcastMessage = async () => {
+            if (!isAdmin) return;
+            const input = document.getElementById('broadcast-text-input');
+            const msg = input.value.trim();
+            if (!msg) {
+                alert("נא להזין תוכן להודעה.");
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, "broadcasts"), {
+                    message: msg,
+                    senderName: currentUserName,
+                    senderPhone: currentUserPhone,
+                    createdAt: new Date(),
+                    dateStr: new Date().toLocaleString('he-IL')
+                });
+
+                await sendBroadcastPushToAll("📢 הודעה חדשה לכל הצוות", msg);
+
+                logAction("שליחת הודעת פוש", `שודרה הודעה לכל הצוות: ${msg}`, "הודעות פוש ותקשורת");
+
+                alert("📢 ההודעה נשלחה בהצלחה ופוש נשלח לכל הנגנים!");
+                input.value = '';
+            } catch (err) {
+                alert("שגיאה בשליחת הודעה: " + err.message);
+            }
+        };
+
         async function loadUnavailabilityData() {
             const snap = await getDocs(collection(db, "unavailabilities"));
             userUnavailabilities = [];
@@ -264,13 +394,16 @@
             const reportsTabBtn = document.getElementById('btn-tab-reports');
             const auditTabBtn = document.getElementById('btn-tab-audit');
             const backupBtn = document.getElementById('backup-btn-container');
+            const broadcastSection = document.getElementById('admin-broadcast-section');
 
             reportsTabBtn.classList.remove('hidden');
 
             if (isAdmin) {
                 adminTabBtn.classList.remove('hidden');
+                if (broadcastSection) broadcastSection.classList.remove('hidden');
             } else {
                 adminTabBtn.classList.add('hidden');
+                if (broadcastSection) broadcastSection.classList.add('hidden');
                 switchTab('calendar');
             }
 
@@ -554,7 +687,7 @@
             try {
                 alert("מכין קובץ גיבוי נתונים...");
                 const backupData = {};
-                const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs", "unavailabilities"];
+                const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs", "unavailabilities", "broadcasts"];
 
                 for (const colName of cols) {
                     const snap = await getDocs(collection(db, colName));
@@ -1004,6 +1137,15 @@
                 createdAt: new Date()
             });
 
+            // שליחת פוש לכל המנהלים
+            const adminsSnap = await getDocs(collection(db, "users"));
+            adminsSnap.forEach(async (docUser) => {
+                const uData = docUser.data();
+                if (uData.role === 'admin' || cleanPhone(uData.phone) === "0547771121") {
+                    await sendPushNotificationToUser(uData.phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs');
+                }
+            });
+
             logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
             alert("בקשת הביטול נשלחה בהצלחה למנהל המערכת ולמנהל הסניף!");
             closeModal();
@@ -1092,6 +1234,7 @@
                         <option value="אי-זמינות צוות">🚫 אי-זמינות צוות</option>
                         <option value="בקשות ביטול והחלפות">🚨 בקשות ביטול והחלפות</option>
                         <option value="ניהול סניפים וצוות">⚙️ ניהול סניפים וצוות</option>
+                        <option value="הודעות פוש ותקשורת">📢 הודעות פוש ותקשורת</option>
                         <option value="דוחות וייצוא">📊 דוחות וייצוא</option>
                         <option value="כללי">🌐 כללי</option>
                     </select>
@@ -1306,8 +1449,8 @@
                             ${req.status === 'pending' ? `
                                 ${replacementDropdown}
                                 <div style="display:flex; gap:8px; margin-top:10px;">
-                                    <button class="btn-success" style="padding:6px;" onclick="approveRequest('${req.id}', '${req.eventId}', '${req.musicianName}', '${req.branchId}')">אישור ביטול והחלפה</button>
-                                    <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}')">דחיית בקשה</button>
+                                    <button class="btn-success" style="padding:6px;" onclick="approveRequest('${req.id}', '${req.eventId}', '${req.musicianName}', '${req.branchId}', '${req.musicianPhone}')">אישור ביטול והחלפה</button>
+                                    <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}', '${req.musicianPhone}', '${req.branchName}')">דחיית בקשה</button>
                                 </div>
                             ` : ''}
                         </div>
@@ -1363,41 +1506,58 @@
             });
         }
 
-        window.approveRequest = async (requestId, eventId, cancellingMusicianName, branchId) => {
+        window.approveRequest = async (requestId, eventId, cancellingMusicianName, branchId, cancellingPhone) => {
             const selectElem = document.getElementById(`replacement-select-${requestId}`);
             if (!selectElem) {
                 alert("אין נגן/זמר פנוי לבחירה בתפקיד זה!");
                 return;
             }
 
-            const newMusicianName = selectElem.value;
+            const selectedOption = selectElem.options[selectElem.selectedIndex];
+            const newMusicianName = selectedOption.value;
+            const newMusicianPhone = selectedOption.getAttribute('data-phone');
             if (!newMusicianName) return;
 
             const eventRef = doc(db, "events", eventId);
             const eventDoc = await getDoc(eventRef);
+            let eventDateStr = '';
+            let eventTimeStr = '';
             
             if (eventDoc.exists()) {
-                let staff = eventDoc.data().assignedStaff || [];
-                staff = staff.map(s => s.toLowerCase().includes(cancellingMusicianName.toLowerCase()) ? `${newMusicianName} (${selectElem.options[selectElem.selectedIndex].text.split('(')[1] || 'ממלא מקום'}` : s);
+                const evData = eventDoc.data();
+                eventDateStr = evData.date;
+                eventTimeStr = evData.time;
+                let staff = evData.assignedStaff || [];
+                staff = staff.map(s => s.toLowerCase().includes(cancellingMusicianName.toLowerCase()) ? `${newMusicianName} (${selectedOption.getAttribute('data-role') || 'ממלא מקום'})` : s);
                 await updateDoc(eventRef, { assignedStaff: staff });
             }
 
             const branchObj = allBranches.find(b => b.id === branchId);
-            const managerName = branchObj ? branchObj.managerName : 'מנהל הסניף';
+            const branchName = branchObj ? branchObj.name : 'סניף';
 
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved", newMusician: newMusicianName });
+            
+            // פוש לנגן שביטל
+            await sendPushNotificationToUser(cancellingPhone, "✅ בקשת הביטול אושרה", `בקשתך להופעה ב-${branchName} (${eventDateStr}) אושרה ושובץ מילוי מקום.`, 'notifs');
+            
+            // פוש לנגן החדש ששובץ
+            await sendPushNotificationToUser(newMusicianPhone, "🎵 שובצת להופעה חדשה!", `שובצת למילוי מקום בסניף ${branchName} | בתאריך ${eventDateStr} בשעה ${eventTimeStr}.`, 'calendar');
+
             logAction("אישור ביטול והחלפה", `אושרה בקשת ביטול של ${cancellingMusicianName}, שובץ חלופי: ${newMusicianName}`, "בקשות ביטול והחלפות");
             
-            alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName}.\nהודעה אוטומטית נשלחה ל${managerName} (מנהל הסניף).`);
+            alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName} ושניהם קיבלו התראות פוש.`);
 
             loadNotificationsView();
             loadCalendarView();
         };
 
-        window.rejectRequest = async (requestId) => {
+        window.rejectRequest = async (requestId, cancellingPhone, branchName) => {
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "rejected" });
+            
+            await sendPushNotificationToUser(cancellingPhone, "❌ בקשת הביטול נדחתה", `בקשתך לביטול הופעה בסניף ${branchName} נדחתה על ידי המנהל.`, 'notifs');
+
             logAction("דחיית בקשת ביטול", `נדחתה בקשת ביטול (ID: ${requestId})`, "בקשות ביטול והחלפות");
-            alert("בקשת הביטול נדחתה.");
+            alert("בקשת הביטול נדחתה ונשלחה התראה לנגן.");
             loadNotificationsView();
         };
 
@@ -1514,6 +1674,11 @@
                 alert("הופעה חדשה נשמרה בהצלחה!");
             }
 
+            // שליחת פוש לכל מי ששובץ להופעה
+            for (const phone of selectedPhones) {
+                await sendPushNotificationToUser(phone, "🎵 שובצת להופעה חדשה!", `שובצת להופעה בסניף ${branchName} | בתאריך ${date} בשעה ${time}.`, 'calendar');
+            }
+
             if (!hasBouzouki) {
                 alert("שימו לב: שמרת את ההופעה ללא נגן בוזוקי.");
             }
@@ -1573,6 +1738,8 @@
                 <button type="button" id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
             </div>
 
+            <div id="broadcast-banner-container" class="hidden"></div>
+
             <div class="card" style="padding:10px; margin-bottom:10px;">
                 <label style="font-weight:bold; color:var(--accent-gold);">סינון סניף (ברירת מחדל: כל הסניפים):</label>
                 <select id="branch-select" style="margin-bottom:0; margin-top:5px;"></select>
@@ -1629,6 +1796,13 @@
             </div>
 
             <div id="tab-admin" class="tab-content hidden">
+                <div id="admin-broadcast-section" class="card hidden" style="border: 2px solid var(--accent-gold);">
+                    <h3 style="color:var(--accent-gold); margin-bottom:8px;">📢 שליחת הודעת פוש בתפוצה כללית</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">הודעה זו תוקפץ לכל צוות הנגנים והזמרים בנייד ותופיע בראש המסך באפליקציה.</p>
+                    <textarea id="broadcast-text-input" rows="3" placeholder="הקלד את הודעת התפוצה לצוות..."></textarea>
+                    <button type="button" class="btn-success" onclick="sendBroadcastMessage()">🚀 שדר הודעת פוש לכולם</button>
+                </div>
+
                 <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
                     <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתוני מערכת</h3>
                     <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">הורדת קובץ גיבוי מלא (JSON) של כל ההופעות, הסניפים, הצוות והלוגים למחשב/לנייד.</p>
@@ -1722,7 +1896,6 @@
 
 </body>
 </html>
-
 
 
 
