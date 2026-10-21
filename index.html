@@ -353,11 +353,13 @@
             if (!managerSelect) return;
 
             managerSelect.innerHTML = '<option value="">בחר מנהל סניף מתוך הצוות...</option>';
+            
+            // מציג את כל אנשי הצוות הפעילים שהתפקיד שלהם הוא "מנהל סניף" (כולל מנהלים של סניפים קיימים)
             const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
             const branchManagers = activeMusicians.filter(m => m.role === "מנהל סניף");
             
             branchManagers.forEach(m => {
-                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone}) ${m.branchName ? `- ${m.branchName}` : ''}</option>`;
+                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}">${m.name} (${m.phone})</option>`;
             });
         }
 
