@@ -26,13 +26,13 @@
         header { background: linear-gradient(180deg, #1f1f1f 0%, #121212 100%); padding: 15px; text-align: center; border-bottom: 2px solid var(--accent-gold); position: sticky; top: 0; z-index: 100; }
         header h1 { color: var(--accent-gold); font-size: 1.4rem; }
 
-        .container { max-width: 700px; margin: 0 auto; padding: 12px; }
+        .container { max-width: 700px; margin: 0 auto; padding: 8px; }
 
-        .nav-tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
-        .tab-btn { flex: 1; padding: 10px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; position: relative; }
+        .nav-tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 5px; }
+        .tab-btn { flex: 1; padding: 10px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; position: relative; font-size: 0.85rem; }
         .tab-btn.active { background: var(--accent-gold); color: #000; border-color: var(--accent-gold); }
 
-        .card { background-color: var(--card-bg); border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--border-color); }
+        .card { background-color: var(--card-bg); border-radius: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-color); }
         
         input, select, button, textarea { width: 100%; padding: 10px; margin-top: 6px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #444; background-color: #2a2a2a; color: #fff; font-size: 0.95rem; }
         input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; background-color: #1a1a1a; }
@@ -45,13 +45,15 @@
         .hidden { display: none !important; }
 
         .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
-        .cal-day-name { font-weight: bold; font-size: 0.8rem; color: var(--accent-gold); padding: 4px; }
-        .cal-cell { background: #252525; border-radius: 6px; min-height: 60px; padding: 4px; font-size: 0.8rem; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; border: 1px solid transparent; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+        .cal-day-name { font-weight: bold; font-size: 0.75rem; color: var(--accent-gold); padding: 2px; }
+        .cal-cell { background: #252525; border-radius: 6px; min-height: 55px; padding: 3px; font-size: 0.75rem; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; border: 1px solid transparent; overflow: hidden; }
         .cal-cell:hover { border-color: var(--accent-gold); }
         .cal-cell.empty { background: transparent; cursor: default; }
-        .cal-cell .day-num { font-weight: bold; text-align: right; }
-        .cal-event-badge { color: #fff; border-radius: 4px; font-size: 0.65rem; padding: 2px 4px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; text-align: center; }
+        .cal-cell .day-num { font-weight: bold; text-align: right; font-size: 0.75rem; margin-bottom: 2px; }
+        
+        .dots-container { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; align-items: center; padding-top: 2px; }
+        .event-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 0 2px rgba(0,0,0,0.5); }
 
         .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
@@ -117,7 +119,7 @@
 
             if(tabName === 'calendar') loadCalendarView();
             if(tabName === 'admin' && isAdmin) loadAdminData();
-            if(tabName === 'reports' && isAdmin) loadReportsView();
+            if(tabName === 'reports') loadReportsView();
             if(tabName === 'notifs') loadNotificationsView();
         };
 
@@ -156,6 +158,21 @@
             });
         }
 
+        function checkInvoiceReminder() {
+            const today = new Date();
+            const day = today.getDate();
+            const lastDayOfCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+            const dayBeforeLast = lastDayOfCurrentMonth - 1;
+
+            if (day === 14 || day === dayBeforeLast) {
+                document.getElementById('invoice-reminder-modal').classList.remove('hidden');
+            }
+        }
+
+        window.closeInvoiceModal = () => {
+            document.getElementById('invoice-reminder-modal').classList.add('hidden');
+        };
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
@@ -166,12 +183,12 @@
                 await checkUserAdminStatus(user);
                 listenToNotifications();
                 loadCalendarView();
+                checkInvoiceReminder();
             } else {
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
             }
         });
-
         async function checkUserAdminStatus(user) {
             const userDoc = await getDoc(doc(db, "users", user.uid));
             let rawPhone = '';
@@ -181,6 +198,13 @@
 
             currentUserPhone = cleanPhone(rawPhone);
             const matched = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
+            
+            if (matched && matched.status === 'inactive') {
+                alert("חשבונך הוגדר כלא פעיל במערכת. פנה למנהל.");
+                signOut(auth);
+                return;
+            }
+
             currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
 
             document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
@@ -203,12 +227,13 @@
 
             const adminTabBtn = document.getElementById('btn-tab-admin');
             const reportsTabBtn = document.getElementById('btn-tab-reports');
+            
+            reportsTabBtn.classList.remove('hidden');
+
             if (isAdmin) {
                 adminTabBtn.classList.remove('hidden');
-                reportsTabBtn.classList.remove('hidden');
             } else {
                 adminTabBtn.classList.add('hidden');
-                reportsTabBtn.classList.add('hidden');
                 switchTab('calendar');
             }
         }
@@ -342,6 +367,26 @@
             const phone = document.getElementById('musician-phone').value.trim();
             const status = document.getElementById('musician-status').value;
 
+            if (editId && status === 'inactive') {
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const evSnap = await getDocs(collection(db, "events"));
+                let futureConflict = false;
+
+                evSnap.forEach(d => {
+                    const ev = d.data();
+                    if (ev.date >= todayStr && ev.assignedStaff) {
+                        if (ev.assignedStaff.some(s => s.toLowerCase().includes(name.toLowerCase()))) {
+                            futureConflict = true;
+                        }
+                    }
+                });
+
+                if (futureConflict) {
+                    alert(`⚠️ לא ניתן להעביר את ${name} לסטטוס "לא פעיל"!\nהוא/היא משובצים להופעות עתידיות במערכת. יש להחליף אותם קודם לכן ביומן הופעות.`);
+                    return;
+                }
+            }
+
             try {
                 if (editId) {
                     await updateDoc(doc(db, "musicians", editId), { name, role, status });
@@ -395,7 +440,6 @@
                     <span>🎵 ${m.name} (${m.role}) ${m.branchName ? `<small>| סניף: ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? 'לא פעיל' : 'פעיל'}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
                     <div style="display:flex; gap:5px;">
                         <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">ערוך</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('musicians', '${m.id}')">מחק</button>
                     </div>
                 </div>`;
             });
@@ -436,7 +480,6 @@
             }
         };
 
-        // SYSTEM RESET FUNCTIONALITY
         window.systemReset = async () => {
             if (!isAdmin) return;
             const confirm1 = confirm("⚠️ אזהרה חמורה: פעולה זו תמחק את כל ההופעות, הסניפים ואנשי הצוות ממאגר המידע ב-Firebase לצמיתות! האם להמשיך?");
@@ -451,22 +494,18 @@
             try {
                 alert("מבצע איפוס מוחלט, אנא המתן...");
 
-                // Delete all events
                 const eventsSnap = await getDocs(collection(db, "events"));
                 const eventDeletes = eventsSnap.docs.map(d => deleteDoc(doc(db, "events", d.id)));
                 await Promise.all(eventDeletes);
 
-                // Delete all musicians
                 const musiciansSnap = await getDocs(collection(db, "musicians"));
                 const musicianDeletes = musiciansSnap.docs.map(d => deleteDoc(doc(db, "musicians", d.id)));
                 await Promise.all(musicianDeletes);
 
-                // Delete all branches
                 const branchesSnap = await getDocs(collection(db, "branches"));
                 const branchDeletes = branchesSnap.docs.map(d => deleteDoc(doc(db, "branches", d.id)));
                 await Promise.all(branchDeletes);
 
-                // Delete all cancellation requests
                 const reqsSnap = await getDocs(collection(db, "cancellation_requests"));
                 const reqDeletes = reqsSnap.docs.map(d => deleteDoc(doc(db, "cancellation_requests", d.id)));
                 await Promise.all(reqDeletes);
@@ -548,11 +587,10 @@
                 const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const dayEvents = monthEvents.filter(e => e.date === dateStr);
 
-                let eventBadges = dayEvents.map(e => {
+                let eventDots = dayEvents.map(e => {
                     const branch = allBranches.find(b => b.id === e.branchId);
-                    const bName = branch ? branch.name : '';
-                    const bColor = branch ? (branch.color || '#d4af37') : '#d4af37';
-                    return `<div class="cal-event-badge" style="background-color:${bColor};">${e.time} ${bName ? `- ${bName}` : ''}</div>`;
+                    const bColor = branch ? (branch.color || '#1e88e5') : '#1e88e5';
+                    return `<span class="event-dot" style="background-color:${bColor};" title="${e.time} - ${branch ? branch.name : ''}"></span>`;
                 }).join('');
 
                 const canClick = isAdmin || isBranchManager || dayEvents.length > 0;
@@ -561,7 +599,7 @@
                 gridHTML += `
                     <div class="cal-cell" ${clickAttr} style="${!canClick ? 'opacity:0.4; cursor:default;' : ''}">
                         <div class="day-num">${day}</div>
-                        <div>${eventBadges}</div>
+                        <div class="dots-container">${eventDots}</div>
                     </div>
                 `;
             }
@@ -783,11 +821,18 @@
         }
 
         async function loadReportsView() {
+            const musicianContainer = document.getElementById('report-musician-container');
             const musicianSelect = document.getElementById('report-musician-select');
-            musicianSelect.innerHTML = '<option value="">כל אנשי הצוות</option>';
-            allMusicians.forEach(m => {
-                musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
-            });
+            
+            if (isAdmin) {
+                musicianContainer.classList.remove('hidden');
+                musicianSelect.innerHTML = '<option value="">כל אנשי הצוות</option>';
+                allMusicians.forEach(m => {
+                    musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
+                });
+            } else {
+                musicianContainer.classList.add('hidden');
+            }
 
             const branchSelect = document.getElementById('report-branch-select');
             branchSelect.innerHTML = '<option value="">כל הסניפים</option>';
@@ -799,7 +844,13 @@
         let currentReportData = [];
 
         window.generateAccountingReport = async () => {
-            const selectedMusician = document.getElementById('report-musician-select').value;
+            let selectedMusician = '';
+            if (isAdmin) {
+                selectedMusician = document.getElementById('report-musician-select').value;
+            } else {
+                selectedMusician = currentUserName;
+            }
+
             const selectedBranch = document.getElementById('report-branch-select').value;
             const startDate = document.getElementById('report-start-date').value;
             const endDate = document.getElementById('report-end-date').value;
@@ -896,7 +947,15 @@
             const container = document.getElementById('notifs-container');
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
 
-            let html = `<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול לחודש ${monthNames[currentMonth]} ${currentYear}</h3>`;
+            let html = `
+                <div style="background:#2b2202; border:1px solid var(--accent-gold); padding:12px; margin-bottom:15px; border-radius:8px;">
+                    <h4 style="color:var(--accent-gold); margin-bottom:6px;">💳 הודעת תשלומים וחשבוניות</h4>
+                    <p style="font-size:0.85rem; color:#e0e0e0; margin:0;">
+                        תזכורת: פעימות התשלום מתבצעות פעמיים בחודש – ב-15 בחודש וביום האחרון של החודש. יש להעביר חשבוניות יום לפני כל פעימה.
+                    </p>
+                </div>
+                <h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות ביטול לחודש ${monthNames[currentMonth]} ${currentYear}</h3>
+            `;
 
             let count = 0;
             const filteredRequests = allCancellationRequests.filter(req => isDateInCurrentMonth(req.eventDate));
@@ -1135,7 +1194,7 @@
                 <input type="password" id="login-password" required placeholder="סיסמה">
                 
                 <button type="submit" id="login-submit-btn">התחבר</button>
-                <button type="button" id="register-submit-btn" class="btn-success hidden">סים הרשמה והתחבר</button>
+                <button type="button" id="register-submit-btn" class="btn-success hidden">סיום הרשמה</button>
 
                 <div style="text-align:center; margin-top:12px;">
                     <a href="#" id="toggle-to-reg" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(true)">אין לך חשבון? הירשם כאן</a>
@@ -1159,7 +1218,7 @@
             <div class="nav-tabs">
                 <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
                 <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
-                <button type="button" id="btn-tab-reports" class="tab-btn hidden" onclick="switchTab('reports')">📊 דוחות</button>
+                <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')">📊 דוחות</button>
                 <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
             </div>
 
@@ -1174,8 +1233,11 @@
             <div id="tab-reports" class="tab-content hidden">
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">📊 הפקת דוחות להנהלת חשבונות</h3>
-                    <label style="font-size:0.85rem;">סינון לפי איש צוות / נגן:</label>
-                    <select id="report-musician-select"></select>
+                    
+                    <div id="report-musician-container" class="hidden">
+                        <label style="font-size:0.85rem;">סינון לפי איש צוות / נגן:</label>
+                        <select id="report-musician-select"></select>
+                    </div>
 
                     <label style="font-size:0.85rem;">סינון לפי סניף:</label>
                     <select id="report-branch-select"></select>
@@ -1198,7 +1260,6 @@
             </div>
 
             <div id="tab-admin" class="tab-content hidden">
-                <!-- SYSTEM RESET CARD -->
                 <div class="card" style="border: 2px solid var(--danger);">
                     <h3 style="color:var(--danger); margin-bottom:8px;">🚨 אזור סכנה - איפוס מערכת</h3>
                     <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">מחיקה כללית של כל הנתונים, ההופעות, הסניפים ואנשי הצוות מ-Firebase כדי להתחיל מצב נקי.</p>
@@ -1266,6 +1327,14 @@
                 <hr style="margin:15px 0; border-color:#444;">
                 <h4>הופעות קיימות ביום זה:</h4>
                 <div id="existing-day-events"></div>
+            </div>
+
+            <div id="invoice-reminder-modal" class="card hidden" style="position:fixed; top:20%; left:10%; right:10%; z-index:2000; border:2px solid var(--accent-gold); background:#1e1e1e; padding:20px; text-align:center;">
+                <h3 style="color:var(--accent-gold); margin-bottom:10px;">📄 תזכורת להגשת חשבונית!</h3>
+                <p style="font-size:0.95rem; margin-bottom:15px;">
+                    שלום! מחר מבוצעת פעימת תשלום. נא לדאוג לשלוח חשבוניות עבור ההופעות שביצעת עד סוף היום כדי להבטיח את התשלום בזמן.
+                </p>
+                <button type="button" class="btn-success" onclick="closeInvoiceModal()" style="padding:8px 20px;">הבנתי, תודה!</button>
             </div>
 
         </div>
