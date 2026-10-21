@@ -196,6 +196,55 @@
             }
         }
 
+        async function checkSystemLockdownStatus() {
+            try {
+                const lockdownDoc = await getDoc(doc(db, "settings", "system_status"));
+                if (lockdownDoc.exists() && lockdownDoc.data().isLocked) {
+                    if (!isSuperOwner) {
+                        document.getElementById('auth-section').classList.add('hidden');
+                        document.getElementById('main-app').classList.add('hidden');
+                        document.getElementById('system-locked-screen').classList.remove('hidden');
+                        return true;
+                    }
+                }
+                return false;
+            } catch (e) {
+                console.log("Lockdown check info:", e);
+                return false;
+            }
+        }
+
+        window.toggleSystemLockdown = async () => {
+            if (!isSuperOwner) return;
+
+            try {
+                const lockdownRef = doc(db, "settings", "system_status");
+                const lockdownDoc = await getDoc(lockdownRef);
+                const currentStatus = lockdownDoc.exists() ? lockdownDoc.data().isLocked : false;
+
+                if (!currentStatus) {
+                    const confirmVal = prompt("⚠️ אזהרה: פעולה זו תנעל מיד את האפליקציה בפני כל המשתמשים והמנהלים!\nהקלד את המילה: נעילה");
+                    if (confirmVal !== "נעילה") {
+                        alert("הנעילה בוטלה (המילה שהוקלדה שגויה).");
+                        return;
+                    }
+
+                    await setDoc(lockdownRef, { isLocked: true, updatedAt: new Date() });
+                    logAction("נעילת מערכת", "המערכת ננעלה בהצלחה מרחוק (Kill Switch)", "אבטחה");
+                    alert("🔒 המערכת ננעלה בהצלחה! מעתה אף אחד לא יוכל להיכנס חוץ ממך.");
+                } else {
+                    const confirmVal = confirm("האם ברצונך לשחרר את נעילת המערכת ולהחזיר את הגישה לכולם?");
+                    if (!confirmVal) return;
+
+                    await setDoc(lockdownRef, { isLocked: false, updatedAt: new Date() });
+                    logAction("שחרור נעילת מערכת", "המערכת שוחררה וחזרה לפעילות רגילה", "אבטחה");
+                    alert("🔓 נעילת המערכת שוחררה בהצלחה! הגישה חזרה לכל המשתמשים.");
+                }
+            } catch (err) {
+                alert("שגיאה בעדכון מצב נעילה: " + err.message);
+            }
+        };
+
         async function logAction(actionType, details, category = "כללי") {
             try {
                 await addDoc(collection(db, "audit_logs"), {
@@ -277,12 +326,16 @@
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
+                await loadMusiciansData();
+                await loadBranchesSelect();
+                await checkUserAdminStatus(user);
+
+                const isLocked = await checkSystemLockdownStatus();
+                if (isLocked) return;
+
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
 
-                await loadBranchesSelect();
-                await loadMusiciansData();
-                await checkUserAdminStatus(user);
                 await loadUnavailabilityData();
                 initPushToken(user.uid);
                 listenToNotifications();
@@ -290,10 +343,12 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
-                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
+                document.getElementById('system-locked-screen').classList.add('hidden');
             }
         });
+
         function listenToBroadcastMessages() {
             const q = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"));
             onSnapshot(q, (snapshot) => {
@@ -395,6 +450,7 @@
             const auditTabBtn = document.getElementById('btn-tab-audit');
             const backupBtn = document.getElementById('backup-btn-container');
             const broadcastSection = document.getElementById('admin-broadcast-section');
+            const lockdownContainer = document.getElementById('lockdown-btn-container');
 
             reportsTabBtn.classList.remove('hidden');
 
@@ -410,9 +466,11 @@
             if (isSuperOwner) {
                 auditTabBtn.classList.remove('hidden');
                 if (backupBtn) backupBtn.classList.remove('hidden');
+                if (lockdownContainer) lockdownContainer.classList.remove('hidden');
             } else {
                 auditTabBtn.classList.add('hidden');
                 if (backupBtn) backupBtn.classList.add('hidden');
+                if (lockdownContainer) lockdownContainer.classList.add('hidden');
             }
         }
 
@@ -771,6 +829,7 @@
                 loadNotificationsView();
             }
         };
+
         async function loadCalendarView() {
             const container = document.getElementById('calendar-container');
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
@@ -1137,7 +1196,6 @@
                 createdAt: new Date()
             });
 
-            // שליחת פוש לכל המנהלים
             const adminsSnap = await getDocs(collection(db, "users"));
             adminsSnap.forEach(async (docUser) => {
                 const uData = docUser.data();
@@ -1393,6 +1451,7 @@
 
             logAction("ייצוא דוח CSV", `ייצוא דוח ל-Excel/CSV (${currentReportData.length} שורות)`, "דוחות וייצוא");
         };
+
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
@@ -1537,10 +1596,7 @@
 
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved", newMusician: newMusicianName });
             
-            // פוש לנגן שביטל
             await sendPushNotificationToUser(cancellingPhone, "✅ בקשת הביטול אושרה", `בקשתך להופעה ב-${branchName} (${eventDateStr}) אושרה ושובץ מילוי מקום.`, 'notifs');
-            
-            // פוש לנגן החדש ששובץ
             await sendPushNotificationToUser(newMusicianPhone, "🎵 שובצת להופעה חדשה!", `שובצת למילוי מקום בסניף ${branchName} | בתאריך ${eventDateStr} בשעה ${eventTimeStr}.`, 'calendar');
 
             logAction("אישור ביטול והחלפה", `אושרה בקשת ביטול של ${cancellingMusicianName}, שובץ חלופי: ${newMusicianName}`, "בקשות ביטול והחלפות");
@@ -1674,7 +1730,6 @@
                 alert("הופעה חדשה נשמרה בהצלחה!");
             }
 
-            // שליחת פוש לכל מי ששובץ להופעה
             for (const phone of selectedPhones) {
                 await sendPushNotificationToUser(phone, "🎵 שובצת להופעה חדשה!", `שובצת להופעה בסניף ${branchName} | בתאריך ${date} בשעה ${time}.`, 'calendar');
             }
@@ -1697,6 +1752,16 @@
 
     <div class="container">
         
+        <!-- מסך חסימה במצב נעילה -->
+        <div id="system-locked-screen" class="card hidden" style="border: 3px solid var(--danger); text-align: center; padding: 40px 20px; margin-top: 50px;">
+            <h2 style="color: var(--danger); margin-bottom: 15px;">🔒 הגישה למערכת הושעתה</h2>
+            <p style="font-size: 1rem; color: #fff; line-height: 1.6; margin-bottom: 20px;">
+                הגישה למערכת הושעתה עקב אי-הסדרת תשלום הריטיינר החודשי.<br>
+                לחידוש הגישה והפעלת המערכת מחדש, יש ליצור קשר עם מפתח המערכת.
+            </p>
+            <span style="font-size: 0.85rem; color: var(--text-muted);">סלון יווני - מערכת ניהול הופעות</span>
+        </div>
+
         <div id="auth-section" class="card">
             <h2 id="auth-title" style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
             <form id="login-form" onsubmit="return false;">
@@ -1803,6 +1868,12 @@
                     <button type="button" class="btn-success" onclick="sendBroadcastMessage()">🚀 שדר הודעת פוש לכולם</button>
                 </div>
 
+                <div id="lockdown-btn-container" class="card hidden" style="border: 1px solid #ff9800;">
+                    <h3 style="color:#ff9800; margin-bottom:8px;">🔒 נעילת גישה למערכת (Kill Switch)</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">חסימה מיידית של הגישה למערכת לכל המשתמשים במקרה של אי-תשלום ריטיינר.</p>
+                    <button type="button" class="btn-danger" onclick="toggleSystemLockdown()" style="background-color:#ff9800; color:#000;">🔒 נעילת המערכת / שחרור נעילה</button>
+                </div>
+
                 <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
                     <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתוני מערכת</h3>
                     <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">הורדת קובץ גיבוי מלא (JSON) של כל ההופעות, הסניפים, הצוות והלוגים למחשב/לנייד.</p>
@@ -1896,6 +1967,3 @@
 
 </body>
 </html>
-
-
-
