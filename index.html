@@ -67,12 +67,14 @@
         .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
         .report-table th, .report-table td { border: 1px solid #444; padding: 8px; text-align: right; }
         .report-table th { background-color: #2a2a2a; color: var(--accent-gold); }
+        
+        .log-item { background: #252525; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-right: 3px solid var(--accent-gold); font-size: 0.85rem; }
     </style>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCis-H1d8436iH6vBkNfGWoy3ekkIDSflU",
@@ -96,6 +98,7 @@
         let allCancellationRequests = [];
         let isAdmin = false;
         let isBranchManager = false;
+        let isSuperOwner = false;
         let currentUserPhone = '';
         let currentUserName = '';
         let userManagedBranchId = '';
@@ -110,6 +113,21 @@
             return `user_${cleanPhone(phone)}@salonyevani.local`;
         }
 
+        async function logAction(actionType, details) {
+            try {
+                await addDoc(collection(db, "audit_logs"), {
+                    timestamp: new Date(),
+                    dateStr: new Date().toLocaleString('he-IL'),
+                    userPhone: currentUserPhone,
+                    userName: currentUserName,
+                    actionType,
+                    details
+                });
+            } catch (e) {
+                console.error("Error writing audit log:", e);
+            }
+        }
+
         window.switchTab = (tabName) => {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
@@ -121,6 +139,7 @@
             if(tabName === 'admin' && isAdmin) loadAdminData();
             if(tabName === 'reports') loadReportsView();
             if(tabName === 'notifs') loadNotificationsView();
+            if(tabName === 'audit' && isSuperOwner) loadAuditLogsView();
         };
 
         window.toggleAuthMode = (isRegister) => {
@@ -206,10 +225,15 @@
             }
 
             currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
-
             document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
 
-            if (currentUserPhone === "0547771121" || currentUserPhone === "0500000000" || (userDoc.exists() && userDoc.data().role === "admin")) {
+            if (currentUserPhone === "0547771121") {
+                isSuperOwner = true;
+            } else {
+                isSuperOwner = false;
+            }
+
+            if (isSuperOwner || currentUserPhone === "0500000000" || (userDoc.exists() && userDoc.data().role === "admin")) {
                 isAdmin = true;
             } else {
                 isAdmin = false;
@@ -227,7 +251,9 @@
 
             const adminTabBtn = document.getElementById('btn-tab-admin');
             const reportsTabBtn = document.getElementById('btn-tab-reports');
-            
+            const auditTabBtn = document.getElementById('btn-tab-audit');
+            const backupBtn = document.getElementById('backup-btn-container');
+
             reportsTabBtn.classList.remove('hidden');
 
             if (isAdmin) {
@@ -235,6 +261,14 @@
             } else {
                 adminTabBtn.classList.add('hidden');
                 switchTab('calendar');
+            }
+
+            if (isSuperOwner) {
+                auditTabBtn.classList.remove('hidden');
+                if (backupBtn) backupBtn.classList.remove('hidden');
+            } else {
+                auditTabBtn.classList.add('hidden');
+                if (backupBtn) backupBtn.classList.add('hidden');
             }
         }
 
@@ -246,6 +280,7 @@
 
             try {
                 await signInWithEmailAndPassword(auth, fakeEmail, password);
+                logAction("התחברות", "משתמש התחבר למערכת");
             } catch (err) { alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); }
         });
 
@@ -285,12 +320,16 @@
                 }
 
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
+                logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`);
             } catch (err) {
                 alert("שגיאה בהרשמה: " + err.message);
             }
         });
 
-        document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            logAction("התנתקות", "משתמש התנתק מהמערכת");
+            signOut(auth);
+        });
 
         async function loadBranchesSelect() {
             const select = document.getElementById('branch-select');
@@ -342,11 +381,13 @@
             try {
                 if (editId) {
                     await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone, color });
+                    logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`);
                     document.getElementById('edit-branch-id').value = '';
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "branches"), { name, managerId: managerSelect.value, managerName, managerPhone, color });
+                    logAction("הוספת סניף", `נוסף סניף חדש: ${name}, מנהל: ${managerName}`);
                     alert("סניף חדש נוסף בהצלחה!");
                 }
                 document.getElementById('new-branch-name').value = '';
@@ -385,11 +426,18 @@
                     alert(`⚠️ לא ניתן להעביר את ${name} לסטטוס "לא פעיל"!\nהוא/היא משובצים להופעות עתידיות במערכת. יש להחליף אותם קודם לכן ביומן הופעות.`);
                     return;
                 }
+
+                const managedBranch = allBranches.find(b => b.managerName === name || b.managerPhone === phone);
+                if (managedBranch) {
+                    alert(`⚠️ לא ניתן להעביר את ${name} לסטטוס "לא פעיל"!\nהוא/היא מוגדרים כמנהל/ת של סניף "${managedBranch.name}". יש להגדיר מנהל סניף אחר במקומו בעריכת הסניף תחילה.`);
+                    return;
+                }
             }
 
             try {
                 if (editId) {
                     await updateDoc(doc(db, "musicians", editId), { name, role, status });
+                    logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`);
                     document.getElementById('edit-musician-id').value = '';
                     document.getElementById('musician-phone').disabled = false;
                     document.getElementById('phone-edit-note').classList.add('hidden');
@@ -397,6 +445,7 @@
                     alert("איש הצוות עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active" });
+                    logAction("הוספת איש צוות", `נוסף איש צוות: ${name} (${role}), טלפון: ${phone}`);
                     alert("איש צוות נוסף בהצלחה!");
                 }
 
@@ -427,7 +476,7 @@
                     <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
                         <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">ערוך</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteItem('branches', '${d.id}')">מחק</button>
+                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">מחק</button>
                     </div>
                 </div>`;
             });
@@ -469,14 +518,46 @@
             window.scrollTo({top: 250, behavior: 'smooth'});
         };
 
-        window.deleteItem = async (col, id) => {
+        window.deleteBranch = async (id, name) => {
             if(!isAdmin) return;
-            if(confirm("למחוק פריט זה?")) {
-                await deleteDoc(doc(db, col, id));
+            const confirmVal = prompt(`כדי למחוק את סניף "${name}", הקלד את המילה: מחיקה`);
+            if (confirmVal === "מחיקה") {
+                await deleteDoc(doc(db, "branches", id));
+                logAction("מחיקת סניף", `נמחק סניף: ${name}`);
                 await loadMusiciansData();
                 loadAdminData();
                 loadBranchesSelect();
                 loadCalendarView();
+                alert("הסניף נמחק בהצלחה!");
+            } else {
+                alert("המחיקה בוטלה.");
+            }
+        };
+
+        window.exportFullSystemBackup = async () => {
+            if (!isSuperOwner) return;
+            try {
+                alert("מכין קובץ גיבוי נתונים...");
+                const backupData = {};
+                const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs"];
+
+                for (const colName of cols) {
+                    const snap = await getDocs(collection(db, colName));
+                    backupData[colName] = [];
+                    snap.forEach(d => backupData[colName].push({ id: d.id, ...d.data() }));
+                }
+
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `salon_yevani_backup_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                logAction("גיבוי מערכת", "הורד קובץ גיבוי נתונים מלא (JSON)");
+            } catch (err) {
+                alert("שגיאה ביצירת גיבוי: " + err.message);
             }
         };
 
@@ -509,6 +590,8 @@
                 const reqsSnap = await getDocs(collection(db, "cancellation_requests"));
                 const reqDeletes = reqsSnap.docs.map(d => deleteDoc(doc(db, "cancellation_requests", d.id)));
                 await Promise.all(reqDeletes);
+
+                logAction("אתחול מערכת", "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת");
 
                 alert("✅ המערכת אופסה בהצלחה ונוקתה לחלוטין מנתונים!");
                 window.location.reload();
@@ -615,8 +698,14 @@
             const rosterContainer = document.getElementById('musicians-roster');
             rosterContainer.innerHTML = '';
             
-            if (!isAdmin || !currentBranchId) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const isPastEvent = dateStr < todayStr;
+
+            if (!isAdmin || !currentBranchId || (isPastEvent && !isSuperOwner)) {
                 document.getElementById('save-event-form').classList.add('hidden');
+                if (isPastEvent) {
+                    rosterContainer.innerHTML = '<p style="color:var(--danger); font-size:0.85rem; margin-bottom:10px;">🔒 הופעות עבר נעולות לעריכה לצורך שמירת נתוני הנהלת חשבונות.</p>';
+                }
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
                 
@@ -714,6 +803,9 @@
                 return;
             }
 
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const isPastEvent = dateStr < todayStr;
+
             existingList.innerHTML = dayEvents.map(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
@@ -731,7 +823,7 @@
                 );
 
                 let cancelBtnHTML = '';
-                if (isUserInEvent) {
+                if (isUserInEvent && !isPastEvent) {
                     if (pendingRequest) {
                         cancelBtnHTML = `<button type="button" disabled style="width:100%; margin-top:10px; background-color:#ffa726; color:#000; cursor:not-allowed; opacity:0.9;">⏳ בקשה לביטול נשלחה</button>`;
                     } else {
@@ -744,7 +836,7 @@
                     <strong>📍 ${bName} | 🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
-                    ${isAdmin ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}')">מחק הופעה</button>` : ''}
+                    ${(isAdmin && (!isPastEvent || isSuperOwner)) ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}', '${bName}')">מחק הופעה</button>` : ''}
                     ${cancelBtnHTML}
                 </div>
             `;}).join('');
@@ -768,6 +860,7 @@
                 createdAt: new Date()
             });
 
+            logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`);
             alert("בקשת הביטול נשלחה בהצלחה למנהל המערכת ולמנהל הסניף!");
             closeModal();
         };
@@ -839,6 +932,38 @@
             allBranches.forEach(b => {
                 branchSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`;
             });
+        }
+
+        async function loadAuditLogsView() {
+            if (!isSuperOwner) return;
+            const container = document.getElementById('audit-logs-container');
+            container.innerHTML = '<p style="color:var(--text-muted);">טוען יומן שינויים...</p>';
+
+            try {
+                const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
+                const snap = await getDocs(q);
+                
+                if (snap.empty) {
+                    container.innerHTML = '<p style="color:var(--text-muted);">אין שינויים מתוייקים בלוג.</p>';
+                    return;
+                }
+
+                let html = '<h4>📜 יומן פעולות ושינויים במערכת (Log):</h4><div style="margin-top:10px;">';
+                snap.forEach(d => {
+                    const log = d.data();
+                    html += `
+                        <div class="log-item">
+                            <strong style="color:var(--accent-gold);">${log.actionType || 'פעולה'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
+                            <span>👤 מבוצע על ידי: <strong>${log.userName || 'משתמש'}</strong> (${log.userPhone || ''})</span><br>
+                            <span style="color:#fff;">📝 תיאור: ${log.details || ''}</span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת לוגים: ${err.message}</p>`;
+            }
         }
 
         let currentReportData = [];
@@ -1068,6 +1193,8 @@
             const managerName = branchObj ? branchObj.managerName : 'מנהל הסניף';
 
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved", newMusician: newMusicianName });
+            logAction("אישור ביטול והחלפה", `אושרה בקשת ביטול של ${cancellingMusicianName}, שובץ חלופי: ${newMusicianName}`);
+            
             alert(`הבקשה אושרה! ${newMusicianName} שובץ במקום ${cancellingMusicianName}.\nהודעה אוטומטית נשלחה ל${managerName} (מנהל הסניף).`);
 
             loadNotificationsView();
@@ -1076,14 +1203,16 @@
 
         window.rejectRequest = async (requestId) => {
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "rejected" });
+            logAction("דחיית בקשת ביטול", `נדחתה בקשת ביטול (ID: ${requestId})`);
             alert("בקשת הביטול נדחתה.");
             loadNotificationsView();
         };
 
-        window.deleteShow = async (id, dateStr) => {
+        window.deleteShow = async (id, dateStr, branchName) => {
             if(!isAdmin) return;
-            if(confirm("למחוק הופעה זו?")) {
+            if(confirm(`האם אתה בטוח שברצונך למחוק את ההופעה בתאריך ${dateStr}?`)) {
                 await deleteDoc(doc(db, "events", id));
+                logAction("מחיקת הופעה", `נמחקה הופעה בתאריך ${dateStr} בסניף ${branchName || ''}`);
                 await loadCalendarView();
                 renderExistingEvents(dateStr);
             }
@@ -1125,10 +1254,17 @@
                 return;
             }
 
-            if(assignedStaff.length === 0) {
-                alert("נא לבחור לפחות איש צוות אחד להופעה.");
+            const hasSinger = selectedRoles.includes("זמר/ת");
+            const hasKeys = selectedRoles.includes("קלידים");
+            const hasBouzouki = selectedRoles.includes("בוזוקי");
+
+            if (!hasSinger || !hasKeys) {
+                alert("שגיאה: חובה לשבץ זמר/ת וקלידן להופעה זו!\nאם הערב בוטל, ניתן למחוק את ההופעה באמצעות כפתור 'מחק הופעה'.");
                 return;
             }
+
+            const branchObj = allBranches.find(b => b.id === currentBranchId);
+            const branchName = branchObj ? branchObj.name : 'סניף';
 
             const existingEvent = monthEvents.find(ev => ev.date === date && ev.branchId === currentBranchId);
 
@@ -1137,9 +1273,10 @@
                     time,
                     assignedStaff
                 });
+                logAction("עדכון הופעה", `עודכנה הופעה בתאריך ${date} בסניף ${branchName}, צוות: ${assignedStaff.join(', ')}`);
                 alert("ההופעה והשיבוצים עודכנו בהצלחה!");
             } else {
-                const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time);
+                const existingTimeConflict = monthEvents.find(ev => ev.date === date && ev.time === time && ev.branchId === currentBranchId);
                 if (existingTimeConflict) {
                     alert(`שגיאה: כבר קיימת הופעה בסניף זה בתאריך ${date} בשעה ${time}!`);
                     return;
@@ -1152,7 +1289,12 @@
                     assignedStaff,
                     createdAt: new Date()
                 });
+                logAction("יצירת הופעה", `נוצרה הופעה חדשה בתאריך ${date} בסניף ${branchName}, צוות: ${assignedStaff.join(', ')}`);
                 alert("הופעה חדשה נשמרה בהצלחה!");
+            }
+
+            if (!hasBouzouki) {
+                alert("שימו לב: שמרת את ההופעה ללא נגן בוזוקי.");
             }
 
             closeModal();
@@ -1220,6 +1362,7 @@
                 <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
                 <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')">📊 דוחות</button>
                 <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ תפריט מנהל</button>
+                <button type="button" id="btn-tab-audit" class="tab-btn hidden" onclick="switchTab('audit')">📜 לוג שינויים</button>
             </div>
 
             <div id="tab-calendar" class="tab-content">
@@ -1260,6 +1403,12 @@
             </div>
 
             <div id="tab-admin" class="tab-content hidden">
+                <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
+                    <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתוני מערכת</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">הורדת קובץ גיבוי מלא (JSON) של כל ההופעות, הסניפים, הצוות והלוגים למחשב/לנייד.</p>
+                    <button type="button" class="btn-success" onclick="exportFullSystemBackup()">📥 הורד גיבוי מלא (JSON)</button>
+                </div>
+
                 <div class="card" style="border: 2px solid var(--danger);">
                     <h3 style="color:var(--danger); margin-bottom:8px;">🚨 אזור סכנה - איפוס מערכת</h3>
                     <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">מחיקה כללית של כל הנתונים, ההופעות, הסניפים ואנשי הצוות מ-Firebase כדי להתחיל מצב נקי.</p>
@@ -1306,6 +1455,10 @@
                     </form>
                     <div id="musicians-list"></div>
                 </div>
+            </div>
+
+            <div id="tab-audit" class="tab-content hidden">
+                <div class="card" id="audit-logs-container"></div>
             </div>
 
             <div id="event-modal" class="card hidden" style="position:fixed; top:5%; left:5%; right:5%; bottom:5%; z-index:1000; overflow-y:auto; border:2px solid var(--accent-gold);">
