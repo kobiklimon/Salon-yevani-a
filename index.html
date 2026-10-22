@@ -342,7 +342,7 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
-                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
             }
@@ -1278,19 +1278,28 @@
             });
         }
 
+        let auditLogsDisplayLimit = 100;
+
         async function loadAuditLogsView() {
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
+            auditLogsDisplayLimit = 100;
             
             let musicianOptionsHTML = '<option value="">כל אנשי הצוות (הצג הכל)</option>';
             allMusicians.forEach(m => {
-                musicianOptionsHTML += `<option value="${m.phone}" data-name="${m.name}">${m.name} (${m.phone})</option>`;
+                musicianOptionsHTML += `<option value="${m.phone}">${m.name} (${m.phone})</option>`;
             });
 
             let filtersHTML = `
                 <div style="margin-bottom:12px;">
+                    <!-- כפתור ניקוי לוגים זמני -->
+                    <div style="margin-bottom: 12px; background: #2a1515; padding: 10px; border-radius: 8px; border: 1px dashed var(--danger);">
+                        <p style="font-size: 0.8rem; color: #ff8a8a; margin-bottom: 6px;">⚠️ אזור ניקוי לוגים ישנים לצורך איפוס הבדיקה:</p>
+                        <button type="button" class="btn-danger" style="padding: 8px; font-size: 0.85rem;" onclick="clearAllAuditLogs()">🗑️ נקה את כל הלוגים לצמיתות</button>
+                    </div>
+
                     <label style="font-size:0.85rem; color:var(--accent-gold);">סינון לוגים לפי קטגוריה:</label>
-                    <select id="audit-category-select" style="margin-top:4px;" onchange="renderFilteredAuditLogs()">
+                    <select id="audit-category-select" style="margin-top:4px;" onchange="resetAuditLimitAndRender()">
                         <option value="">הצג הכל (כל הקטגוריות)</option>
                         <option value="אבטחה והתחברות">אבטחה והתחברות</option>
                         <option value="הופעות ושיבוצים">הופעות ושיבוצים</option>
@@ -1303,7 +1312,7 @@
                     </select>
 
                     <label style="font-size:0.85rem; color:var(--accent-gold); margin-top:8px; display:block;">סינון לוגים לפי איש צוות / נגן:</label>
-                    <select id="audit-user-select" style="margin-top:4px;" onchange="renderFilteredAuditLogs()">
+                    <select id="audit-user-select" style="margin-top:4px;" onchange="resetAuditLimitAndRender()">
                         ${musicianOptionsHTML}
                     </select>
                 </div>
@@ -1314,6 +1323,37 @@
             await renderFilteredAuditLogs();
         }
 
+        window.clearAllAuditLogs = async () => {
+            if (!isSuperOwner) return;
+            const confirmVal = prompt("⚠️ אזהרה: פעולה זו תמחק את כל הלוגים הקיימים במסד הנתונים!\nהקלד את המילה: נקה");
+            if (confirmVal !== "נקה") {
+                alert("הניקוי בוטל.");
+                return;
+            }
+
+            try {
+                alert("מוחק את כל הלוגים, אנא המתן...");
+                const snap = await getDocs(collection(db, "audit_logs"));
+                const deletes = snap.docs.map(d => deleteDoc(doc(db, "audit_logs", d.id)));
+                await Promise.all(deletes);
+
+                alert("✅ כל הלוגים נמחקו בהצלחה! כעת תוכל לבצע פעולות חדשות.");
+                loadAuditLogsView();
+            } catch (err) {
+                alert("שגיאה במחיקת לוגים: " + err.message);
+            }
+        };
+
+        window.resetAuditLimitAndRender = () => {
+            auditLogsDisplayLimit = 100;
+            renderFilteredAuditLogs();
+        };
+
+        window.loadMoreAuditLogs = () => {
+            auditLogsDisplayLimit += 100;
+            renderFilteredAuditLogs();
+        };
+
         async function renderFilteredAuditLogs() {
             const contentDiv = document.getElementById('logs-list-content');
             if (!contentDiv) return;
@@ -1322,14 +1362,7 @@
             const userSelect = document.getElementById('audit-user-select');
 
             const selectedCategory = categorySelect ? categorySelect.value.trim() : '';
-            
-            let selectedPhone = '';
-            let selectedName = '';
-            if (userSelect && userSelect.value) {
-                selectedPhone = cleanPhone(userSelect.value);
-                const selectedOpt = userSelect.options[userSelect.selectedIndex];
-                selectedName = selectedOpt ? (selectedOpt.getAttribute('data-name') || '').trim().toLowerCase() : '';
-            }
+            const selectedPhone = userSelect && userSelect.value ? cleanPhone(userSelect.value) : '';
 
             try {
                 const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
@@ -1337,9 +1370,8 @@
                 let logs = [];
                 snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
-                // סינון הרמטי מוחלט
+                // סינון הרמטי לפי קטגוריה ומספר טלפון ייחודי בלבד
                 let filtered = logs.filter(log => {
-                    // 1. סינון לפי קטגוריה
                     let matchesCategory = true;
                     if (selectedCategory) {
                         const logCat = (log.category || '').trim();
@@ -1352,17 +1384,10 @@
                         }
                     }
 
-                    // 2. סינון לפי איש צוות (טלפון + שם)
                     let matchesUser = true;
-                    if (selectedPhone || selectedName) {
+                    if (selectedPhone) {
                         const logPhone = cleanPhone(log.userPhone);
-                        const logName = (log.userName || '').trim().toLowerCase();
-                        const logDetails = (log.details || '').trim().toLowerCase();
-
-                        const matchByPhone = selectedPhone && logPhone === selectedPhone;
-                        const matchByName = selectedName && (logName.includes(selectedName) || logDetails.includes(selectedName));
-
-                        matchesUser = matchByPhone || matchByName;
+                        matchesUser = logPhone === selectedPhone;
                     }
 
                     return matchesCategory && matchesUser;
@@ -1373,8 +1398,13 @@
                     return;
                 }
 
-                let html = `<h4>📜 יומן פעולות ושינויים (${filtered.length} תוצאות):</h4><div style="margin-top:10px;">`;
-                filtered.forEach(log => {
+                const totalFilteredCount = filtered.length;
+                const paginatedLogs = filtered.slice(0, auditLogsDisplayLimit);
+                const hasMore = totalFilteredCount > auditLogsDisplayLimit;
+
+                let html = `<h4>📜 יומן פעולות ושינויים (מציג ${paginatedLogs.length} מתוך ${totalFilteredCount} תוצאות תואמות):</h4><div style="margin-top:10px;">`;
+                
+                paginatedLogs.forEach(log => {
                     html += `
                         <div class="log-item">
                             <strong style="color:var(--accent-gold);">${log.actionType || 'פעולה'}</strong> | <span class="badge">${log.category || 'כללי'}</span> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
@@ -1383,6 +1413,15 @@
                         </div>
                     `;
                 });
+
+                if (hasMore) {
+                    html += `
+                        <div style="text-align:center; margin: 15px 0;">
+                            <button type="button" class="btn-secondary" onclick="loadMoreAuditLogs()" style="padding: 10px 20px; width: auto;">⬇️ טען עוד 100 לוגים</button>
+                        </div>
+                    `;
+                }
+
                 html += '</div>';
                 contentDiv.innerHTML = html;
             } catch (err) {
@@ -1534,7 +1573,7 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוي (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
