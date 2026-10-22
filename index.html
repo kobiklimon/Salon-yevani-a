@@ -1330,11 +1330,18 @@
                 let logs = [];
                 snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
+                // סינון קשוח: מסיר לחלוטין כל לוג שלא תואם לבחירה
                 let filtered = logs.filter(log => {
                     let matchesCategory = true;
                     if (selectedCategory) {
                         const logCat = (log.category || '').trim();
-                        matchesCategory = logCat === selectedCategory || logCat.includes(selectedCategory) || selectedCategory.includes(logCat);
+                        const logAction = (log.actionType || '').trim();
+
+                        if (selectedCategory === "הודעות פוש ותקשורת") {
+                            matchesCategory = logCat.includes("פוש") || logCat.includes("תקשורת") || logAction.includes("פוש");
+                        } else {
+                            matchesCategory = logCat === selectedCategory || logCat.includes(selectedCategory);
+                        }
                     }
 
                     let matchesUser = true;
@@ -1351,7 +1358,7 @@
                     return;
                 }
 
-                let html = '<h4>📜 יומן פעולות ושינויים במערכת (Log):</h4><div style="margin-top:10px;">';
+                let html = `<h4>📜 יומן פעולות ושינויים (${filtered.length} תוצאות):</h4><div style="margin-top:10px;">`;
                 filtered.forEach(log => {
                     html += `
                         <div class="log-item">
@@ -1512,7 +1519,7 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוي (מאותו תפקיד בלבד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
