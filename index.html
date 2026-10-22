@@ -349,7 +349,6 @@
         });
 
         function listenToBroadcastMessages() {
-            // מאזין למסמך הקבוע של ההודעה האחרונה
             onSnapshot(doc(db, "broadcasts", "latest_broadcast"), (docSnap) => {
                 const bannerContainer = document.getElementById('broadcast-banner-container');
                 if (docSnap.exists()) {
@@ -382,7 +381,6 @@
             }
 
             try {
-                // שומרי הודעה יחידה באמצעות דריסת המסמך הקבוע
                 await setDoc(doc(db, "broadcasts", "latest_broadcast"), {
                     message: msg,
                     senderName: currentUserName,
@@ -1284,7 +1282,6 @@
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
             
-            // יצירת אפשרויות בחירה לאנשי הצוות
             let musicianOptionsHTML = '<option value="">כל אנשי הצוות (הצג הכל)</option>';
             allMusicians.forEach(m => {
                 musicianOptionsHTML += `<option value="${m.phone}">${m.name} (${m.phone})</option>`;
@@ -1317,12 +1314,6 @@
             await renderFilteredAuditLogs();
         }
 
-        function cleanCategoryName(str) {
-            if (!str) return '';
-            // ניקוי אימוג'ים ורווחים לצורך סינון מבוסס טקסט נקי
-            return str.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-        }
-
         async function renderFilteredAuditLogs() {
             const contentDiv = document.getElementById('logs-list-content');
             if (!contentDiv) return;
@@ -1330,7 +1321,7 @@
             const categorySelect = document.getElementById('audit-category-select');
             const userSelect = document.getElementById('audit-user-select');
 
-            const selectedCategory = categorySelect ? cleanCategoryName(categorySelect.value) : '';
+            const selectedCategory = categorySelect ? categorySelect.value.trim() : '';
             const selectedPhone = userSelect ? cleanPhone(userSelect.value) : '';
 
             try {
@@ -1339,17 +1330,17 @@
                 let logs = [];
                 snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
-                // סינון כפול: לפי קטגוריה ו/או לפי איש צוות
                 let filtered = logs.filter(log => {
                     let matchesCategory = true;
                     if (selectedCategory) {
-                        const logCatClean = cleanCategoryName(log.category);
-                        matchesCategory = logCatClean.includes(selectedCategory) || selectedCategory.includes(logCatClean);
+                        const logCat = (log.category || '').trim();
+                        matchesCategory = logCat === selectedCategory || logCat.includes(selectedCategory) || selectedCategory.includes(logCat);
                     }
 
                     let matchesUser = true;
                     if (selectedPhone) {
-                        matchesUser = cleanPhone(log.userPhone) === selectedPhone;
+                        const logPhone = cleanPhone(log.userPhone);
+                        matchesUser = logPhone === selectedPhone;
                     }
 
                     return matchesCategory && matchesUser;
@@ -1521,7 +1512,7 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוي (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
