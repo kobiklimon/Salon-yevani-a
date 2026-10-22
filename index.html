@@ -1284,7 +1284,7 @@
             
             let musicianOptionsHTML = '<option value="">כל אנשי הצוות (הצג הכל)</option>';
             allMusicians.forEach(m => {
-                musicianOptionsHTML += `<option value="${m.phone}">${m.name} (${m.phone})</option>`;
+                musicianOptionsHTML += `<option value="${m.phone}" data-name="${m.name}">${m.name} (${m.phone})</option>`;
             });
 
             let filtersHTML = `
@@ -1322,7 +1322,14 @@
             const userSelect = document.getElementById('audit-user-select');
 
             const selectedCategory = categorySelect ? categorySelect.value.trim() : '';
-            const selectedPhone = userSelect ? cleanPhone(userSelect.value) : '';
+            
+            let selectedPhone = '';
+            let selectedName = '';
+            if (userSelect && userSelect.value) {
+                selectedPhone = cleanPhone(userSelect.value);
+                const selectedOpt = userSelect.options[userSelect.selectedIndex];
+                selectedName = selectedOpt ? (selectedOpt.getAttribute('data-name') || '').trim().toLowerCase() : '';
+            }
 
             try {
                 const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
@@ -1330,8 +1337,9 @@
                 let logs = [];
                 snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
-                // סינון קשוח: מסיר לחלוטין כל לוג שלא תואם לבחירה
+                // סינון הרמטי מוחלט
                 let filtered = logs.filter(log => {
+                    // 1. סינון לפי קטגוריה
                     let matchesCategory = true;
                     if (selectedCategory) {
                         const logCat = (log.category || '').trim();
@@ -1344,10 +1352,17 @@
                         }
                     }
 
+                    // 2. סינון לפי איש צוות (טלפון + שם)
                     let matchesUser = true;
-                    if (selectedPhone) {
+                    if (selectedPhone || selectedName) {
                         const logPhone = cleanPhone(log.userPhone);
-                        matchesUser = logPhone === selectedPhone;
+                        const logName = (log.userName || '').trim().toLowerCase();
+                        const logDetails = (log.details || '').trim().toLowerCase();
+
+                        const matchByPhone = selectedPhone && logPhone === selectedPhone;
+                        const matchByName = selectedName && (logName.includes(selectedName) || logDetails.includes(selectedName));
+
+                        matchesUser = matchByPhone || matchByName;
                     }
 
                     return matchesCategory && matchesUser;
