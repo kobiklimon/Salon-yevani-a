@@ -349,11 +349,11 @@
         });
 
         function listenToBroadcastMessages() {
-            const q = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"));
-            onSnapshot(q, (snapshot) => {
-                if (!snapshot.empty) {
-                    const latest = snapshot.docs[0].data();
-                    const bannerContainer = document.getElementById('broadcast-banner-container');
+            // מאזין למסמך הקבוע של ההודעה האחרונה
+            onSnapshot(doc(db, "broadcasts", "latest_broadcast"), (docSnap) => {
+                const bannerContainer = document.getElementById('broadcast-banner-container');
+                if (docSnap.exists()) {
+                    const latest = docSnap.data();
                     if (bannerContainer && latest.message) {
                         bannerContainer.innerHTML = `
                             <div class="broadcast-banner">
@@ -363,7 +363,11 @@
                             </div>
                         `;
                         bannerContainer.classList.remove('hidden');
+                    } else if (bannerContainer) {
+                        bannerContainer.classList.add('hidden');
                     }
+                } else if (bannerContainer) {
+                    bannerContainer.classList.add('hidden');
                 }
             });
         }
@@ -378,7 +382,8 @@
             }
 
             try {
-                await addDoc(collection(db, "broadcasts"), {
+                // שומרי הודעה יחידה באמצעות דריסת המסמך הקבוע
+                await setDoc(doc(db, "broadcasts", "latest_broadcast"), {
                     message: msg,
                     senderName: currentUserName,
                     senderPhone: currentUserPhone,
@@ -388,9 +393,9 @@
 
                 await sendBroadcastPushToAll("📢 הודעה חדשה לכל הצוות", msg);
 
-                logAction("שליחת הודעת פוש", `שודרה הודעה לכל הצוות: ${msg}`, "הודעות פוש ותקשורת");
+                logAction("שליחת הודעת פוש", `שודרה הודעה חדשה לכל הצוות (החליפה הודעה קודמת): ${msg}`, "הודעות פוש ותקשורת");
 
-                alert("📢 ההודעה נשלחה בהצלחה ופוש נשלח לכל הנגנים!");
+                alert("📢 ההודעה נשלחה בהצלחה והחליפה את ההודעה הקודמת!");
                 input.value = '';
             } catch (err) {
                 alert("שגיאה בשליחת הודעה: " + err.message);
@@ -1279,52 +1284,79 @@
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
             
-            let categoryFilterHTML = `
+            // יצירת אפשרויות בחירה לאנשי הצוות
+            let musicianOptionsHTML = '<option value="">כל אנשי הצוות (הצג הכל)</option>';
+            allMusicians.forEach(m => {
+                musicianOptionsHTML += `<option value="${m.phone}">${m.name} (${m.phone})</option>`;
+            });
+
+            let filtersHTML = `
                 <div style="margin-bottom:12px;">
                     <label style="font-size:0.85rem; color:var(--accent-gold);">סינון לוגים לפי קטגוריה:</label>
                     <select id="audit-category-select" style="margin-top:4px;" onchange="renderFilteredAuditLogs()">
                         <option value="">הצג הכל (כל הקטגוריות)</option>
-                        <option value="אבטחה והתחברות">🔐 אבטחה והתחברות</option>
-                        <option value="הופעות ושיבוצים">📅 הופעות ושיבוצים</option>
-                        <option value="אי-זמינות צוות">🚫 אי-זמינות צוות</option>
-                        <option value="בקשות ביטול והחלפות">🚨 בקשות ביטול והחלפות</option>
-                        <option value="ניהול סניפים וצוות">⚙️ ניהול סניפים וצוות</option>
-                        <option value="הודעות פוש ותקשורת">📢 הודעות פוש ותקשורת</option>
-                        <option value="דוחות וייצוא">📊 דוחות וייצוא</option>
-                        <option value="כללי">🌐 כללי</option>
+                        <option value="אבטחה והתחברות">אבטחה והתחברות</option>
+                        <option value="הופעות ושיבוצים">הופעות ושיבוצים</option>
+                        <option value="אי-זמינות צוות">אי-זמינות צוות</option>
+                        <option value="בקשות ביטול והחלפות">בקשות ביטול והחלפות</option>
+                        <option value="ניהול סניפים וצוות">ניהול סניפים וצוות</option>
+                        <option value="הודעות פוש ותקשורת">הודעות פוש ותקשורת</option>
+                        <option value="דוחות וייצוא">דוחות וייצוא</option>
+                        <option value="כללי">כללי</option>
+                    </select>
+
+                    <label style="font-size:0.85rem; color:var(--accent-gold); margin-top:8px; display:block;">סינון לוגים לפי איש צוות / נגן:</label>
+                    <select id="audit-user-select" style="margin-top:4px;" onchange="renderFilteredAuditLogs()">
+                        ${musicianOptionsHTML}
                     </select>
                 </div>
                 <div id="logs-list-content"><p style="color:var(--text-muted);">טוען יומן שינויים...</p></div>
             `;
             
-            container.innerHTML = categoryFilterHTML;
+            container.innerHTML = filtersHTML;
             await renderFilteredAuditLogs();
         }
 
-        let fetchedLogs = [];
+        function cleanCategoryName(str) {
+            if (!str) return '';
+            // ניקוי אימוג'ים ורווחים לצורך סינון מבוסס טקסט נקי
+            return str.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+        }
 
         async function renderFilteredAuditLogs() {
             const contentDiv = document.getElementById('logs-list-content');
-            const selectElem = document.getElementById('audit-category-select');
-            const selectedCategory = selectElem ? selectElem.value : '';
+            if (!contentDiv) return;
+
+            const categorySelect = document.getElementById('audit-category-select');
+            const userSelect = document.getElementById('audit-user-select');
+
+            const selectedCategory = categorySelect ? cleanCategoryName(categorySelect.value) : '';
+            const selectedPhone = userSelect ? cleanPhone(userSelect.value) : '';
 
             try {
-                if (fetchedLogs.length === 0) {
-                    const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
-                    const snap = await getDocs(q);
-                    fetchedLogs = [];
-                    snap.forEach(d => fetchedLogs.push({ id: d.id, ...d.data() }));
-                }
+                const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
+                const snap = await getDocs(q);
+                let logs = [];
+                snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
-                let filtered = fetchedLogs;
-                if (selectedCategory) {
-                    filtered = fetchedLogs.filter(l => {
-                        return l.category && l.category.trim() === selectedCategory.trim();
-                    });
-                }
+                // סינון כפול: לפי קטגוריה ו/או לפי איש צוות
+                let filtered = logs.filter(log => {
+                    let matchesCategory = true;
+                    if (selectedCategory) {
+                        const logCatClean = cleanCategoryName(log.category);
+                        matchesCategory = logCatClean.includes(selectedCategory) || selectedCategory.includes(logCatClean);
+                    }
+
+                    let matchesUser = true;
+                    if (selectedPhone) {
+                        matchesUser = cleanPhone(log.userPhone) === selectedPhone;
+                    }
+
+                    return matchesCategory && matchesUser;
+                });
                 
                 if (filtered.length === 0) {
-                    contentDiv.innerHTML = '<p style="color:var(--text-muted); margin-top:10px;">אין פעולות מתועדות בקטגוריה זו.</p>';
+                    contentDiv.innerHTML = '<p style="color:var(--text-muted); margin-top:10px;">אין פעולות מתועדות התואמות לסינון המבוקש.</p>';
                     return;
                 }
 
@@ -1489,7 +1521,7 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוي (מאותו תפקיד בלבד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
@@ -1863,7 +1895,7 @@
             <div id="tab-admin" class="tab-content hidden">
                 <div id="admin-broadcast-section" class="card hidden" style="border: 2px solid var(--accent-gold);">
                     <h3 style="color:var(--accent-gold); margin-bottom:8px;">📢 שליחת הודעת פוש בתפוצה כללית</h3>
-                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">הודעה זו תוקפץ לכל צוות הנגנים והזמרים בנייד ותופיע בראש המסך באפליקציה.</p>
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">הודעה זו תוקפץ לכל צוות הנגנים והזמרים בנייד ותופיע בראש המסך באפליקציה (הודעה חדשה מחליפה הודעה קודמת).</p>
                     <textarea id="broadcast-text-input" rows="3" placeholder="הקלד את הודעת התפוצה לצוות..."></textarea>
                     <button type="button" class="btn-success" onclick="sendBroadcastMessage()">🚀 שדר הודעת פוש לכולם</button>
                 </div>
@@ -1967,6 +1999,3 @@
 
 </body>
 </html>
-
-
-
