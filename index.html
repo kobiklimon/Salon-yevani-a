@@ -244,13 +244,13 @@
                 alert("שגיאה בעדכון מצב נעילה: " + err.message);
             }
         };
-        async function logAction(actionType, details, category = "כללי") {
+        async function logAction(actionType, details, category = "כללי", overridePhone = null, overrideName = null) {
             try {
                 await addDoc(collection(db, "audit_logs"), {
                     timestamp: new Date(),
                     dateStr: new Date().toLocaleString('he-IL'),
-                    userPhone: currentUserPhone,
-                    userName: currentUserName,
+                    userPhone: overridePhone || currentUserPhone,
+                    userName: overrideName || currentUserName,
                     actionType,
                     category,
                     details
@@ -482,11 +482,16 @@
             const password = document.getElementById('login-password').value;
             const fakeEmail = phoneToEmail(phone);
 
+            const cleanedInputPhone = cleanPhone(phone);
+            await loadMusiciansData();
+            const matchedMusician = allMusicians.find(m => cleanPhone(m.phone) === cleanedInputPhone);
+            const userDisplayName = matchedMusician ? matchedMusician.name : phone;
+
             try {
                 await signInWithEmailAndPassword(auth, fakeEmail, password);
-                logAction("התחברות", "משתמש התחבר בהצלחה למערכת", "אבטחה והתחברות");
+                logAction("התחברות", "משתמש התחבר בהצלחה למערכת", "אבטחה והתחברות", cleanedInputPhone, userDisplayName);
             } catch (err) {
-                logAction("כשל בהתחברות", `ניסיון התחברות שנכשל עבור טלפון: ${phone}`, "אבטחה והתחברות");
+                logAction("כשל בהתחברות", `ניסיון התחברות שנכשל עבור טלפון: ${phone}`, "אבטחה והתחברות", cleanedInputPhone, userDisplayName);
                 alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); 
             }
         });
@@ -527,7 +532,7 @@
                 }
 
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
-                logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות");
+                logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות", cleaned, name);
             } catch (err) {
                 alert("שגיאה בהרשמה: " + err.message);
             }
@@ -1486,9 +1491,8 @@
             let tableHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:15px;">
                     <h4>תוצאות הדוח (${currentReportData.length} הופעות):</h4>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn-success" style="width:auto; padding:4px 10px;" onclick="exportReportToCSV()">📥 ייצוא ל-Excel/CSV</button>
-                        <button class="btn-secondary" style="width:auto; padding:4px 10px;" onclick="window.print()">🩻 הדפסה/PDF</button>
+                    <div>
+                        <button class="btn-success" style="width:auto; padding:6px 14px;" onclick="exportReportToCSV()">📥 ייצוא ל-Excel/CSV</button>
                     </div>
                 </div>
                 <table class="report-table">
@@ -1497,7 +1501,7 @@
                             <th>תאריך</th>
                             <th>שעה</th>
                             <th>סניף</th>
-                            <th>הרכב משתתף</th>
+                            ${isAdmin ? '<th>הרכב משתתף</th>' : ''}
                         </tr>
                     </thead>
                     <tbody>
@@ -1506,7 +1510,7 @@
                                 <td>${row.date}</td>
                                 <td>${row.time}</td>
                                 <td>${row.branchName}</td>
-                                <td>${row.staff}</td>
+                                ${isAdmin ? `<td>${row.staff}</td>` : ''}
                             </tr>
                         `).join('')}
                     </tbody>
@@ -1518,16 +1522,29 @@
 
         window.exportReportToCSV = () => {
             if (currentReportData.length === 0) return;
-            let csvContent = "\uFEFFתאריך,שעה,סניף,צוות משתתף\n";
-            currentReportData.forEach(r => {
-                csvContent += `"${r.date}","${r.time}","${r.branchName}","${r.staff.replace(/"/g, '""')}"\n`;
-            });
+            
+            let csvContent = "";
+            if (isAdmin) {
+                csvContent = "\uFEFFתאריך,שעה,סניף,צוות משתתף\n";
+                currentReportData.forEach(r => {
+                    csvContent += `"${r.date}","${r.time}","${r.branchName}","${r.staff.replace(/"/g, '""')}"\n`;
+                });
+            } else {
+                csvContent = "\uFEFFתאריך,שעה,סניף\n";
+                currentReportData.forEach(r => {
+                    csvContent += `"${r.date}","${r.time}","${r.branchName}"\n`;
+                });
+            }
+
+            const todayStr = new Date().toISOString().slice(0,10);
+            const userPhoneStr = currentUserPhone || 'user';
+            const fileName = `report_${userPhoneStr}_${todayStr}.csv`;
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
-            link.setAttribute("download", `report_salon_yevani_${new Date().toISOString().slice(0,10)}.csv`);
+            link.setAttribute("download", fileName);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
