@@ -342,7 +342,7 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
-                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
             }
@@ -1370,7 +1370,6 @@
                 let logs = [];
                 snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
-                // סינון הרמטי לפי קטגוריה ומספר טלפון ייחודי בלבד
                 let filtered = logs.filter(log => {
                     let matchesCategory = true;
                     if (selectedCategory) {
@@ -1573,7 +1572,7 @@
                             replacementDropdown = `<p style="color:var(--danger); font-size:0.8rem; margin-top:8px;">⚠️ אין נגנים/זמרים פעילים ופנויים בתפקיד זה בתאריך ובשעה זו!</p>`;
                         } else {
                             replacementDropdown = `
-                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוي (מאותו תפקיד בלבד):</label>
+                                <label style="font-size:0.8rem; margin-top:8px; display:block;">בחר נגן/זמר חלופי פנוי (מאותו תפקיד בלבד):</label>
                                 <select id="replacement-select-${req.id}" style="margin-top:4px; margin-bottom:8px;">
                                     ${availables.map(m => `<option value="${m.name}" data-phone="${m.phone}" data-role="${m.role}">${m.name} (${m.role})</option>`).join('')}
                                 </select>
