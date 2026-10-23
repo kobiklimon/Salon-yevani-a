@@ -779,6 +779,11 @@
 
         document.getElementById('logout-btn').addEventListener('click', () => {
             logAction("התנתקות", "משתמש התנתק מהמערכת", "אבטחה והתחברות");
+            
+            // איפוס שדות ההתחברות (טלפון וסיסמה) בעת התנתקות
+            document.getElementById('login-phone').value = '';
+            document.getElementById('login-password').value = '';
+
             signOut(auth);
         });
 
@@ -858,20 +863,14 @@
                     }
                     await updateDoc(doc(db, "branches", editId), updatePayload);
                     logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
-                    document.getElementById('edit-branch-id').value = '';
-                    document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "branches"), { name, managerId: managerSelect.value, managerName, managerPhone, color });
                     logAction("הוספת סניף", `נוסף סניף חדש: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
                     alert("סניף חדש נוסף בהצלחה!");
                 }
-                document.getElementById('new-branch-name').value = '';
-                managerSelect.value = '';
                 
-                const colorContainer = document.getElementById('branch-color-container');
-                if (colorContainer) colorContainer.classList.remove('hidden');
-
+                window.cancelEditBranch();
                 loadBranchesSelect();
                 loadAdminData();
             } catch (err) {
@@ -995,20 +994,32 @@
             const colorInput = document.getElementById('new-branch-color');
 
             if (isSuperOwner) {
-                // מנהל על: השדה נשאר גלוי ופתוח לשינוי צבע
                 if (colorContainer) colorContainer.classList.remove('hidden');
                 if (colorInput) colorInput.value = color || '#d4af37';
             } else {
-                // מנהל רגיל: מסתירים את בורר הצבע כדי למנוע בלבול
                 if (colorContainer) colorContainer.classList.add('hidden');
             }
 
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
+            document.getElementById('branch-cancel-btn').classList.remove('hidden');
             
             const formElement = document.getElementById('add-branch-form');
             if (formElement) {
                 formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+        };
+
+        window.cancelEditBranch = () => {
+            document.getElementById('edit-branch-id').value = '';
+            document.getElementById('new-branch-name').value = '';
+            const managerSelect = document.getElementById('new-branch-manager-select');
+            if (managerSelect) managerSelect.value = '';
+
+            const colorContainer = document.getElementById('branch-color-container');
+            if (colorContainer) colorContainer.classList.remove('hidden');
+
+            document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
+            document.getElementById('branch-cancel-btn').classList.add('hidden');
         };
 
         window.editMusician = (id, name, role, phone, status) => {
@@ -1411,6 +1422,26 @@
             `;}).join('');
         }
 
+        window.deleteShow = async (eventId, dateStr, branchName) => {
+            if (!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
+            if (!confirm(`האם אתה בטוח שברצונך למחוק את ההופעה בסניף ${branchName} בתאריך ${dateStr}?`)) return;
+
+            try {
+                await deleteDoc(doc(db, "events", eventId));
+                logAction("מחיקת הופעה", `נמחקה הופעה בתאריך ${dateStr} בסניף ${branchName}`, "הופעות ושיבוצים");
+                alert("ההופעה נמחקה בהצלחה!");
+                openDayModal(dateStr);
+                loadCalendarView();
+            } catch (err) {
+                alert("שגיאה במחיקת ההופעה: " + err.message);
+            }
+        };
+
         window.requestCancellation = async (eventId, eventDate, eventTime, branchId) => {
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. שליחת בקשת ביטול זמינה במצב מקוון בלבד.");
@@ -1502,6 +1533,65 @@
                 branchSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`;
             });
         }
+
+        window.generateAccountingReport = async () => {
+            const selectedMusician = document.getElementById('report-musician-select').value;
+            const selectedBranchId = document.getElementById('report-branch-select').value;
+            const resultsDiv = document.getElementById('report-results');
+
+            let filteredEvents = monthEvents.filter(e => {
+                let matchMusician = true;
+                let matchBranch = true;
+
+                if (selectedMusician) {
+                    matchMusician = e.assignedStaff && e.assignedStaff.some(s => s.toLowerCase().includes(selectedMusician.toLowerCase()));
+                }
+                if (selectedBranchId) {
+                    matchBranch = e.branchId === selectedBranchId;
+                }
+
+                return matchMusician && matchBranch;
+            });
+
+            if (filteredEvents.length === 0) {
+                resultsDiv.innerHTML = '<p style="color:var(--text-muted); margin-top:10px;">לא נמצאו הופעות התואמות לסינון בחודש זה.</p>';
+                return;
+            }
+
+            let reportHTML = `
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>תאריך</th>
+                            <th>סניף</th>
+                            <th>שעה</th>
+                            <th>הרכב</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            filteredEvents.forEach(e => {
+                const branch = allBranches.find(b => b.id === e.branchId);
+                const bName = branch ? branch.name : 'סניף';
+                reportHTML += `
+                    <tr>
+                        <td>${e.date}</td>
+                        <td>${bName}</td>
+                        <td>${e.time}</td>
+                        <td>${e.assignedStaff ? e.assignedStaff.join(', ') : 'לא שובצו'}</td>
+                    </tr>
+                `;
+            });
+
+            reportHTML += `
+                    </tbody>
+                </table>
+                <p style="margin-top:10px; font-weight:bold; color:var(--accent-gold);">סה"כ הופעות: ${filteredEvents.length}</p>
+            `;
+
+            resultsDiv.innerHTML = reportHTML;
+        };
 
         async function loadAuditLogsView() {
             if (!isSuperOwner) return;
@@ -1825,7 +1915,10 @@
                         <div id="branch-color-container">
                             <input type="color" id="new-branch-color" value="#d4af37" style="height:40px; padding:2px; cursor:pointer;">
                         </div>
-                        <button type="submit" id="branch-submit-btn">הוסף סניף</button>
+                        <div style="display:flex; gap:8px;">
+                            <button type="submit" id="branch-submit-btn" style="flex:2;">הוסף סניף</button>
+                            <button type="button" id="branch-cancel-btn" class="btn-danger hidden" style="flex:1;" onclick="cancelEditBranch()">ביטול</button>
+                        </div>
                     </form>
                     <div id="branches-list"></div>
                 </div>
@@ -1900,5 +1993,3 @@
 
 </body>
 </html>
-
-
