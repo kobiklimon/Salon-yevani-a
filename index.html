@@ -162,7 +162,6 @@
             return null;
         }
 
-        // ניהול חיווי מצב אופליין
         function updateOnlineStatusBanner() {
             const banner = document.getElementById('offline-status-banner');
             if (!banner) return;
@@ -788,13 +787,27 @@
             select.innerHTML = '<option value="">כל הסניפים (הצג הכל)</option>';
             const snap = await getDocs(collection(db, "branches"));
             allBranches = [];
+
+            function getColorDotEmoji(hexColor) {
+                if (!hexColor) return '🟡';
+                const color = hexColor.toLowerCase();
+                if (color.includes('e88') || color.includes('blue') || color.includes('00a') || color.includes('1e8')) return '🔵';
+                if (color.includes('43a') || color.includes('green') || color.includes('00') || color.includes('2e')) return '🟢';
+                if (color.includes('e53') || color.includes('red') || color.includes('f4')) return '🔴';
+                if (color.includes('8e2') || color.includes('purple') || color.includes('9c')) return '🟣';
+                if (color.includes('fb8') || color.includes('orange') || color.includes('ff9')) return '🟠';
+                return '🟡';
+            }
+
             snap.forEach((d, idx) => {
                 const bData = d.data();
                 if (!bData.color) {
                     bData.color = defaultColors[idx % defaultColors.length];
                 }
                 allBranches.push({ id: d.id, ...bData });
-                select.innerHTML += `<option value="${d.id}">${bData.name}</option>`;
+
+                const colorDot = getColorDotEmoji(bData.color);
+                select.innerHTML += `<option value="${d.id}">${colorDot} ${bData.name}</option>`;
             });
 
             populateBranchManagersDropdown();
@@ -834,14 +847,14 @@
 
             const managerName = selectedOption.getAttribute('data-name');
             const managerPhone = selectedOption.getAttribute('data-phone');
-            const color = document.getElementById('new-branch-color').value;
+            const colorInput = document.getElementById('new-branch-color');
+            const color = colorInput ? colorInput.value : '#d4af37';
 
             try {
                 if (editId) {
-                    await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone, color });
+                    await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone });
                     logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
                     document.getElementById('edit-branch-id').value = '';
-                    document.getElementById('new-branch-color').disabled = false;
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
@@ -851,6 +864,10 @@
                 }
                 document.getElementById('new-branch-name').value = '';
                 managerSelect.value = '';
+                
+                const colorContainer = document.getElementById('branch-color-container');
+                if (colorContainer) colorContainer.classList.remove('hidden');
+
                 loadBranchesSelect();
                 loadAdminData();
             } catch (err) {
@@ -912,7 +929,7 @@
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
                     <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}')">ערוך</button>
                         <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">מחק</button>
                     </div>
                 </div>`;
@@ -965,21 +982,13 @@
             }
         };
 
-        window.editBranch = (id, name, managerId, color) => {
+        window.editBranch = (id, name, managerId) => {
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
             populateBranchManagersDropdown(managerId);
             
-            const colorInput = document.getElementById('new-branch-color');
-            colorInput.value = color || '#d4af37';
-
-            if (!isSuperOwner) {
-                colorInput.disabled = true;
-                colorInput.title = "שינוי צבע סניף מורשה למנהל על בלבד";
-            } else {
-                colorInput.disabled = false;
-                colorInput.title = "";
-            }
+            const colorContainer = document.getElementById('branch-color-container');
+            if (colorContainer) colorContainer.classList.add('hidden');
 
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
             
@@ -1684,7 +1693,6 @@
 
     <div class="container">
         
-        <!-- באנר אופליין / צפייה בלבד -->
         <div id="offline-status-banner" class="hidden" style="background: var(--danger); color: white; text-align: center; padding: 10px; font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
             ⚠️ אין חיבור לאינטרנט — המערכת במצב אופליין (צפייה בלבד)
         </div>
@@ -1801,7 +1809,9 @@
                         <input type="hidden" id="edit-branch-id">
                         <input type="text" id="new-branch-name" placeholder="שם הסניף" required>
                         <select id="new-branch-manager-select" required></select>
-                        <input type="color" id="new-branch-color" value="#d4af37" style="height:40px; padding:2px; cursor:pointer;">
+                        <div id="branch-color-container">
+                            <input type="color" id="new-branch-color" value="#d4af37" style="height:40px; padding:2px; cursor:pointer;">
+                        </div>
                         <button type="submit" id="branch-submit-btn">הוסף סניף</button>
                     </form>
                     <div id="branches-list"></div>
