@@ -255,8 +255,27 @@
             }
         }
         async function checkSystemLockdownStatus() {
-            // ביטול נעילה אוטומטית בעליית האפליקציה כדי לא לחסום את מסך ההתחברות
-            return false;
+            try {
+                // מנהל-על (0547771121) לעולם לא ייחסם!
+                if (isSuperOwner || currentUserPhone === "0547771121") {
+                    document.getElementById('system-locked-screen').classList.add('hidden');
+                    return false;
+                }
+
+                const lockdownDoc = await getDoc(doc(db, "settings", "system_status"));
+                if (lockdownDoc.exists() && lockdownDoc.data().isLocked) {
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('main-app').classList.add('hidden');
+                    document.getElementById('system-locked-screen').classList.remove('hidden');
+                    return true;
+                } else {
+                    document.getElementById('system-locked-screen').classList.add('hidden');
+                }
+                return false;
+            } catch (e) {
+                console.log("Lockdown check info:", e);
+                return false;
+            }
         }
 
         window.toggleSystemLockdown = async () => {
@@ -279,7 +298,7 @@
                     }
 
                     await setDoc(lockdownRef, { isLocked: true, updatedAt: new Date() });
-                    alert("🔒 המערכת ננעלה.");
+                    alert("🔒 המערכת ננעלה בהצלחה!");
                 } else {
                     const confirmVal = confirm("האם ברצונך לשחרר את נעילת המערכת ולהחזיר את הגישה לכולם?");
                     if (!confirmVal) return;
@@ -410,6 +429,10 @@
                 await loadBranchesSelect();
                 await checkUserAdminStatus(user);
 
+                // בדיקת נעילה - מבוצעת רק לאחר שזוהה המשתמש ומנהל-על מוחרג ממנה
+                const isLocked = await checkSystemLockdownStatus();
+                if (isLocked) return;
+
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
@@ -442,6 +465,7 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
+                // מסך ההתחברות תמיד מוצג כשאף משתמש אינו מחובר
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
@@ -765,11 +789,24 @@
             }
         });
 
+        // התנתקות מלאה - ניקוי נתוני דוחות ואיפוס משתנים
         document.getElementById('logout-btn').addEventListener('click', () => {
             logAction("התנתקות", "משתמש התנתק מהמערכת", "אבטחה והתחברות");
             
             document.getElementById('login-phone').value = '';
             document.getElementById('login-password').value = '';
+
+            // ניקוי תוצאות דוחות ישנים מהמסך והזיכרון
+            const reportResults = document.getElementById('report-results');
+            if (reportResults) reportResults.innerHTML = '';
+            window.currentReportEvents = [];
+
+            // איפוס משתני משתמש
+            currentUserPhone = '';
+            currentUserName = '';
+            isAdmin = false;
+            isBranchManager = false;
+            isSuperOwner = false;
 
             signOut(auth);
         });
@@ -784,13 +821,13 @@
                 if (!hexColor) return '🟡';
                 const color = hexColor.toLowerCase().trim();
 
-                if (color === '#d4af37' || color.includes('d4af')) return '🟡'; // זהב
-                if (color === '#1e88e5' || color.includes('1e88')) return '🔵'; // כחול
-                if (color === '#43a047' || color.includes('43a0')) return '🟢'; // ירוק
-                if (color === '#e53935' || color.includes('e539')) return '🔴'; // אדום
-                if (color === '#8e24aa' || color.includes('8e24')) return '🟣'; // סגול
-                if (color === '#fb8c00' || color.includes('fb8c')) return '🟠'; // כתום
-                if (color === '#00acc1' || color.includes('00ac')) return '🩵'; // תכלת
+                if (color === '#d4af37' || color.includes('d4af')) return '🟡';
+                if (color === '#1e88e5' || color.includes('1e88')) return '🔵';
+                if (color === '#43a047' || color.includes('43a0')) return '🟢';
+                if (color === '#e53935' || color.includes('e539')) return '🔴';
+                if (color === '#8e24aa' || color.includes('8e24')) return '🟣';
+                if (color === '#fb8c00' || color.includes('fb8c')) return '🟠';
+                if (color === '#00acc1' || color.includes('00ac')) return '🩵';
 
                 let hex = color.replace('#', '');
                 if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
@@ -1524,6 +1561,10 @@
         }
 
         async function loadReportsView() {
+            // ניקוי תוצאות דוחות ישנים בעת טעינת טאב דוחות
+            const resultsDiv = document.getElementById('report-results');
+            if (resultsDiv) resultsDiv.innerHTML = '';
+
             const musicianContainer = document.getElementById('report-musician-container');
             const musicianSelect = document.getElementById('report-musician-select');
             
