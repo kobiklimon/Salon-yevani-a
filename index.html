@@ -1809,12 +1809,12 @@
 
         <div id="auth-section" class="card">
             <h2 id="auth-title" style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
-            <form id="login-form" onsubmit="return false;">
+            <form id="login-form" onsubmit="return false;" autocomplete="off">
                 
-                <input type="tel" id="login-phone" required placeholder="מספר טלפון (למשל: 0501234567)">
+                <input type="tel" id="login-phone" required placeholder="מספר טלפון (למשל: 0501234567)" autocomplete="off">
                 
                 <div id="register-fields" class="hidden">
-                    <input type="text" id="reg-name" placeholder="שם מלא">
+                    <input type="text" id="reg-name" placeholder="שם מלא" autocomplete="off">
                     <label style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד במערכת:</label>
                     <select id="reg-role" onchange="onRoleChange()">
                         <option value="זמר/ת">זמר/ת</option>
@@ -1829,7 +1829,7 @@
                     </div>
                 </div>
 
-                <input type="password" id="login-password" required placeholder="סיסמה">
+                <input type="password" id="login-password" required placeholder="סיסמה" autocomplete="new-password">
                 
                 <button type="submit" id="login-submit-btn">התחבר</button>
                 <button type="button" id="register-submit-btn" class="btn-success hidden">סיום הרשמה</button>
