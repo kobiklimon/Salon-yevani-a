@@ -137,6 +137,31 @@
             return `user_${cleanPhone(phone)}@salonyevani.local`;
         }
 
+        function validatePasswordRules(password) {
+            if (password === "Salon1234") {
+                return null;
+            }
+
+            const commonPasswords = ["12345678", "123456789", "password", "1234567890", "qwertyuiop"];
+            if (commonPasswords.includes(password.toLowerCase())) {
+                return "הסיסמה שבחרת נפוצה וגנרית מדי. נא לבחור סיסמה מורכבת יותר.";
+            }
+
+            if (password.length < 8) {
+                return "הסיסמה חייבת להכיל לפחות 8 תווים.";
+            }
+
+            const hasUpperCase = /[A-Z]/.test(password);
+            const hasLowerCase = /[a-z]/.test(password);
+            const hasNumbers = /[0-9]/.test(password);
+
+            if (!hasUpperCase || !hasLowerCase || !hasNumbers) {
+                return "הסיסמה חייבת לשלב אות גדולה באנגלית (A-Z), אות קטנה (a-z) ומספר (0-9).";
+            }
+
+            return null;
+        }
+
         async function initPushToken(userId) {
             try {
                 if ('serviceWorker' in navigator) {
@@ -385,12 +410,13 @@
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
 
-                // בדיקת החלפת סיסמה זמנית כפויה
                 const userDocSnap = await getDoc(doc(db, "users", user.uid));
                 if (userDocSnap.exists() && userDocSnap.data().mustChangePassword) {
                     setTimeout(async () => {
-                        const newPassword = prompt("🔐 סיסמתך אופסה לסיסמה זמנית.\nאנא הזן כעת סיסמה קבועה חדשה (לפחות 6 תווים):");
-                        if (newPassword && newPassword.length >= 6) {
+                        const newPassword = prompt("🔐 סיסמתך אופסה לסיסמה זמנית.\nאנא הזן כעת סיסמה קבועה חדשה (לפחות 8 תווים, אות גדולה, אות קטנה ומספר):");
+                        
+                        const passErr = validatePasswordRules(newPassword);
+                        if (newPassword && !passErr) {
                             try {
                                 await updatePassword(auth.currentUser, newPassword);
                                 await updateDoc(doc(db, "users", user.uid), { mustChangePassword: false, tempPassword: null });
@@ -400,7 +426,7 @@
                                 alert("שגיאה בעדכון הסיסמה: " + e.message);
                             }
                         } else {
-                            alert("הסיסמה לא שונתה. תתבקש להחליף אותה שוב בהתחברות הבאה.");
+                            alert("הסיסמה לא שונתה (" + (passErr || "בוטל") + "). תתבקש להחליף אותה שוב בהתחברות הבאה.");
                         }
                     }, 500);
                 }
@@ -424,11 +450,20 @@
                 if (docSnap.exists()) {
                     const latest = docSnap.data();
                     if (bannerContainer && latest.message) {
+                        const canClear = isAdmin || isSuperOwner;
+                        
                         bannerContainer.innerHTML = `
-                            <div class="broadcast-banner">
-                                <strong style="color:var(--accent-gold);">📢 הודעה לכל הצוות (${latest.senderName || 'הנהלה'}):</strong><br>
-                                <span>${latest.message}</span>
-                                <br><small style="color:var(--text-muted); font-size:0.75rem;">פורסם: ${latest.dateStr || ''}</small>
+                            <div class="broadcast-banner" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                                <div>
+                                    <strong style="color:var(--accent-gold);">📢 הודעה לכל הצוות (${latest.senderName || 'הנהלה'}):</strong><br>
+                                    <span>${latest.message}</span><br>
+                                    <small style="color:var(--text-muted); font-size:0.75rem;">פורסם: ${latest.dateStr || ''}</small>
+                                </div>
+                                ${canClear ? `
+                                    <button type="button" class="btn-danger" onclick="clearBroadcastMessage()" style="width: auto; padding: 4px 8px; font-size: 0.75rem; white-space: nowrap;">
+                                        🗑️ ניקוי
+                                    </button>
+                                ` : ''}
                             </div>
                         `;
                         bannerContainer.classList.remove('hidden');
@@ -440,6 +475,19 @@
                 }
             });
         }
+
+        window.clearBroadcastMessage = async () => {
+            if (!isAdmin && !isSuperOwner) return;
+
+            if (!confirm("האם למחוק ולהעלים את ההודעה לכל המשתמשים?")) return;
+
+            try {
+                await deleteDoc(doc(db, "broadcasts", "latest_broadcast"));
+                logAction("מחיקת הודעת תפוצה", "הודעת התפוצה הכללית נמחקה והוסרה מתצוגת המשתמשים", "הודעות פוש ותקשורת");
+            } catch (err) {
+                alert("שגיאה במחיקת ההודעה: " + err.message);
+            }
+        };
 
         window.sendBroadcastMessage = async () => {
             if (!isAdmin) return;
@@ -647,6 +695,12 @@
                 return;
             }
 
+            const passwordErr = validatePasswordRules(password);
+            if (passwordErr) {
+                alert("⚠️ הנחיות לבחירת סיסמה:\n\n" + passwordErr);
+                return;
+            }
+
             if (role === "מנהל סניף" && !branchName) {
                 alert("חובה לבחור את שם הסניף שעבורו הוגדרת מנהל.");
                 return;
@@ -736,6 +790,7 @@
                     await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone, color });
                     logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
                     document.getElementById('edit-branch-id').value = '';
+                    document.getElementById('new-branch-color').disabled = false;
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
                     alert("הסניף עודכן בהצלחה!");
                 } else {
@@ -853,9 +908,24 @@
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
             populateBranchManagersDropdown(managerId);
-            document.getElementById('new-branch-color').value = color || '#d4af37';
+            
+            const colorInput = document.getElementById('new-branch-color');
+            colorInput.value = color || '#d4af37';
+
+            if (!isSuperOwner) {
+                colorInput.disabled = true;
+                colorInput.title = "שינוי צבע סניף מורשה למנהל על בלבד";
+            } else {
+                colorInput.disabled = false;
+                colorInput.title = "";
+            }
+
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
-            window.scrollTo({top: 0, behavior: 'smooth'});
+            
+            const formElement = document.getElementById('add-branch-form');
+            if (formElement) {
+                formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         };
 
         window.editMusician = (id, name, role, phone, status) => {
@@ -870,7 +940,11 @@
 
             document.getElementById('musician-status').value = status || 'active';
             document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
-            window.scrollTo({top: 250, behavior: 'smooth'});
+            
+            const formElement = document.getElementById('add-musician-form');
+            if (formElement) {
+                formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         };
 
         window.deleteBranch = async (id, name) => {
@@ -1135,7 +1209,6 @@
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
                 const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
-                const busyMap = {}; 
                 let existingEventInThisBranch = null;
 
                 dayEventsSnap.forEach(docSnap => {
@@ -1328,7 +1401,7 @@
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
             const snap = await getDocs(query(collection(db, "audit_logs"), orderBy("timestamp", "desc")));
-            let html = '<h4>📜 יומן פעולות מערכת (מנהל על):</h4><div style="margin-top:10px;">';
+            let html = '<h4>📜 לוג פעולות מערכת:</h4><div style="margin-top:10px;">';
             snap.forEach(d => {
                 const log = d.data();
                 html += `
@@ -1357,11 +1430,9 @@
                 });
 
                 const latest50 = myLogs.slice(0, 50);
-
-                // שליפת תשובות מנהל לבקשות ביטול אישיות
                 const myReqs = allCancellationRequests.filter(r => cleanPhone(r.musicianPhone) === cleanPhone(currentUserPhone) && (r.status === 'approved' || r.status === 'rejected'));
 
-                let html = '<h3 style="color:var(--accent-gold); margin-bottom:10px;">📜 היסטוריית הפעולות שלי (50 אחרונות)</h3>';
+                let html = '<h3 style="color:var(--accent-gold); margin-bottom:10px;">📜 היסטוריה (50 פעולות אחרונות)</h3>';
 
                 if (myReqs.length > 0) {
                     html += '<div style="margin-bottom:12px;"><h4 style="font-size:0.9rem; color:var(--accent-gold);">תשובות מנהל לבקשות ביטול:</h4>';
@@ -1577,11 +1648,11 @@
             <div class="nav-tabs">
                 <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
                 <button type="button" id="btn-tab-unavail" class="tab-btn" onclick="switchTab('unavail')">🚫 זמינות</button>
-                <button type="button" id="btn-tab-my-logs" class="tab-btn" onclick="switchTab('my-logs')">📜 היסטוריה שלי</button>
                 <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
                 <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')">📊 דוחות</button>
-                <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ מנהל</button>
-                <button type="button" id="btn-tab-audit" class="tab-btn hidden" onclick="switchTab('audit')">📜 לוג על</button>
+                <button type="button" id="btn-tab-my-logs" class="tab-btn" onclick="switchTab('my-logs')">📜 היסטוריה</button>
+                <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ ניהול</button>
+                <button type="button" id="btn-tab-audit" class="tab-btn hidden" onclick="switchTab('audit')">📜 לוג</button>
             </div>
 
             <div id="tab-calendar" class="tab-content">
@@ -1620,18 +1691,6 @@
                     <textarea id="broadcast-text-input" rows="3" placeholder="הקלד הודעה לצוות..."></textarea>
                     <button type="button" class="btn-success" onclick="sendBroadcastMessage()">🚀 שדר הודעת פוש</button>
                 </div>
-                <div id="lockdown-btn-container" class="card hidden" style="border: 1px solid #ff9800;">
-                    <h3 style="color:#ff9800; margin-bottom:8px;">🔒 נעילת מערכת (Kill Switch)</h3>
-                    <button type="button" class="btn-danger" onclick="toggleSystemLockdown()" style="background-color:#ff9800; color:#000;">נעילה / שחרור</button>
-                </div>
-                <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
-                    <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתונים</h3>
-                    <button type="button" class="btn-success" onclick="exportFullSystemBackup()">📥 הורד גיבוי (JSON)</button>
-                </div>
-                <div id="system-reset-section" class="card hidden" style="border: 2px solid var(--danger);">
-                    <h3 style="color:var(--danger); margin-bottom:8px;">🚨 אזור סכנה - איפוס</h3>
-                    <button type="button" class="btn-danger" onclick="systemReset()">🗑️ אתחול מוחלט</button>
-                </div>
 
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;">ניהול סניפים</h3>
@@ -1665,6 +1724,22 @@
                         <button type="submit" id="musician-submit-btn">הוסף איש צוות</button>
                     </form>
                     <div id="musicians-list"></div>
+                </div>
+
+                <!-- סדר מוחלף: גיבוי נתונים ראשון, נעילת מערכת שני, איפוס שלישי -->
+                <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
+                    <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתונים</h3>
+                    <button type="button" class="btn-success" onclick="exportFullSystemBackup()">📥 הורד גיבוי (JSON)</button>
+                </div>
+
+                <div id="lockdown-btn-container" class="card hidden" style="border: 1px solid #ff9800;">
+                    <h3 style="color:#ff9800; margin-bottom:8px;">🔒 נעילת מערכת (Kill Switch)</h3>
+                    <button type="button" class="btn-danger" onclick="toggleSystemLockdown()" style="background-color:#ff9800; color:#000;">נעילה / שחרור</button>
+                </div>
+                
+                <div id="system-reset-section" class="card hidden" style="border: 2px solid var(--danger);">
+                    <h3 style="color:var(--danger); margin-bottom:8px;">🗑️ איפוס המערכת</h3>
+                    <button type="button" class="btn-danger" onclick="systemReset()">איפוס מוחלט</button>
                 </div>
             </div>
 
