@@ -256,8 +256,9 @@
         }
         async function checkSystemLockdownStatus() {
             try {
-                // מנהל-על (קובי) מורשה תמיד להתחבר, גם כשהמערכת נעולה!
+                // מנהל-על (0547771121) מורשה תמיד להתחבר, גם כשהמערכת נעולה!
                 if (isSuperOwner || currentUserPhone === "0547771121") {
+                    document.getElementById('system-locked-screen').classList.add('hidden');
                     return false;
                 }
 
@@ -267,6 +268,8 @@
                     document.getElementById('main-app').classList.add('hidden');
                     document.getElementById('system-locked-screen').classList.remove('hidden');
                     return true;
+                } else {
+                    document.getElementById('system-locked-screen').classList.add('hidden');
                 }
                 return false;
             } catch (e) {
@@ -428,10 +431,12 @@
                 await loadBranchesSelect();
                 await checkUserAdminStatus(user);
 
+                // בדיקת נעילה מתבצעת רק לאחר שזוהה המשתמש ומנהל-על מוחרג ממנה
                 const isLocked = await checkSystemLockdownStatus();
                 if (isLocked) return;
 
                 document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('system-locked-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
 
                 const userDocSnap = await getDoc(doc(db, "users", user.uid));
@@ -462,6 +467,7 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
+                // במצב להתחברות - מסך ההתחברות תמיד מוצג ומסך הנעילה מוסתר
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
