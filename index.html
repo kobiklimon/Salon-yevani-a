@@ -780,7 +780,7 @@
         document.getElementById('logout-btn').addEventListener('click', () => {
             logAction("התנתקות", "משתמש התנתק מהמערכת", "אבטחה והתחברות");
             
-            // איפוס שדות ההתחברות (טלפון וסיסמה) בעת התנתקות
+            // איפוס שדות ההתחברות בעת התנתקות
             document.getElementById('login-phone').value = '';
             document.getElementById('login-password').value = '';
 
@@ -795,21 +795,353 @@
 
             function getColorDotEmoji(hexColor) {
                 if (!hexColor) return '🟡';
-                let hex = hexColor.replace('#', '');
-                if (hex.length === 3) {
-                    hex = hex.split('').map(c => c + c).join('');
-                }
+                const color = hexColor.toLowerCase().trim();
+
+                // מיפוי ישיר ומדויק לפי פלטת הצבעים המוגדרת
+                if (color === '#d4af37' || color.includes('d4af')) return '🟡'; // זהב
+                if (color === '#1e88e5' || color.includes('1e88')) return '🔵'; // כחול
+                if (color === '#43a047' || color.includes('43a0')) return '🟢'; // ירוק
+                if (color === '#e53935' || color.includes('e539')) return '🔴'; // אדום
+                if (color === '#8e24aa' || color.includes('8e24')) return '🟣'; // סגול
+                if (color === '#fb8c00' || color.includes('fb8c')) return '🟠'; // כתום
+                if (color === '#00acc1' || color.includes('00ac')) return '🩵'; // תכלת
+
+                // בדיקה לפי רכיב צבע שולט לצבע מותאם אישית
+                let hex = color.replace('#', '');
+                if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
                 
                 const r = parseInt(hex.substring(0, 2), 16) || 0;
                 const g = parseInt(hex.substring(2, 4), 16) || 0;
                 const b = parseInt(hex.substring(4, 6), 16) || 0;
 
+                if (r > 120 && b > 120 && g < 100) return '🟣';
                 if (r > 180 && g > 150 && b < 100) return '🟡';
                 if (b > r && b > g) return '🔵';
                 if (g > r && g > b) return '🟢';
-                if (r > g && r > b && g < 100) return '🔴';
+                if (r > g && r > b) return '🔴';
+
+                return '🟡';
+            }
+
+            snap.forEach((d, idx) => {
+                const bData = d.data();
+                if (!bData.color) {
+                    bData.color = defaultColors[idx % defaultColors.length];
+                }
+                allBranches.push({ id: d.id, ...bData });
+
+                const colorDot = getColorDotEmoji(bData.color);
+                select.innerHTML += `<option value="${d.id}">${colorDot} ${bData.name}</option>`;
+            });
+
+            populateBranchManagersDropdown();
+        }
+
+        function populateBranchManagersDropdown(selectedManagerId = '') {
+            const managerSelect = document.getElementById('new-branch-manager-select');
+            if (!managerSelect) return;
+
+            managerSelect.innerHTML = '<option value="">בחר מנהל סניף מתוך הצוות...</option>';
+            const activeMusicians = allMusicians.filter(m => m.status !== "inactive");
+            const branchManagers = activeMusicians.filter(m => m.role === "מנהל סניף");
+            
+            branchManagers.forEach(m => {
+                const isSelected = m.id === selectedManagerId ? 'selected' : '';
+                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}" ${isSelected}>${m.name} (${m.phone})</option>`;
+            });
+        }
+
+        document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if(!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
+            const editId = document.getElementById('edit-branch-id').value;
+            const name = document.getElementById('new-branch-name').value.trim();
+            const managerSelect = document.getElementById('new-branch-manager-select');
+            const selectedOption = managerSelect.options[managerSelect.selectedIndex];
+
+            if (!managerSelect.value) {
+                alert("חובה לבחור מנהל סניף מתוך רשימת מנהלי הסניפים!");
+                return;
+            }
+
+            const managerName = selectedOption.getAttribute('data-name');
+            const managerPhone = selectedOption.getAttribute('data-phone');
+            const colorInput = document.getElementById('new-branch-color');
+            const color = colorInput ? colorInput.value.toLowerCase() : '#d4af37';
+
+            // בדיקה האם הצבע כבר תפוס בסניף אחר
+            const existingColorBranch = allBranches.find(b => b.id !== editId && b.color && b.color.toLowerCase() === color);
+            if (existingColorBranch) {
+                alert(`⚠️ הצבע שבחרת כבר בשימוש על ידי סניף "${existingColorBranch.name}". נא לבחור צבע ייחודי אחר.`);
+                return;
+            }
+
+            try {
+                if (editId) {
+                    const updatePayload = { name, managerId: managerSelect.value, managerName, managerPhone };
+                    if (isSuperOwner && colorInput) {
+                        updatePayload.color = color;
+                    }
+                    await updateDoc(doc(db, "branches", editId), updatePayload);
+                    logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
+                    alert("הסניף עודכן בהצלחה!");
+                } else {
+                    await addDoc(collection(db, "branches"), { name, managerId: managerSelect.value, managerName, managerPhone, color });
+                    logAction("הוספת סניף", `נוסף סניף חדש: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
+                    alert("סניף חדש נוסף בהצלחה!");
+                }
+                
+                window.cancelEditBranch();
+                loadBranchesSelect();
+                loadAdminData();
+            } catch (err) {
+                alert("שגיאה בשמירת סניף: " + err.message);
+            }
+        });
+
+        document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if(!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
+            const editId = document.getElementById('edit-musician-id').value;
+            const name = document.getElementById('musician-name').value;
+            const role = document.getElementById('musician-role').value;
+            const phone = document.getElementById('musician-phone').value.trim();
+            const status = document.getElementById('musician-status').value;
+
+            try {
+                if (editId) {
+                    await updateDoc(doc(db, "musicians", editId), { name, role, status });
+                    logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`, "ניהול סניפים וצוות");
+                    document.getElementById('edit-musician-id').value = '';
+                    document.getElementById('musician-phone').disabled = false;
+                    document.getElementById('phone-edit-note').classList.add('hidden');
+                    document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
+                    alert("איש הצוות עודכן בהצלחה!");
+                } else {
+                    await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active", isAdmin: false });
+                    logAction("הוספת איש צוות", `נוסף איש צוות: ${name} (${role}), טלפון: ${phone}`, "ניהול סניפים וצוות");
+                    alert("איש צוות נוסף בהצלחה!");
+                }
+
+                document.getElementById('musician-name').value = '';
+                document.getElementById('musician-phone').value = '';
+                await loadMusiciansData();
+                loadBranchesSelect();
+                loadAdminData();
+            } catch (err) {
+                alert("שגיאה בשמירת איש צוות: " + err.message);
+            }
+        });
+
+        async function loadMusiciansData() {
+            const snap = await getDocs(collection(db, "musicians"));
+            allMusicians = [];
+            snap.forEach(d => allMusicians.push({ id: d.id, ...d.data() }));
+        }
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('login-phone').value.trim();
+            const password = document.getElementById('login-password').value;
+            const fakeEmail = phoneToEmail(phone);
+
+            const cleanedInputPhone = cleanPhone(phone);
+            await loadMusiciansData();
+            const matchedMusician = allMusicians.find(m => cleanPhone(m.phone) === cleanedInputPhone);
+            const userDisplayName = matchedMusician ? matchedMusician.name : phone;
+
+            try {
+                await signInWithEmailAndPassword(auth, fakeEmail, password);
+                logAction("התחברות", "משתמש התחבר בהצלחה למערכת", "אבטחה והתחברות", cleanedInputPhone, userDisplayName);
+            } catch (err) {
+                logAction("כשל בהתחברות", `ניסיון התחברות שנכשל עבור טלפון: ${phone}`, "אבטחה והתחברות", cleanedInputPhone, userDisplayName);
+                alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); 
+            }
+        });
+
+        window.requestPasswordReset = async () => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
+            const phoneInput = document.getElementById('login-phone').value.trim();
+            const phone = prompt("הזן את מספר הטלפון שלך לאיפוס הסיסמה:", phoneInput);
+            if (!phone) return;
+
+            const cleaned = cleanPhone(phone);
+            if (!cleaned) {
+                alert("מספר טלפון לא תקין.");
+                return;
+            }
+
+            const matched = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
+            const userName = matched ? matched.name : phone;
+
+            try {
+                await addDoc(collection(db, "password_reset_requests"), {
+                    userPhone: cleaned,
+                    userName: userName,
+                    status: "pending",
+                    createdAt: new Date()
+                });
+
+                const adminsSnap = await getDocs(collection(db, "users"));
+                adminsSnap.forEach(async (docUser) => {
+                    const uData = docUser.data();
+                    if (uData.role === 'admin' || uData.isAdmin) {
+                        await sendPushNotificationToUser(uData.phone, "🔑 בקשת איפוס סיסמה", `${userName} ביקש/ה איפוס סיסמה במערכת`, 'notifs');
+                    }
+                });
+
+                logAction("בקשת איפוס סיסמה", `נשלחה בקשת איפוס סיסמה עבור ${userName} (${cleaned})`, "אבטחה והתחברות", cleaned, userName);
+                alert("פנייתך עברה למנהלי המערכת. ברגע שהסיסמה תאופס, תקבל התראה.");
+            } catch (err) {
+                alert("שגיאה בשליחת הבקשה: " + err.message);
+            }
+        };
+
+        window.confirmResetPassword = async (requestId, userPhone, userName) => {
+            if (!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
+            if (!confirm(`האם לאפס את הסיסמה עבור ${userName} לסיסמה הגנרית: Salon1234?`)) return;
+
+            try {
+                await updateDoc(doc(db, "password_reset_requests", requestId), {
+                    status: "approved",
+                    resetBy: currentUserName,
+                    resetAt: new Date()
+                });
+
+                const usersSnap = await getDocs(collection(db, "users"));
+                usersSnap.forEach(async (uDoc) => {
+                    if (cleanPhone(uDoc.data().phone) === cleanPhone(userPhone)) {
+                        await updateDoc(doc(db, "users", uDoc.id), {
+                            mustChangePassword: true,
+                            tempPassword: "Salon1234"
+                        });
+                    }
+                });
+
+                await sendPushNotificationToUser(userPhone, "🔑 הסיסמה שלך אופסה!", "סיסמתך אופסה ל: Salon1234. בהתחברות הבאה תידרש לקבוע סיסמה חדשה.", 'login');
+                logAction("איפוס סיסמה ע\"י מנהל", `איפוס סיסמה בוצע עבור ${userName} (${userPhone}) לסיסמה גנרית`, "אבטחה והתחברות");
+
+                alert(`✅ הסיסמה של ${userName} אופסה בהצלחה ל-Salon1234 ונשלחה אליו התראת פוש!`);
+                loadNotificationsView();
+            } catch (err) {
+                alert("שגיאה באיפוס הסיסמה: " + err.message);
+            }
+        };
+
+        document.getElementById('register-submit-btn').addEventListener('click', async () => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
+            const phone = document.getElementById('login-phone').value.trim();
+            const password = document.getElementById('login-password').value;
+            const name = document.getElementById('reg-name').value.trim();
+            const role = document.getElementById('reg-role').value;
+            const branchName = document.getElementById('reg-branch-select').value;
+
+            if (!phone || !password || !name) {
+                alert("נא למלא שם מלא, מספר טלפון וסיסמה להרשמה.");
+                return;
+            }
+
+            const passwordErr = validatePasswordRules(password);
+            if (passwordErr) {
+                alert("⚠️ הנחיות לבחירת סיסמה:\n\n" + passwordErr);
+                return;
+            }
+
+            if (role === "מנהל סניף" && !branchName) {
+                alert("חובה לבחור את שם הסניף שעבורו הוגדרת מנהל.");
+                return;
+            }
+
+            const fakeEmail = phoneToEmail(phone);
+
+            try {
+                const userCred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+                await setDoc(doc(db, "users", userCred.user.uid), { phone, role: "user", name, branchName: branchName || '' });
+                
+                const cleaned = cleanPhone(phone);
+                const existingM = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
+                if (!existingM) {
+                    await addDoc(collection(db, "musicians"), {
+                        name,
+                        role,
+                        phone,
+                        branchName: branchName || '',
+                        status: "active",
+                        isAdmin: false
+                    });
+                }
+
+                alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
+                logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות", cleaned, name);
+            } catch (err) {
+                alert("שגיאה בהרשמה: " + err.message);
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            logAction("התנתקות", "משתמש התנתק מהמערכת", "אבטחה והתחברות");
+            
+            // איפוס שדות ההתחברות בעת התנתקות
+            document.getElementById('login-phone').value = '';
+            document.getElementById('login-password').value = '';
+
+            signOut(auth);
+        });
+
+        async function loadBranchesSelect() {
+            const select = document.getElementById('branch-select');
+            select.innerHTML = '<option value="">כל הסניפים (הצג הכל)</option>';
+            const snap = await getDocs(collection(db, "branches"));
+            allBranches = [];
+
+            function getColorDotEmoji(hexColor) {
+                if (!hexColor) return '🟡';
+                const color = hexColor.toLowerCase().trim();
+
+                // מיפוי ישיר ומדויק לפי פלטת הצבעים המוגדרת
+                if (color === '#d4af37' || color.includes('d4af')) return '🟡'; // זהב
+                if (color === '#1e88e5' || color.includes('1e88')) return '🔵'; // כחול
+                if (color === '#43a047' || color.includes('43a0')) return '🟢'; // ירוק
+                if (color === '#e53935' || color.includes('e539')) return '🔴'; // אדום
+                if (color === '#8e24aa' || color.includes('8e24')) return '🟣'; // סגול
+                if (color === '#fb8c00' || color.includes('fb8c')) return '🟠'; // כתום
+                if (color === '#00acc1' || color.includes('00ac')) return '🩵'; // תכלת
+
+                // בדיקה לפי רכיב צבע שולט לצבע מותאם אישית
+                let hex = color.replace('#', '');
+                if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+                
+                const r = parseInt(hex.substring(0, 2), 16) || 0;
+                const g = parseInt(hex.substring(2, 4), 16) || 0;
+                const b = parseInt(hex.substring(4, 6), 16) || 0;
+
                 if (r > 120 && b > 120 && g < 100) return '🟣';
-                if (r > 200 && g > 100 && b < 100) return '🟠';
+                if (r > 180 && g > 150 && b < 100) return '🟡';
+                if (b > r && b > g) return '🔵';
+                if (g > r && g > b) return '🟢';
+                if (r > g && r > b) return '🔴';
 
                 return '🟡';
             }
