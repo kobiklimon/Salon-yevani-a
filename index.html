@@ -255,27 +255,8 @@
             }
         }
         async function checkSystemLockdownStatus() {
-            try {
-                // מנהל-על (0547771121) מורשה תמיד להתחבר, גם כשהמערכת נעולה!
-                if (isSuperOwner || currentUserPhone === "0547771121") {
-                    document.getElementById('system-locked-screen').classList.add('hidden');
-                    return false;
-                }
-
-                const lockdownDoc = await getDoc(doc(db, "settings", "system_status"));
-                if (lockdownDoc.exists() && lockdownDoc.data().isLocked) {
-                    document.getElementById('auth-section').classList.add('hidden');
-                    document.getElementById('main-app').classList.add('hidden');
-                    document.getElementById('system-locked-screen').classList.remove('hidden');
-                    return true;
-                } else {
-                    document.getElementById('system-locked-screen').classList.add('hidden');
-                }
-                return false;
-            } catch (e) {
-                console.log("Lockdown check info:", e);
-                return false;
-            }
+            // ביטול נעילה אוטומטית בעליית האפליקציה כדי לא לחסום את מסך ההתחברות
+            return false;
         }
 
         window.toggleSystemLockdown = async () => {
@@ -291,22 +272,20 @@
                 const currentStatus = lockdownDoc.exists() ? lockdownDoc.data().isLocked : false;
 
                 if (!currentStatus) {
-                    const confirmVal = prompt("⚠️ אזהרה: פעולה זו תנעל מיד את האפליקציה בפני כל המשתמשים והמנהלים!\nהקלד את המילה: נעילה");
+                    const confirmVal = prompt("⚠️ אזהרה: פעולה זו תנעל את המערכת בפני משתמשים!\nהקלד את המילה: נעילה");
                     if (confirmVal !== "נעילה") {
-                        alert("הנעילה בוטלה (המילה שהוקלדה שגויה).");
+                        alert("הנעילה בוטלה.");
                         return;
                     }
 
                     await setDoc(lockdownRef, { isLocked: true, updatedAt: new Date() });
-                    logAction("נעילת מערכת", "המערכת ננעלה בהצלחה מרחוק (Kill Switch)", "אבטחה");
-                    alert("🔒 המערכת ננעלה בהצלחה! מעתה אף אחד לא יוכל להיכנס חוץ ממך.");
+                    alert("🔒 המערכת ננעלה.");
                 } else {
                     const confirmVal = confirm("האם ברצונך לשחרר את נעילת המערכת ולהחזיר את הגישה לכולם?");
                     if (!confirmVal) return;
 
                     await setDoc(lockdownRef, { isLocked: false, updatedAt: new Date() });
-                    logAction("שחרור נעילת מערכת", "המערכת שוחררה וחזרה לפעילות רגילה", "אבטחה");
-                    alert("🔓 נעילת המערכת שוחררה בהצלחה! הגישה חזרה לכל המשתמשים.");
+                    alert("🔓 נעילת המערכת שוחררה בהצלחה! הגישה חזרה לכולם.");
                 }
             } catch (err) {
                 alert("שגיאה בעדכון מצב נעילה: " + err.message);
@@ -431,10 +410,6 @@
                 await loadBranchesSelect();
                 await checkUserAdminStatus(user);
 
-                // בדיקת נעילה מתבצעת רק לאחר שזוהה המשתמש ומנהל-על מוחרג ממנה
-                const isLocked = await checkSystemLockdownStatus();
-                if (isLocked) return;
-
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
@@ -467,7 +442,6 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
-                // במצב להתחברות - מסך ההתחברות תמיד מוצג ומסך הנעילה מוסתר
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
@@ -642,7 +616,6 @@
             const cleanedInputPhone = cleanPhone(phone);
 
             try {
-                // התחברות ישירה ומיידית מול פיירבייס
                 await signInWithEmailAndPassword(auth, fakeEmail, password);
                 
                 await loadMusiciansData();
@@ -784,7 +757,6 @@
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
                 logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות", cleaned, name);
             } catch (err) {
-                // תרגום שגיאת פיירבייס להודעה ברורה בעברית
                 if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
                     alert("שגיאה בהרשמה: מספר טלפון כבר קיים במערכת.");
                 } else {
@@ -1597,7 +1569,7 @@
                 return;
             }
 
-            window.currentReportEvents = filteredEvents; // שמירת הנתונים לצורך ייצוא
+            window.currentReportEvents = filteredEvents;
 
             let reportHTML = `
                 <table class="report-table" id="export-report-table">
@@ -1649,7 +1621,7 @@
                 return;
             }
 
-            let csvContent = "\uFEFFתאריך,סניף,שעה,שם המבצע / נגן\n"; // BOM לתמיכה בעברית ב-Excel
+            let csvContent = "\uFEFFתאריך,סניף,שעה,שם המבצע / נגן\n";
 
             const musicianSelectEl = document.getElementById('report-musician-select');
             const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
