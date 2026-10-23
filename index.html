@@ -852,7 +852,11 @@
 
             try {
                 if (editId) {
-                    await updateDoc(doc(db, "branches", editId), { name, managerId: managerSelect.value, managerName, managerPhone });
+                    const updatePayload = { name, managerId: managerSelect.value, managerName, managerPhone };
+                    if (isSuperOwner && colorInput) {
+                        updatePayload.color = color;
+                    }
+                    await updateDoc(doc(db, "branches", editId), updatePayload);
                     logAction("עריכת סניף", `עודכן סניף: ${name}, מנהל: ${managerName}`, "ניהול סניפים וצוות");
                     document.getElementById('edit-branch-id').value = '';
                     document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
@@ -929,7 +933,7 @@
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
                     <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">ערוך</button>
                         <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">מחק</button>
                     </div>
                 </div>`;
@@ -982,13 +986,22 @@
             }
         };
 
-        window.editBranch = (id, name, managerId) => {
+        window.editBranch = (id, name, managerId, color) => {
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
             populateBranchManagersDropdown(managerId);
             
             const colorContainer = document.getElementById('branch-color-container');
-            if (colorContainer) colorContainer.classList.add('hidden');
+            const colorInput = document.getElementById('new-branch-color');
+
+            if (isSuperOwner) {
+                // מנהל על: השדה נשאר גלוי ופתוח לשינוי צבע
+                if (colorContainer) colorContainer.classList.remove('hidden');
+                if (colorInput) colorInput.value = color || '#d4af37';
+            } else {
+                // מנהל רגיל: מסתירים את בורר הצבע כדי למנוע בלבול
+                if (colorContainer) colorContainer.classList.add('hidden');
+            }
 
             document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
             
@@ -1887,3 +1900,5 @@
 
 </body>
 </html>
+
+
