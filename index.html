@@ -256,14 +256,17 @@
         }
         async function checkSystemLockdownStatus() {
             try {
+                // מנהל-על (קובי) מורשה תמיד להתחבר, גם כשהמערכת נעולה!
+                if (isSuperOwner || currentUserPhone === "0547771121") {
+                    return false;
+                }
+
                 const lockdownDoc = await getDoc(doc(db, "settings", "system_status"));
                 if (lockdownDoc.exists() && lockdownDoc.data().isLocked) {
-                    if (!isSuperOwner) {
-                        document.getElementById('auth-section').classList.add('hidden');
-                        document.getElementById('main-app').classList.add('hidden');
-                        document.getElementById('system-locked-screen').classList.remove('hidden');
-                        return true;
-                    }
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('main-app').classList.add('hidden');
+                    document.getElementById('system-locked-screen').classList.remove('hidden');
+                    return true;
                 }
                 return false;
             } catch (e) {
@@ -775,7 +778,12 @@
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
                 logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות", cleaned, name);
             } catch (err) {
-                alert("שגיאה בהרשמה: " + err.message);
+                // תרגום שגיאת פיירבייס להודעה ברורה בעברית
+                if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
+                    alert("שגיאה בהרשמה: מספר טלפון כבר קיים במערכת.");
+                } else {
+                    alert("שגיאה בהרשמה: " + err.message);
+                }
             }
         });
 
@@ -1873,7 +1881,7 @@
         <div id="system-locked-screen" class="card hidden" style="border: 3px solid var(--danger); text-align: center; padding: 40px 20px; margin-top: 50px;">
             <h2 style="color: var(--danger); margin-bottom: 15px;">🔒 הגישה למערכת הושעתה</h2>
             <p style="font-size: 1rem; color: #fff; line-height: 1.6; margin-bottom: 20px;">
-                הגישה למערכת הושעתה עקב אי-הסדרת תשלום הריטיינר החודשי.
+                המערכת נעולה כעת. אנא פנה למנהל המערכת לשחרור הגישה.
             </p>
         </div>
 
