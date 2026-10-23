@@ -795,12 +795,22 @@
 
             function getColorDotEmoji(hexColor) {
                 if (!hexColor) return '🟡';
-                const color = hexColor.toLowerCase();
-                if (color.includes('e88') || color.includes('blue') || color.includes('00a') || color.includes('1e8')) return '🔵';
-                if (color.includes('43a') || color.includes('green') || color.includes('00') || color.includes('2e')) return '🟢';
-                if (color.includes('e53') || color.includes('red') || color.includes('f4')) return '🔴';
-                if (color.includes('8e2') || color.includes('purple') || color.includes('9c')) return '🟣';
-                if (color.includes('fb8') || color.includes('orange') || color.includes('ff9')) return '🟠';
+                let hex = hexColor.replace('#', '');
+                if (hex.length === 3) {
+                    hex = hex.split('').map(c => c + c).join('');
+                }
+                
+                const r = parseInt(hex.substring(0, 2), 16) || 0;
+                const g = parseInt(hex.substring(2, 4), 16) || 0;
+                const b = parseInt(hex.substring(4, 6), 16) || 0;
+
+                if (r > 180 && g > 150 && b < 100) return '🟡';
+                if (b > r && b > g) return '🔵';
+                if (g > r && g > b) return '🟢';
+                if (r > g && r > b && g < 100) return '🔴';
+                if (r > 120 && b > 120 && g < 100) return '🟣';
+                if (r > 200 && g > 100 && b < 100) return '🟠';
+
                 return '🟡';
             }
 
@@ -841,7 +851,7 @@
             }
 
             const editId = document.getElementById('edit-branch-id').value;
-            const name = document.getElementById('new-branch-name').value;
+            const name = document.getElementById('new-branch-name').value.trim();
             const managerSelect = document.getElementById('new-branch-manager-select');
             const selectedOption = managerSelect.options[managerSelect.selectedIndex];
 
@@ -853,7 +863,14 @@
             const managerName = selectedOption.getAttribute('data-name');
             const managerPhone = selectedOption.getAttribute('data-phone');
             const colorInput = document.getElementById('new-branch-color');
-            const color = colorInput ? colorInput.value : '#d4af37';
+            const color = colorInput ? colorInput.value.toLowerCase() : '#d4af37';
+
+            // בדיקה האם הצבע כבר תפוס בסניף אחר
+            const existingColorBranch = allBranches.find(b => b.id !== editId && b.color && b.color.toLowerCase() === color);
+            if (existingColorBranch) {
+                alert(`⚠️ הצבע שבחרת כבר בשימוש על ידי סניף "${existingColorBranch.name}". נא לבחור צבע ייחודי אחר.`);
+                return;
+            }
 
             try {
                 if (editId) {
@@ -1535,7 +1552,8 @@
         }
 
         window.generateAccountingReport = async () => {
-            const selectedMusician = document.getElementById('report-musician-select').value;
+            const musicianSelectEl = document.getElementById('report-musician-select');
+            const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
             const selectedBranchId = document.getElementById('report-branch-select').value;
             const resultsDiv = document.getElementById('report-results');
 
@@ -1558,14 +1576,16 @@
                 return;
             }
 
+            window.currentReportEvents = filteredEvents; // שמירת הנתונים לצורך ייצוא
+
             let reportHTML = `
-                <table class="report-table">
+                <table class="report-table" id="export-report-table">
                     <thead>
                         <tr>
                             <th>תאריך</th>
                             <th>סניף</th>
                             <th>שעה</th>
-                            <th>הרכב</th>
+                            <th>שם המבצע / נגן</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1574,12 +1594,17 @@
             filteredEvents.forEach(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
+                
+                const targetName = (isAdmin && selectedMusician) ? selectedMusician : currentUserName;
+                const userEntry = e.assignedStaff ? e.assignedStaff.find(s => s.toLowerCase().includes(targetName.toLowerCase())) : null;
+                const staffDisplay = userEntry || targetName;
+
                 reportHTML += `
                     <tr>
                         <td>${e.date}</td>
                         <td>${bName}</td>
                         <td>${e.time}</td>
-                        <td>${e.assignedStaff ? e.assignedStaff.join(', ') : 'לא שובצו'}</td>
+                        <td>${staffDisplay}</td>
                     </tr>
                 `;
             });
@@ -1587,10 +1612,48 @@
             reportHTML += `
                     </tbody>
                 </table>
-                <p style="margin-top:10px; font-weight:bold; color:var(--accent-gold);">סה"כ הופעות: ${filteredEvents.length}</p>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+                    <p style="font-weight:bold; color:var(--accent-gold); margin:0;">סה"כ הופעות: ${filteredEvents.length}</p>
+                    <button type="button" class="btn-success" style="width:auto; padding:8px 14px; font-size:0.85rem;" onclick="exportReportToExcel()">📥 ייצוא לאקסל (CSV)</button>
+                </div>
             `;
 
             resultsDiv.innerHTML = reportHTML;
+        };
+
+        window.exportReportToExcel = () => {
+            const events = window.currentReportEvents;
+            if (!events || events.length === 0) {
+                alert("אין נתונים לייצוא.");
+                return;
+            }
+
+            let csvContent = "\uFEFFתאריך,סניף,שעה,שם המבצע / נגן\n"; // BOM לתמיכה בעברית ב-Excel
+
+            const musicianSelectEl = document.getElementById('report-musician-select');
+            const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
+
+            events.forEach(e => {
+                const branch = allBranches.find(b => b.id === e.branchId);
+                const bName = branch ? branch.name : 'סניף';
+                
+                const targetName = (isAdmin && selectedMusician) ? selectedMusician : currentUserName;
+                const userEntry = e.assignedStaff ? e.assignedStaff.find(s => s.toLowerCase().includes(targetName.toLowerCase())) : null;
+                const staffStr = `"${userEntry || targetName}"`;
+
+                csvContent += `${e.date},${bName},${e.time},${staffStr}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", url);
+            downloadAnchor.setAttribute("download", `salon_yevani_report_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+
+            logAction("ייצוא דוח", `הורד דוח הופעות לאקסל (${events.length} הופעות)`, "דוחות");
         };
 
         async function loadAuditLogsView() {
