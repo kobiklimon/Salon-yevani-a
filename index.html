@@ -162,6 +162,24 @@
             return null;
         }
 
+        // ניהול חיווי מצב אופליין
+        function updateOnlineStatusBanner() {
+            const banner = document.getElementById('offline-status-banner');
+            if (!banner) return;
+            if (!navigator.onLine) {
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatusBanner);
+        window.addEventListener('offline', updateOnlineStatusBanner);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateOnlineStatusBanner();
+        });
+
         async function initPushToken(userId) {
             try {
                 if ('serviceWorker' in navigator) {
@@ -257,6 +275,10 @@
 
         window.toggleSystemLockdown = async () => {
             if (!isSuperOwner) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
 
             try {
                 const lockdownRef = doc(db, "settings", "system_status");
@@ -478,6 +500,10 @@
 
         window.clearBroadcastMessage = async () => {
             if (!isAdmin && !isSuperOwner) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
 
             if (!confirm("האם למחוק ולהעלים את ההודעה לכל המשתמשים?")) return;
 
@@ -491,6 +517,11 @@
 
         window.sendBroadcastMessage = async () => {
             if (!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const input = document.getElementById('broadcast-text-input');
             const msg = input.value.trim();
             if (!msg) {
@@ -616,6 +647,11 @@
         });
 
         window.requestPasswordReset = async () => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const phoneInput = document.getElementById('login-phone').value.trim();
             const phone = prompt("הזן את מספר הטלפון שלך לאיפוס הסיסמה:", phoneInput);
             if (!phone) return;
@@ -654,6 +690,11 @@
 
         window.confirmResetPassword = async (requestId, userPhone, userName) => {
             if (!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             if (!confirm(`האם לאפס את הסיסמה עבור ${userName} לסיסמה הגנרית: Salon1234?`)) return;
 
             try {
@@ -684,6 +725,11 @@
         };
 
         document.getElementById('register-submit-btn').addEventListener('click', async () => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const phone = document.getElementById('login-phone').value.trim();
             const password = document.getElementById('login-password').value;
             const name = document.getElementById('reg-name').value.trim();
@@ -771,6 +817,11 @@
         document.getElementById('add-branch-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const editId = document.getElementById('edit-branch-id').value;
             const name = document.getElementById('new-branch-name').value;
             const managerSelect = document.getElementById('new-branch-manager-select');
@@ -810,6 +861,11 @@
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const editId = document.getElementById('edit-musician-id').value;
             const name = document.getElementById('musician-name').value;
             const role = document.getElementById('musician-role').value;
@@ -889,6 +945,11 @@
 
         window.toggleMusicianAdmin = async (musicianId, makeAdmin) => {
             if (!isSuperOwner) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             try {
                 await updateDoc(doc(db, "musicians", musicianId), { isAdmin: makeAdmin });
                 const targetMusician = allMusicians.find(m => m.id === musicianId);
@@ -949,6 +1010,11 @@
 
         window.deleteBranch = async (id, name) => {
             if(!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const confirmVal = prompt(`כדי למחוק את סניף "${name}", הקלד את המילה: מחיקה`);
             if (confirmVal === "מחיקה") {
                 await deleteDoc(doc(db, "branches", id));
@@ -992,6 +1058,11 @@
 
         window.systemReset = async () => {
             if (!isSuperOwner) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             const confirm1 = confirm("⚠️ אזהרה חמורה: פעולה זו תמחק את כל ההופעות, הסניפים ואנשי הצוות ממאגר המידע ב-Firebase לצמיתות! האם להמשיך?");
             if (!confirm1) return;
 
@@ -1164,6 +1235,11 @@
         }
 
         window.toggleDayUnavailability = async (dateStr, isCurrentlyUnavail) => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. עדכון זמינות זמין במצב מקוון בלבד.");
+                return;
+            }
+
             const todayStr = new Date().toISOString().slice(0, 10);
             if (dateStr < todayStr) {
                 alert("לא ניתן לעדכן אי-זמינות לתאריכי עבר.");
@@ -1199,9 +1275,11 @@
             rosterContainer.innerHTML = '';
             const isPastEvent = dateStr < todayStr;
 
-            if (!isAdmin || !currentBranchId || (isPastEvent && !isSuperOwner)) {
+            if (!isAdmin || !currentBranchId || (isPastEvent && !isSuperOwner) || !navigator.onLine) {
                 document.getElementById('save-event-form').classList.add('hidden');
-                if (isPastEvent) {
+                if (!navigator.onLine) {
+                    rosterContainer.innerHTML = '<p style="color:var(--danger); font-size:0.85rem; margin-bottom:10px;">📡 מצב אופליין: צפייה בהופעות בלבד (עריכה חסומה).</p>';
+                } else if (isPastEvent) {
                     rosterContainer.innerHTML = '<p style="color:var(--danger); font-size:0.85rem; margin-bottom:10px;">🔒 הופעות עבר נעולות לעריכה.</p>';
                 } else if (isBranchManager && !isAdmin) {
                     rosterContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:10px;">👁️ מצב צפייה בלבד: מנהל סניף מורשה לצפות בשיבוצים אך אינו מורשה לערוך או ליצור הופעות חדשות.</p>';
@@ -1273,6 +1351,7 @@
 
             const todayStr = new Date().toISOString().slice(0, 10);
             const isPastEvent = dateStr < todayStr;
+            const isOnline = navigator.onLine;
 
             existingList.innerHTML = dayEvents.map(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
@@ -1291,7 +1370,7 @@
                 );
 
                 let cancelBtnHTML = '';
-                if (isUserInEvent && !isPastEvent) {
+                if (isUserInEvent && !isPastEvent && isOnline) {
                     if (pendingRequest) {
                         cancelBtnHTML = `<button type="button" disabled style="width:100%; margin-top:10px; background-color:#ffa726; color:#000; cursor:not-allowed;">⏳ בקשה לביטול נשלחה</button>`;
                     } else {
@@ -1304,13 +1383,18 @@
                     <strong>📍 ${bName} | 🕒 שעת הופעה: ${e.time}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
                     <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
-                    ${(isAdmin && (!isPastEvent || isSuperOwner)) ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}', '${bName}')">מחק הופעה</button>` : ''}
+                    ${(isAdmin && (!isPastEvent || isSuperOwner) && isOnline) ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}', '${bName}')">מחק הופעה</button>` : ''}
                     ${cancelBtnHTML}
                 </div>
             `;}).join('');
         }
 
         window.requestCancellation = async (eventId, eventDate, eventTime, branchId) => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. שליחת בקשת ביטול זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             if (!confirm("האם אתה בטוח שברצונך לשלוח בקשת ביטול להופעה זו?")) return;
 
             const branchObj = allBranches.find(b => b.id === branchId);
@@ -1519,6 +1603,11 @@
         }
 
         window.approveRequest = async (requestId, eventId, cancellingMusicianName, branchId, cancellingPhone) => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved" });
             const eventRef = doc(db, "events", eventId);
             const eventDoc = await getDoc(eventRef);
@@ -1533,6 +1622,11 @@
         };
 
         window.rejectRequest = async (requestId, cancellingPhone, branchName) => {
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+
             await updateDoc(doc(db, "cancellation_requests", requestId), { status: "rejected" });
             await sendPushNotificationToUser(cancellingPhone, "❌ בקשת הביטול נדחתה", `בקשתך לביטול הופעה בסניף ${branchName} נדחתה.`, 'notifs');
             alert("הבקשה נדחתה.");
@@ -1544,6 +1638,10 @@
         document.getElementById('save-event-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin || !currentBranchId) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. שמירת הופעות זמינה במצב מקוון בלבד.");
+                return;
+            }
 
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
@@ -1586,6 +1684,11 @@
 
     <div class="container">
         
+        <!-- באנר אופליין / צפייה בלבד -->
+        <div id="offline-status-banner" class="hidden" style="background: var(--danger); color: white; text-align: center; padding: 10px; font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
+            ⚠️ אין חיבור לאינטרנט — המערכת במצב אופליין (צפייה בלבד)
+        </div>
+
         <div id="system-locked-screen" class="card hidden" style="border: 3px solid var(--danger); text-align: center; padding: 40px 20px; margin-top: 50px;">
             <h2 style="color: var(--danger); margin-bottom: 15px;">🔒 הגישה למערכת הושעתה</h2>
             <p style="font-size: 1rem; color: #fff; line-height: 1.6; margin-bottom: 20px;">
@@ -1726,7 +1829,6 @@
                     <div id="musicians-list"></div>
                 </div>
 
-                <!-- סדר מוחלף: גיבוי נתונים ראשון, נעילת מערכת שני, איפוס שלישי -->
                 <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
                     <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתונים</h3>
                     <button type="button" class="btn-success" onclick="exportFullSystemBackup()">📥 הורד גיבוי (JSON)</button>
