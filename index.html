@@ -163,6 +163,7 @@
                 filterBranchReportLabel: "סינון לפי סניף:",
                 generateReportBtn: "הפק דוח",
                 historyTitle: "📜 היסטוריה (50 פעולות אחרונות)",
+                notificationsTitle: "🔔 התראות ובקשות",
                 broadcastTitle: "📢 שליחת הודעת פוש בתפוצה כללית",
                 broadcastPlaceholder: "הקלד הודעה לצוות...",
                 sendBroadcastBtn: "🚀 שדר הודעת פוש",
@@ -219,6 +220,7 @@
                 filterBranchReportLabel: "Filter by Branch:",
                 generateReportBtn: "Generate Report",
                 historyTitle: "📜 History (Last 50 Actions)",
+                notificationsTitle: "🔔 Notifications & Requests",
                 broadcastTitle: "📢 Send Broadcast Push Notification",
                 broadcastPlaceholder: "Type a message for the team...",
                 sendBroadcastBtn: "🚀 Send Push Broadcast",
@@ -275,6 +277,7 @@
                 filterBranchReportLabel: "Φίλτρο ανά κατάστημα:",
                 generateReportBtn: "Έκδοση Αναφοράς",
                 historyTitle: "📜 Ιστορικό (Τελευταίες 50 ενέργειες)",
+                notificationsTitle: "🔔 Ειδοποιήσεις & Αιτήματα",
                 broadcastTitle: "📢 Αποστολή Γενικής Ειδοποίησης",
                 broadcastPlaceholder: "Πληκτρολογήστε μήνυμα...",
                 sendBroadcastBtn: "🚀 Αποστολή Ειδοποίησης",
@@ -1946,6 +1949,7 @@
         async function loadMyPersonalLogsView() {
             const container = document.getElementById('my-logs-container');
             if (!container) return;
+            const t = i18n[currentLang];
 
             try {
                 const snap = await getDocs(query(collection(db, "audit_logs"), orderBy("timestamp", "desc")));
@@ -1960,7 +1964,7 @@
                 const latest50 = myLogs.slice(0, 50);
                 const myReqs = allCancellationRequests.filter(r => cleanPhone(r.musicianPhone) === cleanPhone(currentUserPhone) && (r.status === 'approved' || r.status === 'rejected'));
 
-                let html = '<h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="historyTitle">📜 היסטוריה (50 פעולות אחרונות)</h3>';
+                let html = `<h3 style="color:var(--accent-gold); margin-bottom:10px;">${t.historyTitle}</h3>`;
 
                 if (myReqs.length > 0) {
                     html += '<div style="margin-bottom:12px;"><h4 style="font-size:0.9rem; color:var(--accent-gold);">תשובות מנהל לבקשות ביטול:</h4>';
@@ -1994,7 +1998,8 @@
 
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
-            let html = '<h3 style="color:var(--accent-gold); margin-bottom:12px;" data-i18n="tabNotifs">🔔 התראות ובקשות</h3>';
+            const t = i18n[currentLang];
+            let html = `<h3 style="color:var(--accent-gold); margin-bottom:12px;">${t.notificationsTitle}</h3>`;
             let count = 0;
 
             if (isAdmin) {
