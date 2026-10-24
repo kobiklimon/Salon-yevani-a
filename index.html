@@ -118,7 +118,7 @@
         const db = getFirestore(app);
         const messaging = getMessaging(app);
 
-        // מילון תרגומים לשפות (עברית, אנגלית, יוונית)
+        // מילון תרגומים מלא ומעודכן לשפות (עברית, אנגלית, יוונית)
         const i18n = {
             he: {
                 appTitle: "🏛️ סלון יווני - ניהול הופעות וסניפים",
@@ -155,7 +155,26 @@
                 prevMonth: "◀ חודש קודם",
                 nextMonth: "חודש הבא ▶",
                 daysShort: ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"],
-                months: ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"]
+                months: ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"],
+                
+                reportsTitle: "📊 הפקת דוחות להנהלת חשבונות",
+                filterMusicianLabel: "סינון לפי איש צוות / נגן:",
+                allMusicians: "כל אנשי הצוות",
+                filterBranchReportLabel: "סינון לפי סניף:",
+                generateReportBtn: "הפק דוח",
+                historyTitle: "📜 היסטוריה (50 פעולות אחרונות)",
+                broadcastTitle: "📢 שליחת הודעת פוש בתפוצה כללית",
+                broadcastPlaceholder: "הקלד הודעה לצוות...",
+                sendBroadcastBtn: "🚀 שדר הודעת פוש",
+                branchMgmtTitle: "ניהול סניפים",
+                branchNamePlaceholder: "שם הסניף",
+                selectBranchManagerPlaceholder: "בחר מנהל סניף מתוך הצוות...",
+                addBranchBtn: "הוסף סניף",
+                existingBranchesTitle: "סניפים קיימים ומנהלים:",
+                teamMgmtTitle: "ניהול צוות ומתן הרשאות מנהל",
+                addMusicianBtn: "הוסף איש צוות",
+                existingTeamTitle: "צוות נגנים, זמרים ומנהלים:",
+                auditTitle: "📜 לוג פעולות מערכת:"
             },
             en: {
                 appTitle: "🏛️ Greek Salon - Shows & Branches",
@@ -192,7 +211,26 @@
                 prevMonth: "◀ Prev Month",
                 nextMonth: "Next Month ▶",
                 daysShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-                months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+                
+                reportsTitle: "📊 Accounting Reports Generation",
+                filterMusicianLabel: "Filter by Staff / Musician:",
+                allMusicians: "All Staff Members",
+                filterBranchReportLabel: "Filter by Branch:",
+                generateReportBtn: "Generate Report",
+                historyTitle: "📜 History (Last 50 Actions)",
+                broadcastTitle: "📢 Send Broadcast Push Notification",
+                broadcastPlaceholder: "Type a message for the team...",
+                sendBroadcastBtn: "🚀 Send Push Broadcast",
+                branchMgmtTitle: "Branch Management",
+                branchNamePlaceholder: "Branch Name",
+                selectBranchManagerPlaceholder: "Select Branch Manager from staff...",
+                addBranchBtn: "Add Branch",
+                existingBranchesTitle: "Existing Branches & Managers:",
+                teamMgmtTitle: "Team Management & Admin Rights",
+                addMusicianBtn: "Add Staff Member",
+                existingTeamTitle: "Musicians, Singers & Managers Team:",
+                auditTitle: "📜 System Audit Log:"
             },
             el: {
                 appTitle: "🏛️ Greek Salon - Διαχείριση",
@@ -229,7 +267,26 @@
                 prevMonth: "◀ Προηγούμενος",
                 nextMonth: "Επόμενος ▶",
                 daysShort: ["Κυρ", "Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ"],
-                months: ["Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"]
+                months: ["Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"],
+                
+                reportsTitle: "📊 Έκδοση Αναφορών Λογιστηρίου",
+                filterMusicianLabel: "Φίλτρο ανά μέλος / μουσικό:",
+                allMusicians: "Όλα τα μέλη",
+                filterBranchReportLabel: "Φίλτρο ανά κατάστημα:",
+                generateReportBtn: "Έκδοση Αναφοράς",
+                historyTitle: "📜 Ιστορικό (Τελευταίες 50 ενέργειες)",
+                broadcastTitle: "📢 Αποστολή Γενικής Ειδοποίησης",
+                broadcastPlaceholder: "Πληκτρολογήστε μήνυμα...",
+                sendBroadcastBtn: "🚀 Αποστολή Ειδοποίησης",
+                branchMgmtTitle: "Διαχείριση Καταστημάτων",
+                branchNamePlaceholder: "Όνομα Καταστήματος",
+                selectBranchManagerPlaceholder: "Επιλέξτε διευθυντή καταστήματος...",
+                addBranchBtn: "Προσθήκη Καταστήματος",
+                existingBranchesTitle: "Υπάρχοντα Καταστήματα & Διευθυντές:",
+                teamMgmtTitle: "Διαχείριση Ομάδας & Δικαιώματα",
+                addMusicianBtn: "Προσθήκη Μέλους",
+                existingTeamTitle: "Μουσικοί, Τραγουδιστές & Διευθυντές:",
+                auditTitle: "📜 Καταγραφή Ενεργειών Συστήματος:"
             }
         };
 
@@ -970,10 +1027,17 @@
         });
 
         async function loadBranchesSelect() {
-            const select = document.getElementById('branch-select');
-            if (!select) return;
+            const calendarSelect = document.getElementById('branch-select');
+            const reportSelect = document.getElementById('report-branch-select');
+            
+            if (!calendarSelect) return;
             const t = i18n[currentLang];
-            select.innerHTML = `<option value="">${t.allBranches}</option>`;
+
+            calendarSelect.innerHTML = `<option value="">${t.allBranches}</option>`;
+            if (reportSelect) {
+                reportSelect.innerHTML = `<option value="">${t.allBranches}</option>`;
+            }
+
             const snap = await getDocs(collection(db, "branches"));
             allBranches = [];
 
@@ -1013,7 +1077,12 @@
                 allBranches.push({ id: d.id, ...bData });
 
                 const colorDot = getColorDotEmoji(bData.color);
-                select.innerHTML += `<option value="${d.id}">${colorDot} ${bData.name}</option>`;
+                const optionHTML = `<option value="${d.id}">${colorDot} ${bData.name}</option>`;
+
+                calendarSelect.innerHTML += optionHTML;
+                if (reportSelect) {
+                    reportSelect.innerHTML += optionHTML;
+                }
             });
 
             populateBranchManagersDropdown();
@@ -1738,22 +1807,17 @@
 
             const musicianContainer = document.getElementById('report-musician-container');
             const musicianSelect = document.getElementById('report-musician-select');
+            const t = i18n[currentLang];
             
             if (isAdmin) {
                 musicianContainer.classList.remove('hidden');
-                musicianSelect.innerHTML = '<option value="">כל אנשי הצוות</option>';
+                musicianSelect.innerHTML = `<option value="">${t.allMusicians}</option>`;
                 allMusicians.forEach(m => {
                     musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
                 });
             } else {
                 musicianContainer.classList.add('hidden');
             }
-
-            const branchSelect = document.getElementById('report-branch-select');
-            branchSelect.innerHTML = '<option value="">כל הסניפים</option>';
-            allBranches.forEach(b => {
-                branchSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`;
-            });
         }
 
         window.generateAccountingReport = async () => {
@@ -1865,7 +1929,7 @@
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
             const snap = await getDocs(query(collection(db, "audit_logs"), orderBy("timestamp", "desc")));
-            let html = '<h4>📜 לוג פעולות מערכת:</h4><div style="margin-top:10px;">';
+            let html = '<h4 data-i18n="auditTitle">📜 לוג פעולות מערכת:</h4><div style="margin-top:10px;">';
             snap.forEach(d => {
                 const log = d.data();
                 html += `
@@ -1896,7 +1960,7 @@
                 const latest50 = myLogs.slice(0, 50);
                 const myReqs = allCancellationRequests.filter(r => cleanPhone(r.musicianPhone) === cleanPhone(currentUserPhone) && (r.status === 'approved' || r.status === 'rejected'));
 
-                let html = '<h3 style="color:var(--accent-gold); margin-bottom:10px;">📜 היסטוריה (50 פעולות אחרונות)</h3>';
+                let html = '<h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="historyTitle">📜 היסטוריה (50 פעולות אחרונות)</h3>';
 
                 if (myReqs.length > 0) {
                     html += '<div style="margin-bottom:12px;"><h4 style="font-size:0.9rem; color:var(--accent-gold);">תשובות מנהל לבקשות ביטול:</h4>';
@@ -1930,7 +1994,7 @@
 
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
-            let html = '<h3 style="color:var(--accent-gold); margin-bottom:12px;">🔔 התראות ובקשות</h3>';
+            let html = '<h3 style="color:var(--accent-gold); margin-bottom:12px;" data-i18n="tabNotifs">🔔 התראות ובקשות</h3>';
             let count = 0;
 
             if (isAdmin) {
@@ -2078,7 +2142,6 @@
         <div id="auth-section" class="card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 id="auth-title" data-i18n="loginTitle" style="margin:0;">התחברות למערכת</h2>
-                <!-- בורר שפה במסך התחברות -->
                 <select class="lang-select-dropdown" onchange="setAppLanguage(this.value)" style="width:auto; margin:0; padding:4px 8px; font-size:0.85rem;">
                     <option value="he">🇮🇱 עברית</option>
                     <option value="en">🇬🇧 English</option>
@@ -2124,7 +2187,6 @@
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px;">
                 <span style="font-size:0.85rem; color:var(--text-muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">מחובר: <strong id="user-display-phone"></strong></span>
                 <div style="display:flex; gap:6px; align-items:center;">
-                    <!-- בורר שפה בתוך האפליקציה (ליד מצב תצוגה) -->
                     <select class="lang-select-dropdown" onchange="setAppLanguage(this.value)" style="width:auto; margin:0; padding:4px 6px; font-size:0.75rem;">
                         <option value="he">🇮🇱 עברית</option>
                         <option value="en">🇬🇧 EN</option>
@@ -2170,36 +2232,36 @@
 
             <div id="tab-reports" class="tab-content hidden">
                 <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">📊 הפקת דוחות להנהלת חשבונות</h3>
+                    <h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="reportsTitle">📊 הפקת דוחות להנהלת חשבונות</h3>
                     <div id="report-musician-container" class="hidden">
-                        <label style="font-size:0.85rem;">סינון לפי איש צוות / נגן:</label>
+                        <label style="font-size:0.85rem;" data-i18n="filterMusicianLabel">סינון לפי איש צוות / נגן:</label>
                         <select id="report-musician-select"></select>
                     </div>
-                    <label style="font-size:0.85rem;">סינון לפי סניף:</label>
+                    <label style="font-size:0.85rem;" data-i18n="filterBranchReportLabel">סינון לפי סניף:</label>
                     <select id="report-branch-select"></select>
-                    <button type="button" onclick="generateAccountingReport()">הפק דוח</button>
+                    <button type="button" onclick="generateAccountingReport()" data-i18n="generateReportBtn">הפק דוח</button>
                     <div id="report-results"></div>
                 </div>
             </div>
 
             <div id="tab-admin" class="tab-content hidden">
                 <div id="admin-broadcast-section" class="card hidden" style="border: 2px solid var(--accent-gold);">
-                    <h3 style="color:var(--accent-gold); margin-bottom:8px;">📢 שליחת הודעת פוש בתפוצה כללית</h3>
-                    <textarea id="broadcast-text-input" rows="3" placeholder="הקלד הודעה לצוות..."></textarea>
-                    <button type="button" class="btn-success" onclick="sendBroadcastMessage()">🚀 שדר הודעת פוש</button>
+                    <h3 style="color:var(--accent-gold); margin-bottom:8px;" data-i18n="broadcastTitle">📢 שליחת הודעת פוש בתפוצה כללית</h3>
+                    <textarea id="broadcast-text-input" rows="3" data-i18n-placeholder="broadcastPlaceholder" placeholder="הקלד הודעה לצוות..."></textarea>
+                    <button type="button" class="btn-success" onclick="sendBroadcastMessage()" data-i18n="sendBroadcastBtn">🚀 שדר הודעת פוש</button>
                 </div>
 
                 <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">ניהול סניפים</h3>
+                    <h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="branchMgmtTitle">ניהול סניפים</h3>
                     <form id="add-branch-form">
                         <input type="hidden" id="edit-branch-id">
-                        <input type="text" id="new-branch-name" placeholder="שם הסניף" required>
+                        <input type="text" id="new-branch-name" data-i18n-placeholder="branchNamePlaceholder" placeholder="שם הסניף" required>
                         <select id="new-branch-manager-select" required></select>
                         <div id="branch-color-container">
                             <input type="color" id="new-branch-color" value="#d4af37" style="height:40px; padding:2px; cursor:pointer;">
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button type="submit" id="branch-submit-btn" style="flex:2;">הוסף סניף</button>
+                            <button type="submit" id="branch-submit-btn" style="flex:2;" data-i18n="addBranchBtn">הוסף סניף</button>
                             <button type="button" id="branch-cancel-btn" class="btn-danger hidden" style="flex:1;" onclick="cancelEditBranch()">ביטול</button>
                         </div>
                     </form>
@@ -2207,23 +2269,23 @@
                 </div>
 
                 <div class="card">
-                    <h3 style="color:var(--accent-gold); margin-bottom:10px;">ניהול צוות ומתן הרשאות מנהל</h3>
+                    <h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="teamMgmtTitle">ניהול צוות ומתן הרשאות מנהל</h3>
                     <form id="add-musician-form">
                         <input type="hidden" id="edit-musician-id">
-                        <input type="text" id="musician-name" placeholder="שם מלא" required>
+                        <input type="text" id="musician-name" data-i18n-placeholder="fullNamePlaceholder" placeholder="שם מלא" required>
                         <select id="musician-role">
-                            <option value="זמר/ת">זמר/ת</option>
-                            <option value="קלידים">קלידים</option>
-                            <option value="בוזוקי">בוזוקי</option>
-                            <option value="מנהל סניף">מנהל סניף</option>
+                            <option value="זמר/ת" data-i18n="singer">זמר/ת</option>
+                            <option value="קלידים" data-i18n="keys">קלידים</option>
+                            <option value="בוזוקי" data-i18n="bouzouki">בוזוקי</option>
+                            <option value="מנהל סניף" data-i18n="branchManager">מנהל סניף</option>
                         </select>
-                        <input type="tel" id="musician-phone" placeholder="מספר טלפון" required>
+                        <input type="tel" id="musician-phone" data-i18n-placeholder="phonePlaceholder" placeholder="מספר טלפון" required>
                         <p id="phone-edit-note" class="hidden" style="color:var(--text-muted); font-size:0.75rem;">⚠️ מספר טלפון אינו ניתן לשינוי.</p>
                         <select id="musician-status">
                             <option value="active">פעיל</option>
                             <option value="inactive">לא פעיל</option>
                         </select>
-                        <button type="submit" id="musician-submit-btn">הוסף איש צוות</button>
+                        <button type="submit" id="musician-submit-btn" data-i18n="addMusicianBtn">הוסף איש צוות</button>
                     </form>
                     <div id="musicians-list"></div>
                 </div>
