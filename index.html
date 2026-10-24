@@ -39,6 +39,12 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text-color); direction: rtl; padding-bottom: 40px; }
+        
+        /* תמיכה בכיווניות LTR עבור אנגלית ויוונית */
+        html[dir="ltr"] body { direction: ltr; }
+        html[dir="ltr"] .log-item { border-right: none; border-left: 3px solid var(--accent-gold); }
+        html[dir="ltr"] .cal-cell .day-num { text-align: left; }
+        html[dir="ltr"] .report-table th, html[dir="ltr"] .report-table td { text-align: left; }
 
         header { background: linear-gradient(180deg, #1f1f1f 0%, #121212 100%); padding: 15px; text-align: center; border-bottom: 2px solid var(--accent-gold); position: sticky; top: 0; z-index: 100; }
         header h1 { color: var(--accent-gold); font-size: 1.4rem; }
@@ -112,6 +118,165 @@
         const db = getFirestore(app);
         const messaging = getMessaging(app);
 
+        // מילון תרגומים לשפות (עברית, אנגלית, יוונית)
+        const i18n = {
+            he: {
+                appTitle: "🏛️ סלון יווני - ניהול הופעות וסניפים",
+                loginTitle: "התחברות למערכת",
+                loginBtn: "התחבר",
+                signupBtn: "סיום הרשמה",
+                forgotPass: "🔑 שכחתי סיסמה",
+                noAccount: "אין לך חשבון? הירשם כאן",
+                hasAccount: "רשום כבר? התחבר כאן",
+                phonePlaceholder: "מספר טלפון (למשל: 0501234567)",
+                passPlaceholder: "סיסמה",
+                fullNamePlaceholder: "שם מלא",
+                selectRoleLabel: "בחר תפקיד במערכת:",
+                selectBranchLabel: "בחר את הסניף שברשותך:",
+                logout: "התנתק",
+                themeBtn: "🌓 תצוגה",
+                tabCalendar: "📅 יומן הופעות",
+                tabUnavail: "🚫 זמינות",
+                tabNotifs: "🔔 התראות",
+                tabReports: "📊 דוחות",
+                tabHistory: "📜 היסטוריה",
+                tabAdmin: "⚙️ ניהול",
+                tabAudit: "📜 לוג",
+                filterBranchLabel: "סינון סניף (ברירת מחדל: כל הסניפים):",
+                allBranches: "כל הסניפים (הצג הכל)",
+                unavailOpen: "🟢 <strong>מערכת אי-הזמינות פתוחה כעת!</strong> חלון העדכונים פעיל בין ה-10 ל-15 בחודש. נא לסמן תאריכים שאינך פנוי בהם לחודש ",
+                unavailClosed: "🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח בין ה-10 ל-15 בכל חודש עבור החודש הבא.",
+                unavailTitle: "📅 אי-זמינות לחודש ",
+                notAvailable: "לא זמין",
+                singer: "זמר/ת",
+                keys: "קלידים",
+                bouzouki: "בוזוקי",
+                branchManager: "מנהל סניף",
+                prevMonth: "◀ חודש קודם",
+                nextMonth: "חודש הבא ▶",
+                daysShort: ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"],
+                months: ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"]
+            },
+            en: {
+                appTitle: "🏛️ Greek Salon - Shows & Branches",
+                loginTitle: "System Login",
+                loginBtn: "Log In",
+                signupBtn: "Complete Registration",
+                forgotPass: "🔑 Forgot Password",
+                noAccount: "Don't have an account? Register here",
+                hasAccount: "Already registered? Log in here",
+                phonePlaceholder: "Phone Number (e.g. 0501234567)",
+                passPlaceholder: "Password",
+                fullNamePlaceholder: "Full Name",
+                selectRoleLabel: "Select Role:",
+                selectBranchLabel: "Select Your Branch:",
+                logout: "Log Out",
+                themeBtn: "🌓 Theme",
+                tabCalendar: "📅 Shows Calendar",
+                tabUnavail: "🚫 Availability",
+                tabNotifs: "🔔 Notifications",
+                tabReports: "📊 Reports",
+                tabHistory: "📜 History",
+                tabAdmin: "⚙️ Admin",
+                tabAudit: "📜 Audit Log",
+                filterBranchLabel: "Filter Branch (Default: All Branches):",
+                allBranches: "All Branches (Show All)",
+                unavailOpen: "🟢 <strong>Unavailability system is OPEN!</strong> Window active between 10th-15th. Mark dates you are unavailable for ",
+                unavailClosed: "🔒 <strong>Unavailability system is LOCKED.</strong> Updates open between 10th-15th of each month for next month.",
+                unavailTitle: "📅 Unavailability for ",
+                notAvailable: "Unavailable",
+                singer: "Singer",
+                keys: "Keyboard",
+                bouzouki: "Bouzouki",
+                branchManager: "Branch Manager",
+                prevMonth: "◀ Prev Month",
+                nextMonth: "Next Month ▶",
+                daysShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+                months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+            },
+            el: {
+                appTitle: "🏛️ Greek Salon - Διαχείριση",
+                loginTitle: "Σύνδεση στο Σύστημα",
+                loginBtn: "Σύνδεση",
+                signupBtn: "Ολοκλήρωση Εγγραφής",
+                forgotPass: "🔑 Ξέχασα τον κωδικό",
+                noAccount: "Δεν έχετε λογαριασμό; Εγγραφείτε εδώ",
+                hasAccount: "Έχετε ήδη λογαριασμό; Σύνδεση εδώ",
+                phonePlaceholder: "Αριθμός Τηλεφώνου",
+                passPlaceholder: "Κωδικός πρόσβασης",
+                fullNamePlaceholder: "Ονοματεπώνυμο",
+                selectRoleLabel: "Επιλέξτε ρόλο:",
+                selectBranchLabel: "Επιλέξτε κατάστημα:",
+                logout: "Αποσύνδεση",
+                themeBtn: "🌓 Θέμα",
+                tabCalendar: "📅 Ημερολόγιο",
+                tabUnavail: "🚫 Διαθεσιμότητα",
+                tabNotifs: "🔔 Ειδοποιήσεις",
+                tabReports: "📊 Αναφορές",
+                tabHistory: "📜 Ιστορικό",
+                tabAdmin: "⚙️ Διαχείριση",
+                tabAudit: "📜 Καταγραφή",
+                filterBranchLabel: "Φίλτρο Καταστήματος:",
+                allBranches: "Όλα τα καταστήματα",
+                unavailOpen: "🟢 <strong>Η διαθεσιμότητα είναι ΑΝΟΙΧΤΗ!</strong> Ενεργή 10-15 του μηνός. Σημειώστε μη διαθέσιμες μέρες για ",
+                unavailClosed: "🔒 <strong>Η διαθεσιμότητα είναι ΚΛΕΙΔΩΜΕΝΗ.</strong> Ενημερώσεις μόνο 10-15 κάθε μήνα για τον επόμενο.",
+                unavailTitle: "📅 Μη διαθεσιμότητα για ",
+                notAvailable: "Μη διαθέσιμος",
+                singer: "Τραγουδιστής",
+                keys: "Πλήκτρα",
+                bouzouki: "Μπουζούκι",
+                branchManager: "Διευθυντής Καταστήματος",
+                prevMonth: "◀ Προηγούμενος",
+                nextMonth: "Επόμενος ▶",
+                daysShort: ["Κυρ", "Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ"],
+                months: ["Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"]
+            }
+        };
+
+        let currentLang = localStorage.getItem('salon_lang') || 'he';
+
+        window.setAppLanguage = (lang) => {
+            currentLang = lang;
+            localStorage.setItem('salon_lang', lang);
+            
+            const htmlEl = document.documentElement;
+            if (lang === 'he') {
+                htmlEl.setAttribute('dir', 'rtl');
+                htmlEl.setAttribute('lang', 'he');
+            } else {
+                htmlEl.setAttribute('dir', 'ltr');
+                htmlEl.setAttribute('lang', lang);
+            }
+
+            document.querySelectorAll('.lang-select-dropdown').forEach(select => {
+                select.value = lang;
+            });
+
+            applyTranslations();
+            if (monthEvents.length > 0 || currentBranchId !== undefined) {
+                loadCalendarView();
+                loadUnavailabilityCalendar();
+            }
+        };
+
+        function applyTranslations() {
+            const t = i18n[currentLang];
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) {
+                    el.innerHTML = t[key];
+                }
+            });
+
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (t[key]) {
+                    el.placeholder = t[key];
+                }
+            });
+        }
+
         let currentBranchId = '';
         let currentYear = new Date().getFullYear();
         let currentMonth = new Date().getMonth();
@@ -175,6 +340,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             updateOnlineStatusBanner();
+            setAppLanguage(currentLang);
         });
 
         async function initPushToken(userId) {
@@ -806,7 +972,8 @@
         async function loadBranchesSelect() {
             const select = document.getElementById('branch-select');
             if (!select) return;
-            select.innerHTML = '<option value="">כל הסניפים (הצג הכל)</option>';
+            const t = i18n[currentLang];
+            select.innerHTML = `<option value="">${t.allBranches}</option>`;
             const snap = await getDocs(collection(db, "branches"));
             allBranches = [];
 
@@ -1177,7 +1344,7 @@
 
         async function loadCalendarView() {
             const container = document.getElementById('calendar-container');
-            const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+            const t = i18n[currentLang];
             
             let q;
             if (currentBranchId) {
@@ -1209,9 +1376,9 @@
 
             container.innerHTML = `
                 <div class="calendar-header">
-                    <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">◀ חודש קודם</button>
-                    <h3 id="cal-month-title" style="color:var(--accent-gold);">${monthNames[currentMonth]} ${currentYear}</h3>
-                    <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">חודש הבא ▶</button>
+                    <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">${t.prevMonth}</button>
+                    <h3 id="cal-month-title" style="color:var(--accent-gold);">${t.months[currentMonth]} ${currentYear}</h3>
+                    <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">${t.nextMonth}</button>
                 </div>
                 <div id="calendar-grid" class="calendar-grid"></div>
             `;
@@ -1219,12 +1386,7 @@
             const firstDay = new Date(currentYear, currentMonth, 1).getDay();
             const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
             
-            let gridHTML = `
-                <div class="cal-day-name">א'</div><div class="cal-day-name">ב'</div>
-                <div class="cal-day-name">ג'</div><div class="cal-day-name">ד'</div>
-                <div class="cal-day-name">ה'</div><div class="cal-day-name">ו'</div>
-                <div class="cal-day-name">ש'</div>
-            `;
+            let gridHTML = t.daysShort.map(d => `<div class="cal-day-name">${d}</div>`).join('');
 
             for (let i = 0; i < firstDay; i++) {
                 gridHTML += `<div class="cal-cell empty"></div>`;
@@ -1256,7 +1418,7 @@
 
         async function loadUnavailabilityCalendar() {
             const container = document.getElementById('unavail-calendar-container');
-            const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+            const t = i18n[currentLang];
             
             const today = new Date();
             const dayOfMonth = today.getDate();
@@ -1272,19 +1434,19 @@
             if (isWindowOpen) {
                 statusHTML = `
                     <div style="background:#1b5e20; border:1px solid #43a047; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        🟢 <strong>מערכת אי-הזמינות פתוחה כעת!</strong> חלון העדכונים פעיל בין ה-10 ל-15 בחודש. נא לסמן תאריכים שאינך פנוי בהם לחודש ${monthNames[nextMonth]}.
+                        ${t.unavailOpen} ${t.months[nextMonth]}.
                     </div>
                 `;
             } else {
                 statusHTML = `
                     <div style="background:#b71c1c; border:1px solid #e53935; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח בין ה-10 ל-15 בכל חודש עבור החודש הבא.
+                        ${t.unavailClosed}
                     </div>
                 `;
             }
 
             container.innerHTML = `
-                <h3 style="color:var(--accent-gold); margin-bottom:5px;">📅 אי-זמינות לחודש ${monthNames[nextMonth]} ${nextYear}</h3>
+                <h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[nextMonth]} ${nextYear}</h3>
                 ${statusHTML}
                 <div class="calendar-grid" id="unavail-grid"></div>
             `;
@@ -1292,12 +1454,7 @@
             const firstDay = new Date(nextYear, nextMonth, 1).getDay();
             const daysInMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
 
-            let gridHTML = `
-                <div class="cal-day-name">א'</div><div class="cal-day-name">ב'</div>
-                <div class="cal-day-name">ג'</div><div class="cal-day-name">ד'</div>
-                <div class="cal-day-name">ה'</div><div class="cal-day-name">ו'</div>
-                <div class="cal-day-name">ש'</div>
-            `;
+            let gridHTML = t.daysShort.map(d => `<div class="cal-day-name">${d}</div>`).join('');
 
             for (let i = 0; i < firstDay; i++) {
                 gridHTML += `<div class="cal-cell empty"></div>`;
@@ -1307,13 +1464,13 @@
                 const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
 
-                const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('חסימת תאריכים זמינה בין ה-10 ל-15 בחודש בלבד.')"`;
+                const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('${t.unavailClosed}')"`;
 
                 gridHTML += `
                     <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" ${clickAction} style="${isWindowOpen ? 'cursor:pointer;' : 'cursor:not-allowed; opacity:0.75;'}">
                         <div class="day-num">${day}</div>
                         <div style="font-size:0.65rem; color:${isUnavail ? 'var(--danger)' : 'transparent'}; font-weight:bold; margin-top:4px;">
-                            ${isUnavail ? 'לא זמין' : ''}
+                            ${isUnavail ? t.notAvailable : ''}
                         </div>
                     </div>
                 `;
@@ -1331,7 +1488,7 @@
             const today = new Date();
             const dayOfMonth = today.getDate();
             if (dayOfMonth < 10 || dayOfMonth > 15) {
-                alert("⚠️ מערכת אי-הזמינות סגורה. ניתן לחסום תאריכים בין ה-10 ל-15 בחודש בלבד.");
+                alert(i18n[currentLang].unavailClosed);
                 return;
             }
 
@@ -1406,7 +1563,7 @@
                             <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} onchange="updateRoleDisabling()">
                             <label for="m-${m.id}">
                                 ${m.name} <span class="badge">${m.role}</span>
-                                ${isUserMarkedUnavail ? '<br><small style="color:var(--danger); font-size:0.7rem;">(לא זמין)</small>' : ''}
+                                ${isUserMarkedUnavail ? `<br><small style="color:var(--danger); font-size:0.7rem;">(${i18n[currentLang].notAvailable})</small>` : ''}
                             </label>
                         </div>
                     `;
@@ -1902,7 +2059,7 @@
 <body>
 
     <header>
-        <h1>🏛️ סלון יווני - ניהול הופעות וסניפים</h1>
+        <h1 data-i18n="appTitle">🏛️ סלון יווני - ניהול הופעות וסניפים</h1>
     </header>
 
     <div class="container">
@@ -1919,65 +2076,81 @@
         </div>
 
         <div id="auth-section" class="card">
-            <h2 id="auth-title" style="margin-bottom: 15px; text-align: center;">התחברות למערכת</h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 id="auth-title" data-i18n="loginTitle" style="margin:0;">התחברות למערכת</h2>
+                <!-- בורר שפה במסך התחברות -->
+                <select class="lang-select-dropdown" onchange="setAppLanguage(this.value)" style="width:auto; margin:0; padding:4px 8px; font-size:0.85rem;">
+                    <option value="he">🇮🇱 עברית</option>
+                    <option value="en">🇬🇧 English</option>
+                    <option value="el">🇬🇷 Ελληνικά</option>
+                </select>
+            </div>
+
             <form id="login-form" onsubmit="return false;" autocomplete="off">
                 
-                <input type="tel" id="login-phone" required placeholder="מספר טלפון (למשל: 0501234567)" autocomplete="off">
+                <input type="tel" id="login-phone" required data-i18n-placeholder="phonePlaceholder" placeholder="מספר טלפון (למשל: 0501234567)" autocomplete="off">
                 
                 <div id="register-fields" class="hidden">
-                    <input type="text" id="reg-name" placeholder="שם מלא" autocomplete="off">
-                    <label style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד במערכת:</label>
+                    <input type="text" id="reg-name" data-i18n-placeholder="fullNamePlaceholder" placeholder="שם מלא" autocomplete="off">
+                    <label data-i18n="selectRoleLabel" style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד במערכת:</label>
                     <select id="reg-role" onchange="onRoleChange()">
-                        <option value="זמר/ת">זמר/ת</option>
-                        <option value="קלידים">קלידים</option>
-                        <option value="בוזוקי">בוזוקי</option>
-                        <option value="מנהל סניף">מנהל סניף</option>
+                        <option value="זמר/ת" data-i18n="singer">זמר/ת</option>
+                        <option value="קלידים" data-i18n="keys">קלידים</option>
+                        <option value="בוזוקי" data-i18n="bouzouki">בוזוקי</option>
+                        <option value="מנהל סניף" data-i18n="branchManager">מנהל סניף</option>
                     </select>
 
                     <div id="reg-branch-container" class="hidden">
-                        <label style="font-size:0.85rem; color:var(--text-muted);">בחר את הסניף שברשותך:</label>
+                        <label data-i18n="selectBranchLabel" style="font-size:0.85rem; color:var(--text-muted);">בחר את הסניף שברשותך:</label>
                         <select id="reg-branch-select"></select>
                     </div>
                 </div>
 
-                <input type="password" id="login-password" required placeholder="סיסמה" autocomplete="new-password">
+                <input type="password" id="login-password" required data-i18n-placeholder="passPlaceholder" placeholder="סיסמה" autocomplete="new-password">
                 
-                <button type="submit" id="login-submit-btn">התחבר</button>
-                <button type="button" id="register-submit-btn" class="btn-success hidden">סיום הרשמה</button>
+                <button type="submit" id="login-submit-btn" data-i18n="loginBtn">התחבר</button>
+                <button type="button" id="register-submit-btn" class="btn-success hidden" data-i18n="signupBtn">סיום הרשמה</button>
 
                 <div style="text-align:center; margin-top:12px;">
-                    <a href="#" style="color:var(--text-muted); font-size:0.85rem; display:block; margin-bottom:6px;" onclick="requestPasswordReset()">🔑 שכחתי סיסמה</a>
-                    <a href="#" id="toggle-to-reg" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(true)">אין לך חשבון? הירשם כאן</a>
-                    <a href="#" id="toggle-to-login" class="hidden" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(false)">רשום כבר? התחבר כאן</a>
+                    <a href="#" style="color:var(--text-muted); font-size:0.85rem; display:block; margin-bottom:6px;" onclick="requestPasswordReset()" data-i18n="forgotPass">🔑 שכחתי סיסמה</a>
+                    <a href="#" id="toggle-to-reg" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(true)" data-i18n="noAccount">אין לך חשבון? הירשם כאן</a>
+                    <a href="#" id="toggle-to-login" class="hidden" style="color:var(--accent-gold); font-size:0.9rem;" onclick="toggleAuthMode(false)" data-i18n="hasAccount">רשום כבר? התחבר כאן</a>
                 </div>
             </form>
         </div>
 
         <div id="main-app" class="hidden">
             
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <span style="font-size:0.85rem; color:var(--text-muted);">מחובר: <strong id="user-display-phone"></strong></span>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="btn-secondary" onclick="toggleThemeMode()" style="width:auto; padding:4px 8px; font-size:0.75rem;">🌓 תצוגה</button>
-                    <button type="button" id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;">התנתק</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px;">
+                <span style="font-size:0.85rem; color:var(--text-muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">מחובר: <strong id="user-display-phone"></strong></span>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <!-- בורר שפה בתוך האפליקציה (ליד מצב תצוגה) -->
+                    <select class="lang-select-dropdown" onchange="setAppLanguage(this.value)" style="width:auto; margin:0; padding:4px 6px; font-size:0.75rem;">
+                        <option value="he">🇮🇱 עברית</option>
+                        <option value="en">🇬🇧 EN</option>
+                        <option value="el">🇬🇷 ΕΛ</option>
+                    </select>
+
+                    <button type="button" class="btn-secondary" onclick="toggleThemeMode()" style="width:auto; padding:4px 8px; font-size:0.75rem;" data-i18n="themeBtn">🌓 תצוגה</button>
+                    <button type="button" id="logout-btn" class="btn-danger" style="width:auto; padding:4px 10px; font-size:0.8rem;" data-i18n="logout">התנתק</button>
                 </div>
             </div>
 
             <div id="broadcast-banner-container" class="hidden"></div>
 
             <div class="nav-tabs">
-                <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
-                <button type="button" id="btn-tab-unavail" class="tab-btn" onclick="switchTab('unavail')">🚫 זמינות</button>
-                <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
-                <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')">📊 דוחות</button>
-                <button type="button" id="btn-tab-my-logs" class="tab-btn" onclick="switchTab('my-logs')">📜 היסטוריה</button>
-                <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')">⚙️ ניהול</button>
-                <button type="button" id="btn-tab-audit" class="tab-btn hidden" onclick="switchTab('audit')">📜 לוג</button>
+                <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')" data-i18n="tabCalendar">📅 יומן הופעות</button>
+                <button type="button" id="btn-tab-unavail" class="tab-btn" onclick="switchTab('unavail')" data-i18n="tabUnavail">🚫 זמינות</button>
+                <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')" data-i18n="tabNotifs">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
+                <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')" data-i18n="tabReports">📊 דוחות</button>
+                <button type="button" id="btn-tab-my-logs" class="tab-btn" onclick="switchTab('my-logs')" data-i18n="tabHistory">📜 היסטוריה</button>
+                <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')" data-i18n="tabAdmin">⚙️ ניהול</button>
+                <button type="button" id="btn-tab-audit" class="tab-btn hidden" onclick="switchTab('audit')" data-i18n="tabAudit">📜 לוג</button>
             </div>
 
             <div id="tab-calendar" class="tab-content">
                 <div class="card" style="padding:10px; margin-bottom:10px;">
-                    <label style="font-weight:bold; color:var(--accent-gold);">סינון סניף (ברירת מחדל: כל הסניפים):</label>
+                    <label data-i18n="filterBranchLabel" style="font-weight:bold; color:var(--accent-gold);">סינון סניף (ברירת מחדל: כל הסניפים):</label>
                     <select id="branch-select" style="margin-bottom:0; margin-top:5px;" onchange="onBranchSelectChange(event)"></select>
                 </div>
                 <div class="card" id="calendar-container"></div>
