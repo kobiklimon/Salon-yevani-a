@@ -144,7 +144,7 @@
                 tabAudit: "📜 לוג",
                 filterBranchLabel: "סינון סניף (ברירת מחדל: כל הסניפים):",
                 allBranches: "כל הסניפים (הצג הכל)",
-                unavailOpen: "🟢 <strong>מערכת אי-הזמינות פתוחה כעת!</strong> חלון העדכונים פעיל בין ה-10 ל-15 בחודש. נא לסמן תאריכים שאינך פנוי בהם לחודש ",
+                unavailOpen: "🟢 <strong>מערכת אי-הזמינות פתוחה כעת!</strong> חלון העדכונים פעיל בין ה-10 ל-15 בחודש. נא לסמן תאריכים שאינך פנוي בהם לחודש ",
                 unavailClosed: "🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח בין ה-10 ל-15 בכל חודש עבור החודש הבא.",
                 unavailTitle: "📅 אי-זמינות לחודש ",
                 notAvailable: "לא זמין",
@@ -164,6 +164,11 @@
                 generateReportBtn: "הפק דוח",
                 historyTitle: "📜 היסטוריה (50 פעולות אחרונות)",
                 notificationsTitle: "🔔 התראות ובקשות",
+                noNotifications: "אין התראות חדשות.",
+                actionLogin: "התחברות",
+                actionLogout: "התנתקות",
+                descLoginSuccess: "משתמש התחבר בהצלחה למערכת",
+                descLogout: "משתמש התנתק מהמערכת",
                 broadcastTitle: "📢 שליחת הודעת פוש בתפוצה כללית",
                 broadcastPlaceholder: "הקלד הודעה לצוות...",
                 sendBroadcastBtn: "🚀 שדר הודעת פוש",
@@ -221,6 +226,11 @@
                 generateReportBtn: "Generate Report",
                 historyTitle: "📜 History (Last 50 Actions)",
                 notificationsTitle: "🔔 Notifications & Requests",
+                noNotifications: "No new notifications.",
+                actionLogin: "Login",
+                actionLogout: "Logout",
+                descLoginSuccess: "User successfully logged into the system",
+                descLogout: "User logged out of the system",
                 broadcastTitle: "📢 Send Broadcast Push Notification",
                 broadcastPlaceholder: "Type a message for the team...",
                 sendBroadcastBtn: "🚀 Send Push Broadcast",
@@ -278,6 +288,11 @@
                 generateReportBtn: "Έκδοση Αναφοράς",
                 historyTitle: "📜 Ιστορικό (Τελευταίες 50 ενέργειες)",
                 notificationsTitle: "🔔 Ειδοποιήσεις & Αιτήματα",
+                noNotifications: "Δεν υπάρχουν νέες ειδοποιήσεις.",
+                actionLogin: "Σύνδεση",
+                actionLogout: "Αποσύνδεση",
+                descLoginSuccess: "Ο χρήστης συνδέθηκε επιτυχώς στο σύστημα",
+                descLogout: "Ο χρήστης αποσυνδέθηκε από το σύστημα",
                 broadcastTitle: "📢 Αποστολή Γενικής Ειδοποίησης",
                 broadcastPlaceholder: "Πληκτρολογήστε μήνυμα...",
                 sendBroadcastBtn: "🚀 Αποστολή Ειδοποίησης",
@@ -1962,28 +1977,25 @@
                 });
 
                 const latest50 = myLogs.slice(0, 50);
-                const myReqs = allCancellationRequests.filter(r => cleanPhone(r.musicianPhone) === cleanPhone(currentUserPhone) && (r.status === 'approved' || r.status === 'rejected'));
-
                 let html = `<h3 style="color:var(--accent-gold); margin-bottom:10px;">${t.historyTitle}</h3>`;
 
-                if (myReqs.length > 0) {
-                    html += '<div style="margin-bottom:12px;"><h4 style="font-size:0.9rem; color:var(--accent-gold);">תשובות מנהל לבקשות ביטול:</h4>';
-                    myReqs.forEach(r => {
-                        const statusTxt = r.status === 'approved' ? `✅ אושר (שובץ חלופי: ${r.newMusician || 'ללא'})` : '❌ נדחה';
-                        html += `<div style="background:#252525; padding:8px; margin-top:4px; border-radius:6px; font-size:0.85rem;">סניף ${r.branchName} בתאריך ${r.eventDate}: <strong>${statusTxt}</strong></div>`;
-                    });
-                    html += '</div>';
-                }
-
                 if (latest50.length === 0) {
-                    html += '<p style="color:var(--text-muted);">אין עדיין פעולות מתועדות בהיסטוריה שלך.</p>';
+                    html += `<p style="color:var(--text-muted);">${currentLang === 'he' ? 'אין עדיין פעולות מתועדות בהיסטוריה שלך.' : (currentLang === 'el' ? 'Δεν υπάρχουν ακόμη καταγεγραμμένες ενέργειες.' : 'No recorded actions in your history yet.')}</p>`;
                 } else {
                     html += '<div style="margin-top:10px;">';
                     latest50.forEach(log => {
+                        let translatedAction = log.actionType;
+                        let translatedDetails = log.details;
+
+                        if (log.actionType === "התחברות") translatedAction = t.actionLogin;
+                        if (log.actionType === "התנתקות") translatedAction = t.actionLogout;
+                        if (log.details === "משתמש התחבר בהצלחה למערכת") translatedDetails = t.descLoginSuccess;
+                        if (log.details === "משתמש התנתק מהמערכת") translatedDetails = t.descLogout;
+
                         html += `
                             <div class="log-item">
-                                <strong style="color:var(--accent-gold);">${log.actionType || 'פעולה'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
-                                <span style="color:#fff;">📝 ${log.details || ''}</span>
+                                <strong style="color:var(--accent-gold);">${translatedAction || 'Action'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
+                                <span style="color:#fff;">📝 ${translatedDetails || ''}</span>
                             </div>
                         `;
                     });
@@ -2047,7 +2059,7 @@
                 });
             }
 
-            if (count === 0) html += '<p style="color:var(--text-muted);">אין התראות חדשות.</p>';
+            if (count === 0) html += `<p style="color:var(--text-muted);">${t.noNotifications}</p>`;
             container.innerHTML = html;
         }
 
@@ -2113,7 +2125,7 @@
 
             if (existingEvent) {
                 await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff });
-                alert("ההופעה עודכנה בהצלחה!");
+                alert("הופעה עודכנה בהצלחה!");
             } else {
                 await addDoc(collection(db, "events"), { branchId: currentBranchId, date, time, assignedStaff, createdAt: new Date() });
                 alert("הופעה חדשה נשמרה בהצלחה!");
