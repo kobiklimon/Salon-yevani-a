@@ -784,7 +784,6 @@
             }
         });
 
-        // התנתקות מלאה - ניקוי נתוני דוחות ואיפוס משתנים
         document.getElementById('logout-btn').addEventListener('click', () => {
             logAction("התנתקות", "משתמש התנתק מהמערכת", "אבטחה והתחברות");
             
@@ -806,6 +805,7 @@
 
         async function loadBranchesSelect() {
             const select = document.getElementById('branch-select');
+            if (!select) return;
             select.innerHTML = '<option value="">כל הסניפים (הצג הכל)</option>';
             const snap = await getDocs(collection(db, "branches"));
             allBranches = [];
@@ -1162,18 +1162,15 @@
             }
         };
 
-        document.getElementById('branch-select').addEventListener('change', (e) => {
+        window.onBranchSelectChange = (e) => {
             currentBranchId = e.target.value;
-            const branchObj = allBranches.find(b => b.id === currentBranchId);
-            logAction("סינון סניף", `שונה סינון סניפים ראשי ל: ${branchObj ? branchObj.name : 'כל הסניפים'}`, "כללי");
             loadCalendarView();
-        });
+        };
 
         window.changeMonth = (dir) => {
             currentMonth += dir;
             if (currentMonth > 11) { currentMonth = 0; currentYear++; }
             if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-            logAction("שינוי חודש תצוגה", `מעבר לצפייה בחודש: ${currentMonth + 1}/${currentYear}`, "הופעות ושיבוצים");
             loadCalendarView();
             updateNotificationBadge();
         };
@@ -1263,7 +1260,7 @@
             
             const today = new Date();
             const dayOfMonth = today.getDate();
-            const isWindowOpen = isAdmin || (dayOfMonth >= 10 && dayOfMonth <= 15);
+            const isWindowOpen = (dayOfMonth >= 10 && dayOfMonth <= 15);
 
             const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
             const nextYear = nextMonthDate.getFullYear();
@@ -1281,7 +1278,7 @@
             } else {
                 statusHTML = `
                     <div style="background:#b71c1c; border:1px solid #e53935; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח לנגנים רק בין ה-10 ל-15 בכל חודש עבור החודש הבא.
+                        🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח בין ה-10 ל-15 בכל חודש עבור החודש הבא.
                     </div>
                 `;
             }
@@ -1310,7 +1307,7 @@
                 const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
 
-                const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('חסימת תאריכים זמינה רק בין ה-10 ל-15 בחודש.')"`;
+                const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('חסימת תאריכים זמינה בין ה-10 ל-15 בחודש בלבד.')"`;
 
                 gridHTML += `
                     <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" ${clickAction} style="${isWindowOpen ? 'cursor:pointer;' : 'cursor:not-allowed; opacity:0.75;'}">
@@ -1333,8 +1330,8 @@
 
             const today = new Date();
             const dayOfMonth = today.getDate();
-            if (!isAdmin && (dayOfMonth < 10 || dayOfMonth > 15)) {
-                alert("⚠️ מערכת אי-הזמינות סגורה. ניתן לחסום תאריכים רק בין ה-10 ל-15 בחודש.");
+            if (dayOfMonth < 10 || dayOfMonth > 15) {
+                alert("⚠️ מערכת אי-הזמינות סגורה. ניתן לחסום תאריכים בין ה-10 ל-15 בחודש בלבד.");
                 return;
             }
 
@@ -1968,11 +1965,6 @@
 
             <div id="broadcast-banner-container" class="hidden"></div>
 
-            <div class="card" style="padding:10px; margin-bottom:10px;">
-                <label style="font-weight:bold; color:var(--accent-gold);">סינון סניף (ברירת מחדל: כל הסניפים):</label>
-                <select id="branch-select" style="margin-bottom:0; margin-top:5px;"></select>
-            </div>
-
             <div class="nav-tabs">
                 <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">📅 יומן הופעות</button>
                 <button type="button" id="btn-tab-unavail" class="tab-btn" onclick="switchTab('unavail')">🚫 זמינות</button>
@@ -1984,6 +1976,10 @@
             </div>
 
             <div id="tab-calendar" class="tab-content">
+                <div class="card" style="padding:10px; margin-bottom:10px;">
+                    <label style="font-weight:bold; color:var(--accent-gold);">סינון סניף (ברירת מחדל: כל הסניפים):</label>
+                    <select id="branch-select" style="margin-bottom:0; margin-top:5px;" onchange="onBranchSelectChange(event)"></select>
+                </div>
                 <div class="card" id="calendar-container"></div>
             </div>
 
