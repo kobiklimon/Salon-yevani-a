@@ -118,7 +118,7 @@
         const db = getFirestore(app);
         const messaging = getMessaging(app);
 
-        // מילון תרגומים מלא ומעודכן לשפות (עברית, אנגלית, יוונית)
+        // מילון תרגומים מלא ומקיף לכל המערכת (עברית, אנגלית, יוונית)
         const i18n = {
             he: {
                 appTitle: "🏛️ סלון יווני - ניהול הופעות וסניפים",
@@ -169,6 +169,11 @@
                 actionLogout: "התנתקות",
                 descLoginSuccess: "משתמש התחבר בהצלחה למערכת",
                 descLogout: "משתמש התנתק מהמערכת",
+                actionClearBroadcast: "מחיקת הודעת תפוצה",
+                actionSendPush: "שליחת הודעת פוש",
+                actionCancelUnavail: "ביטול אי-זמינות",
+                actionMarkUnavail: "סימון אי-זמינות",
+                descClearBroadcast: "הודעת התפוצה הכללית נמחקה והוסרה מתצוגת המשתמשים",
                 broadcastTitle: "📢 שליחת הודעת פוש בתפוצה כללית",
                 broadcastPlaceholder: "הקלד הודעה לצוות...",
                 sendBroadcastBtn: "🚀 שדר הודעת פוש",
@@ -176,11 +181,22 @@
                 branchNamePlaceholder: "שם הסניף",
                 selectBranchManagerPlaceholder: "בחר מנהל סניף מתוך הצוות...",
                 addBranchBtn: "הוסף סניף",
+                editBranchBtn: "ערוך",
+                deleteBranchBtn: "מחק",
+                cancelBtn: "ביטול",
+                updateBranchBtn: "עדכן סניף",
                 existingBranchesTitle: "סניפים קיימים ומנהלים:",
                 teamMgmtTitle: "ניהול צוות ומתן הרשאות מנהל",
                 addMusicianBtn: "הוסף איש צוות",
+                updateMusicianBtn: "עדכן איש צוות",
                 existingTeamTitle: "צוות נגנים, זמרים ומנהלים:",
-                auditTitle: "📜 לוג פעולות מערכת:"
+                activeStatus: "פעיל",
+                inactiveStatus: "לא פעיל",
+                makeAdminBtn: "הגדר כמנהל",
+                removeAdminBtn: "הסר מנהל",
+                adminBadge: "מנהל מערכת",
+                auditLogTitle: "📜 לוג פעולות מערכת:",
+                performedBy: "מבוצע ע\"י:"
             },
             en: {
                 appTitle: "🏛️ Greek Salon - Shows & Branches",
@@ -231,6 +247,11 @@
                 actionLogout: "Logout",
                 descLoginSuccess: "User successfully logged into the system",
                 descLogout: "User logged out of the system",
+                actionClearBroadcast: "Clear Broadcast Message",
+                actionSendPush: "Send Push Notification",
+                actionCancelUnavail: "Cancel Unavailability",
+                actionMarkUnavail: "Mark Unavailability",
+                descClearBroadcast: "The general broadcast message was deleted and removed from user view",
                 broadcastTitle: "📢 Send Broadcast Push Notification",
                 broadcastPlaceholder: "Type a message for the team...",
                 sendBroadcastBtn: "🚀 Send Push Broadcast",
@@ -238,11 +259,22 @@
                 branchNamePlaceholder: "Branch Name",
                 selectBranchManagerPlaceholder: "Select Branch Manager from staff...",
                 addBranchBtn: "Add Branch",
+                editBranchBtn: "Edit",
+                deleteBranchBtn: "Delete",
+                cancelBtn: "Cancel",
+                updateBranchBtn: "Update Branch",
                 existingBranchesTitle: "Existing Branches & Managers:",
                 teamMgmtTitle: "Team Management & Admin Rights",
                 addMusicianBtn: "Add Staff Member",
+                updateMusicianBtn: "Update Staff Member",
                 existingTeamTitle: "Musicians, Singers & Managers Team:",
-                auditTitle: "📜 System Audit Log:"
+                activeStatus: "Active",
+                inactiveStatus: "Inactive",
+                makeAdminBtn: "Set as Admin",
+                removeAdminBtn: "Remove Admin",
+                adminBadge: "Admin",
+                auditLogTitle: "📜 System Audit Log:",
+                performedBy: "Performed by:"
             },
             el: {
                 appTitle: "🏛️ Greek Salon - Διαχείριση",
@@ -293,6 +325,11 @@
                 actionLogout: "Αποσύνδεση",
                 descLoginSuccess: "Ο χρήστης συνδέθηκε επιτυχώς στο σύστημα",
                 descLogout: "Ο χρήστης αποσυνδέθηκε από το σύστημα",
+                actionClearBroadcast: "Διαγραφή Γενικού Μηνύματος",
+                actionSendPush: "Αποστολή Ειδοποίησης Push",
+                actionCancelUnavail: "Ακύρωση Μη Διαθεσιμότητας",
+                actionMarkUnavail: "Σήμανση Μη Διαθεσιμότητας",
+                descClearBroadcast: "Το γενικό μήνυμα διαγράφηκε και αφαιρέθηκε από την προβολή χρηστών",
                 broadcastTitle: "📢 Αποστολή Γενικής Ειδοποίησης",
                 broadcastPlaceholder: "Πληκτρολογήστε μήνυμα...",
                 sendBroadcastBtn: "🚀 Αποστολή Ειδοποίησης",
@@ -300,14 +337,24 @@
                 branchNamePlaceholder: "Όνομα Καταστήματος",
                 selectBranchManagerPlaceholder: "Επιλέξτε διευθυντή καταστήματος...",
                 addBranchBtn: "Προσθήκη Καταστήματος",
+                editBranchBtn: "Επεξεργασία",
+                deleteBranchBtn: "Διαγραφή",
+                cancelBtn: "Ακύρωση",
+                updateBranchBtn: "Ενημέρωση Καταστήματος",
                 existingBranchesTitle: "Υπάρχοντα Καταστήματα & Διευθυντές:",
                 teamMgmtTitle: "Διαχείριση Ομάδας & Δικαιώματα",
                 addMusicianBtn: "Προσθήκη Μέλους",
+                updateMusicianBtn: "Ενημέρωση Μέλους",
                 existingTeamTitle: "Μουσικοί, Τραγουδιστές & Διευθυντές:",
-                auditTitle: "📜 Καταγραφή Ενεργειών Συστήματος:"
+                activeStatus: "Ενεργός",
+                inactiveStatus: "Ανενεργός",
+                makeAdminBtn: "Ορισμός ως Διαχειριστής",
+                removeAdminBtn: "Αφαίρεση Διαχειριστή",
+                adminBadge: "Διαχειριστής",
+                auditLogTitle: "📜 Καταγραφή Ενεργειών Συστήματος:",
+                performedBy: "Εκτελέστηκε από:"
             }
         };
-
         let currentLang = localStorage.getItem('salon_lang') || 'he';
 
         window.setAppLanguage = (lang) => {
@@ -331,6 +378,9 @@
             if (monthEvents.length > 0 || currentBranchId !== undefined) {
                 loadCalendarView();
                 loadUnavailabilityCalendar();
+            }
+            if (isAdmin) {
+                loadAdminData();
             }
         };
 
@@ -1193,7 +1243,7 @@
                     document.getElementById('edit-musician-id').value = '';
                     document.getElementById('musician-phone').disabled = false;
                     document.getElementById('phone-edit-note').classList.add('hidden');
-                    document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
+                    document.getElementById('musician-submit-btn').textContent = i18n[currentLang].addMusicianBtn;
                     alert("איש הצוות עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active", isAdmin: false });
@@ -1218,40 +1268,44 @@
         }
         async function loadAdminData() {
             if(!isAdmin) return;
+            const t = i18n[currentLang];
             const bSnap = await getDocs(collection(db, "branches"));
             const bList = document.getElementById('branches-list');
-            bList.innerHTML = '<h4>סניפים קיימים ומנהלים:</h4>';
+            bList.innerHTML = `<h4 style="margin-top:10px; color:var(--accent-gold);">${t.existingBranchesTitle}</h4>`;
+            
             bSnap.forEach(d => {
                 const data = d.data();
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
-                    <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
+                    <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">${t.branchManager}: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">ערוך</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">מחק</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">${t.editBranchBtn}</button>
+                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">${t.deleteBranchBtn}</button>
                     </div>
                 </div>`;
             });
 
             const mList = document.getElementById('musicians-list');
-            mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים, זמרים ומנהלים:</h4>';
+            mList.innerHTML = `<h4 style="margin-top:10px; color:var(--accent-gold);">${t.existingTeamTitle}</h4>`;
+            
             allMusicians.forEach(m => {
                 const isInactive = m.status === 'inactive';
                 const isItemAdmin = m.isAdmin === true;
+                const statusText = isInactive ? t.inactiveStatus : t.activeStatus;
                 
                 let adminToggleBtn = '';
                 if (isSuperOwner && cleanPhone(m.phone) !== "0547771121") {
                     if (isItemAdmin) {
-                        adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">הסר מנהל</button>`;
+                        adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
                     } else {
-                        adminToggleBtn = `<button type="button" class="btn-success" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', true)">הגדר כמנהל</button>`;
+                        adminToggleBtn = `<button type="button" class="btn-success" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', true)">${t.makeAdminBtn}</button>`;
                     }
                 }
 
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
-                    <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? '<span class="badge" style="background:var(--accent-gold); color:#000;">מנהל מערכת</span>' : ''} ${m.branchName ? `<small>| סניף: ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? 'לא פעיל' : 'פעיל'}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
+                    <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? `<span class="badge" style="background:var(--accent-gold); color:#000;">${t.adminBadge}</span>` : ''} ${m.branchName ? `<small>| סניף: ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${statusText}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
                     <div style="display:flex; gap:5px; align-items:center;">
                         ${adminToggleBtn}
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBranchBtn}</button>
                     </div>
                 </div>`;
             });
@@ -1280,6 +1334,7 @@
         };
 
         window.editBranch = (id, name, managerId, color) => {
+            const t = i18n[currentLang];
             document.getElementById('edit-branch-id').value = id;
             document.getElementById('new-branch-name').value = name;
             populateBranchManagersDropdown(managerId);
@@ -1294,7 +1349,7 @@
                 if (colorContainer) colorContainer.classList.add('hidden');
             }
 
-            document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
+            document.getElementById('branch-submit-btn').textContent = t.updateBranchBtn;
             document.getElementById('branch-cancel-btn').classList.remove('hidden');
             
             const formElement = document.getElementById('add-branch-form');
@@ -1304,6 +1359,7 @@
         };
 
         window.cancelEditBranch = () => {
+            const t = i18n[currentLang];
             document.getElementById('edit-branch-id').value = '';
             document.getElementById('new-branch-name').value = '';
             const managerSelect = document.getElementById('new-branch-manager-select');
@@ -1312,11 +1368,12 @@
             const colorContainer = document.getElementById('branch-color-container');
             if (colorContainer) colorContainer.classList.remove('hidden');
 
-            document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
+            document.getElementById('branch-submit-btn').textContent = t.addBranchBtn;
             document.getElementById('branch-cancel-btn').classList.add('hidden');
         };
 
         window.editMusician = (id, name, role, phone, status) => {
+            const t = i18n[currentLang];
             document.getElementById('edit-musician-id').value = id;
             document.getElementById('musician-name').value = name;
             document.getElementById('musician-role').value = role;
@@ -1327,7 +1384,7 @@
             document.getElementById('phone-edit-note').classList.remove('hidden');
 
             document.getElementById('musician-status').value = status || 'active';
-            document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
+            document.getElementById('musician-submit-btn').textContent = t.updateMusicianBtn;
             
             const formElement = document.getElementById('add-musician-form');
             if (formElement) {
@@ -1356,605 +1413,35 @@
             }
         };
 
-        window.exportFullSystemBackup = async () => {
-            if (!isSuperOwner) return;
-            try {
-                alert("מכין קובץ גיבוי נתונים...");
-                const backupData = {};
-                const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs", "unavailabilities", "broadcasts"];
-
-                for (const colName of cols) {
-                    const snap = await getDocs(collection(db, colName));
-                    backupData[colName] = [];
-                    snap.forEach(d => backupData[colName].push({ id: d.id, ...d.data() }));
-                }
-
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
-                const downloadAnchor = document.createElement('a');
-                downloadAnchor.setAttribute("href", dataStr);
-                downloadAnchor.setAttribute("download", `salon_yevani_backup_${new Date().toISOString().slice(0,10)}.json`);
-                document.body.appendChild(downloadAnchor);
-                downloadAnchor.click();
-                downloadAnchor.remove();
-
-                logAction("גיבוי מערכת", "הורד קובץ גיבוי נתונים מלא (JSON)", "כללי");
-            } catch (err) {
-                alert("שגיאה ביצירת גיבוי: " + err.message);
-            }
-        };
-
-        window.systemReset = async () => {
-            if (!isSuperOwner) return;
-            if (!navigator.onLine) {
-                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
-                return;
-            }
-
-            const confirm1 = confirm("⚠️ אזהרה חמורה: פעולה זו תמחק את כל ההופעות, הסניפים ואנשי הצוות ממאגר המידע ב-Firebase לצמיתות! האם להמשיך?");
-            if (!confirm1) return;
-
-            const confirm2 = prompt("כדי לאמת את איפוס המערכת, הקלד את המילה: מאפס");
-            if (confirm2 !== "מאפס") {
-                alert("האיפוס בוטלה (המילה שהוקלדה שגויה).");
-                return;
-            }
-
-            try {
-                alert("מבצע איפוס מוחלט, אנא המתן...");
-                const cols = ["events", "musicians", "branches", "cancellation_requests", "unavailabilities"];
-                for (const col of cols) {
-                    const snap = await getDocs(collection(db, col));
-                    const deletes = snap.docs.map(d => deleteDoc(doc(db, col, d.id)));
-                    await Promise.all(deletes);
-                }
-
-                logAction("אתחול מערכת", "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת", "כללי");
-                alert("✅ המערכת אופסה בהצלחה ונוקתה לחלוטין מנתונים!");
-                window.location.reload();
-            } catch (err) {
-                alert("שגיאה באיפוס המערכת: " + err.message);
-            }
-        };
-
-        window.onBranchSelectChange = (e) => {
-            currentBranchId = e.target.value;
-            loadCalendarView();
-        };
-
-        window.changeMonth = (dir) => {
-            currentMonth += dir;
-            if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-            if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-            loadCalendarView();
-            updateNotificationBadge();
-        };
-
-        async function loadCalendarView() {
-            const container = document.getElementById('calendar-container');
-            const t = i18n[currentLang];
-            
-            let q;
-            if (currentBranchId) {
-                q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
-            } else {
-                q = collection(db, "events");
-            }
-            
-            try {
-                const snap = await getDocs(q);
-                monthEvents = [];
-                snap.forEach(d => {
-                    const eventData = d.data();
-                    const isBranchManagerForEvent = isBranchManager && (userManagedBranchId === eventData.branchId || !userManagedBranchId);
-                    const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
-                        const lowerStaff = staffStr.toLowerCase();
-                        return lowerStaff.includes(currentUserName.toLowerCase()) || lowerStaff.includes(currentUserPhone);
-                    });
-
-                    if (isAdmin || isBranchManagerForEvent || isUserAssigned) {
-                        monthEvents.push({ id: d.id, ...eventData });
-                    }
-                });
-                saveAppDataLocally();
-            } catch (err) {
-                console.log("Network error, loading offline cache...");
-                loadAppDataFromOfflineCache();
-            }
-
-            container.innerHTML = `
-                <div class="calendar-header">
-                    <button onclick="changeMonth(-1)" class="btn-secondary" style="width:auto; padding:5px 12px;">${t.prevMonth}</button>
-                    <h3 id="cal-month-title" style="color:var(--accent-gold);">${t.months[currentMonth]} ${currentYear}</h3>
-                    <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">${t.nextMonth}</button>
-                </div>
-                <div id="calendar-grid" class="calendar-grid"></div>
-            `;
-
-            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-            
-            let gridHTML = t.daysShort.map(d => `<div class="cal-day-name">${d}</div>`).join('');
-
-            for (let i = 0; i < firstDay; i++) {
-                gridHTML += `<div class="cal-cell empty"></div>`;
-            }
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayEvents = monthEvents.filter(e => e.date === dateStr);
-
-                let eventDots = dayEvents.map(e => {
-                    const branch = allBranches.find(b => b.id === e.branchId);
-                    const bColor = branch ? (branch.color || '#1e88e5') : '#1e88e5';
-                    return `<span class="event-dot" style="background-color:${bColor};" title="${e.time} - ${branch ? branch.name : ''}"></span>`;
-                }).join('');
-
-                const canClick = isAdmin || isBranchManager || dayEvents.length > 0;
-                const clickAttr = canClick ? `onclick="openDayModal('${dateStr}')"` : '';
-
-                gridHTML += `
-                    <div class="cal-cell" ${clickAttr} style="${!canClick ? 'opacity:0.4; cursor:default;' : ''}">
-                        <div class="day-num">${day}</div>
-                        <div class="dots-container">${eventDots}</div>
-                    </div>
-                `;
-            }
-
-            document.getElementById('calendar-grid').innerHTML = gridHTML;
-        }
-
-        async function loadUnavailabilityCalendar() {
-            const container = document.getElementById('unavail-calendar-container');
-            const t = i18n[currentLang];
-            
-            const today = new Date();
-            const dayOfMonth = today.getDate();
-            const isWindowOpen = (dayOfMonth >= 10 && dayOfMonth <= 15);
-
-            const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-            const nextYear = nextMonthDate.getFullYear();
-            const nextMonth = nextMonthDate.getMonth();
-
-            await loadUnavailabilityData();
-
-            let statusHTML = '';
-            if (isWindowOpen) {
-                statusHTML = `
-                    <div style="background:#1b5e20; border:1px solid #43a047; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        ${t.unavailOpen} ${t.months[nextMonth]}.
-                    </div>
-                `;
-            } else {
-                statusHTML = `
-                    <div style="background:#b71c1c; border:1px solid #e53935; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        ${t.unavailClosed}
-                    </div>
-                `;
-            }
-
-            container.innerHTML = `
-                <h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[nextMonth]} ${nextYear}</h3>
-                ${statusHTML}
-                <div class="calendar-grid" id="unavail-grid"></div>
-            `;
-
-            const firstDay = new Date(nextYear, nextMonth, 1).getDay();
-            const daysInMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
-
-            let gridHTML = t.daysShort.map(d => `<div class="cal-day-name">${d}</div>`).join('');
-
-            for (let i = 0; i < firstDay; i++) {
-                gridHTML += `<div class="cal-cell empty"></div>`;
-            }
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
-
-                const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('${t.unavailClosed}')"`;
-
-                gridHTML += `
-                    <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" ${clickAction} style="${isWindowOpen ? 'cursor:pointer;' : 'cursor:not-allowed; opacity:0.75;'}">
-                        <div class="day-num">${day}</div>
-                        <div style="font-size:0.65rem; color:${isUnavail ? 'var(--danger)' : 'transparent'}; font-weight:bold; margin-top:4px;">
-                            ${isUnavail ? t.notAvailable : ''}
-                        </div>
-                    </div>
-                `;
-            }
-
-            document.getElementById('unavail-grid').innerHTML = gridHTML;
-        }
-
-        window.toggleDayUnavailability = async (dateStr, isCurrentlyUnavail) => {
-            if (!navigator.onLine) {
-                alert("⚠️ אין חיבור לאינטרנט. עדכון זמינות זמין במצב מקוון בלבד.");
-                return;
-            }
-
-            const today = new Date();
-            const dayOfMonth = today.getDate();
-            if (dayOfMonth < 10 || dayOfMonth > 15) {
-                alert(i18n[currentLang].unavailClosed);
-                return;
-            }
-
-            const todayStr = today.toISOString().slice(0, 10);
-            if (dateStr < todayStr) {
-                alert("לא ניתן לעדכן אי-זמינות לתאריכי עבר.");
-                return;
-            }
-
-            if (isCurrentlyUnavail) {
-                const record = userUnavailabilities.find(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
-                if (record) {
-                    await deleteDoc(doc(db, "unavailabilities", record.id));
-                    logAction("ביטול אי-זמינות", `ביטול חסימת תאריך ${dateStr}`, "אי-זמינות צוות");
-                }
-            } else {
-                await addDoc(collection(db, "unavailabilities"), {
-                    phone: currentUserPhone,
-                    name: currentUserName,
-                    date: dateStr,
-                    createdAt: new Date()
-                });
-                logAction("סימון אי-זמינות", `סימון אי-זמינות בתאריך ${dateStr}`, "אי-זמינות צוות");
-            }
-            loadUnavailabilityCalendar();
-        };
-
-        window.openDayModal = async (dateStr) => {
-            const today = new Date();
-            const todayStr = today.toISOString().slice(0, 10);
-            document.getElementById('event-date-input').value = dateStr;
-            document.getElementById('event-time-input').value = "20:00";
-            document.getElementById('modal-date-title').textContent = `הופעות/שיבוצים לתאריך: ${dateStr}`;
-            
-            const rosterContainer = document.getElementById('musicians-roster');
-            rosterContainer.innerHTML = '';
-            const isPastEvent = dateStr < todayStr;
-
-            if (!isAdmin || !currentBranchId || (isPastEvent && !isSuperOwner) || !navigator.onLine) {
-                document.getElementById('save-event-form').classList.add('hidden');
-                if (!navigator.onLine) {
-                    rosterContainer.innerHTML = '<p style="color:var(--danger); font-size:0.85rem; margin-bottom:10px;">📡 מצב אופליין: צפייה בהופעות בלבד (עריכה חסומה).</p>';
-                } else if (isPastEvent) {
-                    rosterContainer.innerHTML = '<p style="color:var(--danger); font-size:0.85rem; margin-bottom:10px;">🔒 הופעות עבר נעולות לעריכה.</p>';
-                } else if (isBranchManager && !isAdmin) {
-                    rosterContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:10px;">👁️ מצב צפייה בלבד: מנהל סניף מורשה לצפות בשיבוצים אך אינו מורשה לערוך או ליצור הופעות חדשות.</p>';
-                }
-            } else {
-                document.getElementById('save-event-form').classList.remove('hidden');
-                const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
-                let existingEventInThisBranch = null;
-
-                dayEventsSnap.forEach(docSnap => {
-                    const evData = docSnap.id ? { id: docSnap.id, ...docSnap.data() } : docSnap.data();
-                    if (evData.branchId === currentBranchId) existingEventInThisBranch = evData;
-                });
-
-                if (existingEventInThisBranch) {
-                    document.getElementById('event-time-input').value = existingEventInThisBranch.time || "20:00";
-                }
-
-                const activeMusiciansAndSingers = allMusicians.filter(m => m.status !== "inactive" && m.role !== "מנהל סניף");
-                activeMusiciansAndSingers.forEach(m => {
-                    const isUserMarkedUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === cleanPhone(m.phone) && u.date === dateStr);
-                    let isAlreadyAssigned = false;
-                    if (existingEventInThisBranch && existingEventInThisBranch.assignedStaff) {
-                        isAlreadyAssigned = existingEventInThisBranch.assignedStaff.some(s => s.toLowerCase().includes(m.name.toLowerCase()) || s.includes(m.phone));
-                    }
-
-                    rosterContainer.innerHTML += `
-                        <div class="roster-item" id="item-m-${m.id}">
-                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} onchange="updateRoleDisabling()">
-                            <label for="m-${m.id}">
-                                ${m.name} <span class="badge">${m.role}</span>
-                                ${isUserMarkedUnavail ? `<br><small style="color:var(--danger); font-size:0.7rem;">(${i18n[currentLang].notAvailable})</small>` : ''}
-                            </label>
-                        </div>
-                    `;
-                });
-            }
-
-            renderExistingEvents(dateStr);
-            document.getElementById('event-modal').classList.remove('hidden');
-            updateRoleDisabling();
-        };
-
-        window.updateRoleDisabling = () => {
-            const selectedRoles = [];
-            document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
-                selectedRoles.push(cb.getAttribute('data-role'));
-            });
-
-            document.querySelectorAll('.musician-checkbox').forEach(cb => {
-                const role = cb.getAttribute('data-role');
-                const parentDiv = document.getElementById(`item-${cb.id}`);
-                if (!cb.checked && selectedRoles.includes(role)) {
-                    cb.disabled = true;
-                    if(parentDiv) parentDiv.classList.add('disabled-role');
-                } else {
-                    cb.disabled = false;
-                    if(parentDiv) parentDiv.classList.remove('disabled-role');
-                }
-            });
-        };
-        function renderExistingEvents(dateStr) {
-            const existingList = document.getElementById('existing-day-events');
-            const dayEvents = monthEvents.filter(e => e.date === dateStr);
-            if(dayEvents.length === 0) {
-                existingList.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">אין הופעות שנקבעו ליום זה.</p>';
-                return;
-            }
-
-            const todayStr = new Date().toISOString().slice(0, 10);
-            const isPastEvent = dateStr < todayStr;
-            const isOnline = navigator.onLine;
-
-            existingList.innerHTML = dayEvents.map(e => {
-                const branch = allBranches.find(b => b.id === e.branchId);
-                const bName = branch ? branch.name : 'סניף';
-                const bColor = branch ? (branch.color || '#d4af37') : '#d4af37';
-
-                const isUserInEvent = !isAdmin && e.assignedStaff && e.assignedStaff.some(s => {
-                    const lower = s.toLowerCase();
-                    return lower.includes(currentUserName.toLowerCase()) || lower.includes(currentUserPhone);
-                });
-
-                const pendingRequest = allCancellationRequests.find(req => 
-                    req.eventId === e.id && 
-                    cleanPhone(req.musicianPhone) === currentUserPhone && 
-                    req.status === 'pending'
-                );
-
-                let cancelBtnHTML = '';
-                if (isUserInEvent && !isPastEvent && isOnline) {
-                    if (pendingRequest) {
-                        cancelBtnHTML = `<button type="button" disabled style="width:100%; margin-top:10px; background-color:#ffa726; color:#000; cursor:not-allowed;">⏳ בקשה לביטול נשלחה</button>`;
-                    } else {
-                        cancelBtnHTML = `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}', '${e.branchId}')">🚨 בקש ביטול הופעה</button>`;
-                    }
-                }
-
-                return `
-                <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:4px solid ${bColor};">
-                    <strong>📍 ${bName} | 🕒 שעת הופעה: ${e.time}</strong><br>
-                    <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
-                    <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
-                    ${(isAdmin && (!isPastEvent || isSuperOwner) && isOnline) ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}', '${bName}')">מחק הופעה</button>` : ''}
-                    ${cancelBtnHTML}
-                </div>
-            `;}).join('');
-        }
-
-        window.deleteShow = async (eventId, dateStr, branchName) => {
-            if (!isAdmin) return;
-            if (!navigator.onLine) {
-                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
-                return;
-            }
-
-            if (!confirm(`האם אתה בטוח שברצונך למחוק את ההופעה בסניף ${branchName} בתאריך ${dateStr}?`)) return;
-
-            try {
-                await deleteDoc(doc(db, "events", eventId));
-                logAction("מחיקת הופעה", `נמחקה הופעה בתאריך ${dateStr} בסניף ${branchName}`, "הופעות ושיבוצים");
-                alert("ההופעה נמחקה בהצלחה!");
-                openDayModal(dateStr);
-                loadCalendarView();
-            } catch (err) {
-                alert("שגיאה במחיקת ההופעה: " + err.message);
-            }
-        };
-
-        window.requestCancellation = async (eventId, eventDate, eventTime, branchId) => {
-            if (!navigator.onLine) {
-                alert("⚠️ אין חיבור לאינטרנט. שליחת בקשת ביטול זמינה במצב מקוון בלבד.");
-                return;
-            }
-
-            if (!confirm("האם אתה בטוח שברצונך לשלוח בקשת ביטול להופעה זו?")) return;
-
-            const branchObj = allBranches.find(b => b.id === branchId);
-            const branchName = branchObj ? branchObj.name : 'סניף';
-
-            await addDoc(collection(db, "cancellation_requests"), {
-                eventId,
-                eventDate,
-                eventTime,
-                branchId,
-                branchName,
-                musicianName: currentUserName,
-                musicianPhone: currentUserPhone,
-                status: "pending",
-                createdAt: new Date()
-            });
-
-            const adminsSnap = await getDocs(collection(db, "users"));
-            adminsSnap.forEach(async (docUser) => {
-                const uData = docUser.data();
-                if (uData.role === 'admin' || uData.isAdmin) {
-                    await sendPushNotificationToUser(uData.phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs');
-                }
-            });
-
-            logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
-            alert("בקשת הביטול נשלחה בהצלחה!");
-            closeModal();
-        };
-
-        function isDateInCurrentMonth(dateStr) {
-            if (!dateStr) return false;
-            const parts = dateStr.split('-');
-            if (parts.length < 2) return false;
-            return parseInt(parts[0], 10) === currentYear && (parseInt(parts[1], 10) - 1) === currentMonth;
-        }
-
-        function updateNotificationBadge() {
-            let pendingCount = 0;
-            allCancellationRequests.forEach(data => {
-                if (isDateInCurrentMonth(data.eventDate)) {
-                    if (isAdmin && data.status === "pending") pendingCount++;
-                    else if (!isAdmin && cleanPhone(data.musicianPhone) === currentUserPhone && (data.status === "approved" || data.status === "rejected")) pendingCount++;
-                }
-            });
-
-            const badge = document.getElementById('notif-count-badge');
-            if (pendingCount > 0) {
-                badge.textContent = pendingCount;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
-
-        function listenToNotifications() {
-            onSnapshot(collection(db, "cancellation_requests"), (snapshot) => {
-                allCancellationRequests = [];
-                snapshot.forEach(docSnap => {
-                    allCancellationRequests.push({ id: docSnap.id, ...docSnap.data() });
-                });
-                updateNotificationBadge();
-            });
-        }
-
-        async function loadReportsView() {
-            const resultsDiv = document.getElementById('report-results');
-            if (resultsDiv) resultsDiv.innerHTML = '';
-
-            const musicianContainer = document.getElementById('report-musician-container');
-            const musicianSelect = document.getElementById('report-musician-select');
-            const t = i18n[currentLang];
-            
-            if (isAdmin) {
-                musicianContainer.classList.remove('hidden');
-                musicianSelect.innerHTML = `<option value="">${t.allMusicians}</option>`;
-                allMusicians.forEach(m => {
-                    musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
-                });
-            } else {
-                musicianContainer.classList.add('hidden');
-            }
-        }
-
-        window.generateAccountingReport = async () => {
-            const musicianSelectEl = document.getElementById('report-musician-select');
-            const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
-            const selectedBranchId = document.getElementById('report-branch-select').value;
-            const resultsDiv = document.getElementById('report-results');
-
-            let filteredEvents = monthEvents.filter(e => {
-                let matchMusician = true;
-                let matchBranch = true;
-
-                if (selectedMusician) {
-                    matchMusician = e.assignedStaff && e.assignedStaff.some(s => s.toLowerCase().includes(selectedMusician.toLowerCase()));
-                }
-                if (selectedBranchId) {
-                    matchBranch = e.branchId === selectedBranchId;
-                }
-
-                return matchMusician && matchBranch;
-            });
-
-            if (filteredEvents.length === 0) {
-                resultsDiv.innerHTML = '<p style="color:var(--text-muted); margin-top:10px;">לא נמצאו הופעות התואמות לסינון בחודש זה.</p>';
-                return;
-            }
-
-            window.currentReportEvents = filteredEvents;
-
-            let reportHTML = `
-                <table class="report-table" id="export-report-table">
-                    <thead>
-                        <tr>
-                            <th>תאריך</th>
-                            <th>סניף</th>
-                            <th>שעה</th>
-                            <th>שם המבצע / נגן</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            filteredEvents.forEach(e => {
-                const branch = allBranches.find(b => b.id === e.branchId);
-                const bName = branch ? branch.name : 'סניף';
-                
-                const targetName = (isAdmin && selectedMusician) ? selectedMusician : currentUserName;
-                const userEntry = e.assignedStaff ? e.assignedStaff.find(s => s.toLowerCase().includes(targetName.toLowerCase())) : null;
-                const staffDisplay = userEntry || targetName;
-
-                reportHTML += `
-                    <tr>
-                        <td>${e.date}</td>
-                        <td>${bName}</td>
-                        <td>${e.time}</td>
-                        <td>${staffDisplay}</td>
-                    </tr>
-                `;
-            });
-
-            reportHTML += `
-                    </tbody>
-                </table>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
-                    <p style="font-weight:bold; color:var(--accent-gold); margin:0;">סה"כ הופעות: ${filteredEvents.length}</p>
-                    <button type="button" class="btn-success" style="width:auto; padding:8px 14px; font-size:0.85rem;" onclick="exportReportToExcel()">📥 ייצוא לאקסל (CSV)</button>
-                </div>
-            `;
-
-            resultsDiv.innerHTML = reportHTML;
-        };
-
-        window.exportReportToExcel = () => {
-            const events = window.currentReportEvents;
-            if (!events || events.length === 0) {
-                alert("אין נתונים לייצוא.");
-                return;
-            }
-
-            let csvContent = "\uFEFFתאריך,סניף,שעה,שם המבצע / נגן\n";
-
-            const musicianSelectEl = document.getElementById('report-musician-select');
-            const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
-
-            events.forEach(e => {
-                const branch = allBranches.find(b => b.id === e.branchId);
-                const bName = branch ? branch.name : 'סניף';
-                
-                const targetName = (isAdmin && selectedMusician) ? selectedMusician : currentUserName;
-                const userEntry = e.assignedStaff ? e.assignedStaff.find(s => s.toLowerCase().includes(targetName.toLowerCase())) : null;
-                const staffStr = `"${userEntry || targetName}"`;
-
-                csvContent += `${e.date},${bName},${e.time},${staffStr}\n`;
-            });
-
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", url);
-            downloadAnchor.setAttribute("download", `salon_yevani_report_${new Date().toISOString().slice(0,10)}.csv`);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
-
-            logAction("ייצוא דוח", `הורד דוח הופעות לאקסל (${events.length} הופעות)`, "דוחות");
-        };
-
         async function loadAuditLogsView() {
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
+            const t = i18n[currentLang];
             const snap = await getDocs(query(collection(db, "audit_logs"), orderBy("timestamp", "desc")));
-            let html = '<h4 data-i18n="auditTitle">📜 לוג פעולות מערכת:</h4><div style="margin-top:10px;">';
+            
+            let html = `<h4 style="color:var(--accent-gold); margin-bottom:10px;">${t.auditLogTitle}</h4><div style="margin-top:10px;">`;
+            
             snap.forEach(d => {
                 const log = d.data();
+                let translatedAction = log.actionType;
+                let translatedDetails = log.details;
+
+                if (log.actionType === "התחברות") translatedAction = t.actionLogin;
+                else if (log.actionType === "התנתקות") translatedAction = t.actionLogout;
+                else if (log.actionType === "מחיקת הודעת תפוצה") translatedAction = t.actionClearBroadcast;
+                else if (log.actionType === "שליחת הודעת פוש") translatedAction = t.actionSendPush;
+                else if (log.actionType === "ביטול אי-זמינות") translatedAction = t.actionCancelUnavail;
+                else if (log.actionType === "סימון אי-זמינות") translatedAction = t.actionMarkUnavail;
+
+                if (log.details === "משתמש התחבר בהצלחה למערכת") translatedDetails = t.descLoginSuccess;
+                else if (log.details === "משתמש התנתק מהמערכת") translatedDetails = t.descLogout;
+                else if (log.details === "הודעת התפוצה הכללית נמחקה והוסרה מתצוגת המשתמשים") translatedDetails = t.descClearBroadcast;
+
                 html += `
                     <div class="log-item">
-                        <strong style="color:var(--accent-gold);">${log.actionType}</strong> | <small>${log.dateStr}</small><br>
-                        <span>👤 מבוצע ע"י: <strong>${log.userName}</strong></span><br>
-                        <span>📝 ${log.details}</span>
+                        <strong style="color:var(--accent-gold);">${translatedAction || 'Action'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
+                        <span>👤 ${t.performedBy} <strong>${log.userName || ''}</strong></span><br>
+                        <span>📝 ${translatedDetails || ''}</span>
                     </div>
                 `;
             });
@@ -1988,9 +1475,15 @@
                         let translatedDetails = log.details;
 
                         if (log.actionType === "התחברות") translatedAction = t.actionLogin;
-                        if (log.actionType === "התנתקות") translatedAction = t.actionLogout;
+                        else if (log.actionType === "התנתקות") translatedAction = t.actionLogout;
+                        else if (log.actionType === "מחיקת הודעת תפוצה") translatedAction = t.actionClearBroadcast;
+                        else if (log.actionType === "שליחת הודעת פוש") translatedAction = t.actionSendPush;
+                        else if (log.actionType === "ביטול אי-זמינות") translatedAction = t.actionCancelUnavail;
+                        else if (log.actionType === "סימון אי-זמינות") translatedAction = t.actionMarkUnavail;
+
                         if (log.details === "משתמש התחבר בהצלחה למערכת") translatedDetails = t.descLoginSuccess;
-                        if (log.details === "משתמש התנתק מהמערכת") translatedDetails = t.descLogout;
+                        else if (log.details === "משתמש התנתק מהמערכת") translatedDetails = t.descLogout;
+                        else if (log.details === "הודעת התפוצה הכללית נמחקה והוסרה מתצוגת המשתמשים") translatedDetails = t.descClearBroadcast;
 
                         html += `
                             <div class="log-item">
@@ -2279,7 +1772,7 @@
                         </div>
                         <div style="display:flex; gap:8px;">
                             <button type="submit" id="branch-submit-btn" style="flex:2;" data-i18n="addBranchBtn">הוסף סניף</button>
-                            <button type="button" id="branch-cancel-btn" class="btn-danger hidden" style="flex:1;" onclick="cancelEditBranch()">ביטול</button>
+                            <button type="button" id="branch-cancel-btn" class="btn-danger hidden" style="flex:1;" onclick="cancelEditBranch()" data-i18n="cancelBtn">ביטול</button>
                         </div>
                     </form>
                     <div id="branches-list"></div>
@@ -2299,8 +1792,8 @@
                         <input type="tel" id="musician-phone" data-i18n-placeholder="phonePlaceholder" placeholder="מספר טלפון" required>
                         <p id="phone-edit-note" class="hidden" style="color:var(--text-muted); font-size:0.75rem;">⚠️ מספר טלפון אינו ניתן לשינוי.</p>
                         <select id="musician-status">
-                            <option value="active">פעיל</option>
-                            <option value="inactive">לא פעיל</option>
+                            <option value="active" data-i18n="activeStatus">פעיל</option>
+                            <option value="inactive" data-i18n="inactiveStatus">לא פעיל</option>
                         </select>
                         <button type="submit" id="musician-submit-btn" data-i18n="addMusicianBtn">הוסף איש צוות</button>
                     </form>
