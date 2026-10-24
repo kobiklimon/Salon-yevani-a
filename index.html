@@ -138,9 +138,7 @@
         }
 
         function validatePasswordRules(password) {
-            if (password === "Salon1234") {
-                return null;
-            }
+            if (password === "Salon1234") return null;
 
             const commonPasswords = ["12345678", "123456789", "password", "1234567890", "qwertyuiop"];
             if (commonPasswords.includes(password.toLowerCase())) {
@@ -256,7 +254,6 @@
         }
         async function checkSystemLockdownStatus() {
             try {
-                // מנהל-על (0547771121) לעולם לא ייחסם!
                 if (isSuperOwner || currentUserPhone === "0547771121") {
                     document.getElementById('system-locked-screen').classList.add('hidden');
                     return false;
@@ -429,7 +426,6 @@
                 await loadBranchesSelect();
                 await checkUserAdminStatus(user);
 
-                // בדיקת נעילה - מבוצעת רק לאחר שזוהה המשתמש ומנהל-על מוחרג ממנה
                 const isLocked = await checkSystemLockdownStatus();
                 if (isLocked) return;
 
@@ -440,7 +436,7 @@
                 const userDocSnap = await getDoc(doc(db, "users", user.uid));
                 if (userDocSnap.exists() && userDocSnap.data().mustChangePassword) {
                     setTimeout(async () => {
-                        const newPassword = prompt("🔐 סיסמתך אופסה לסיסמה זמנית.\nאנא הזן כעת סיסמה קבועה חדשה (לפחות 8 תווים, אות גדולה, אות קטנה ומספר):");
+                        const newPassword = prompt("🔐 סיסמתך אופסה לסיסמה זמנית.\nאנא הזן כעת סיסמה קבועה חדשה:");
                         
                         const passErr = validatePasswordRules(newPassword);
                         if (newPassword && !passErr) {
@@ -465,7 +461,6 @@
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
-                // מסך ההתחברות תמיד מוצג כשאף משתמש אינו מחובר
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
@@ -796,12 +791,10 @@
             document.getElementById('login-phone').value = '';
             document.getElementById('login-password').value = '';
 
-            // ניקוי תוצאות דוחות ישנים מהמסך והזיכרון
             const reportResults = document.getElementById('report-results');
             if (reportResults) reportResults.innerHTML = '';
             window.currentReportEvents = [];
 
-            // איפוס משתני משתמש
             currentUserPhone = '';
             currentUserName = '';
             isAdmin = false;
@@ -1148,7 +1141,7 @@
 
             const confirm2 = prompt("כדי לאמת את איפוס המערכת, הקלד את המילה: מאפס");
             if (confirm2 !== "מאפס") {
-                alert("האיפוס בוטל (המילה שהוקלדה שגויה).");
+                alert("האיפוס בוטלה (המילה שהוקלדה שגויה).");
                 return;
             }
 
@@ -1269,17 +1262,33 @@
             const monthNames = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
             
             const today = new Date();
+            const dayOfMonth = today.getDate();
+            const isWindowOpen = isAdmin || (dayOfMonth >= 10 && dayOfMonth <= 15);
+
             const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
             const nextYear = nextMonthDate.getFullYear();
             const nextMonth = nextMonthDate.getMonth();
 
             await loadUnavailabilityData();
 
+            let statusHTML = '';
+            if (isWindowOpen) {
+                statusHTML = `
+                    <div style="background:#1b5e20; border:1px solid #43a047; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
+                        🟢 <strong>מערכת אי-הזמינות פתוחה כעת!</strong> חלון העדכונים פעיל בין ה-10 ל-15 בחודש. נא לסמן תאריכים שאינך פנוי בהם לחודש ${monthNames[nextMonth]}.
+                    </div>
+                `;
+            } else {
+                statusHTML = `
+                    <div style="background:#b71c1c; border:1px solid #e53935; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
+                        🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח לנגנים רק בין ה-10 ל-15 בכל חודש עבור החודש הבא.
+                    </div>
+                `;
+            }
+
             container.innerHTML = `
-                <h3 style="color:var(--accent-gold); margin-bottom:5px;">📅 סימון ימי אי-זמינות לחודש ${monthNames[nextMonth]} ${nextYear}</h3>
-                <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
-                    📌 לחץ על ימים בחודש הבא שבהם אינך פנוי לעבוד. ניתן לעדכן ולשנות בכל עת.
-                </p>
+                <h3 style="color:var(--accent-gold); margin-bottom:5px;">📅 אי-זמינות לחודש ${monthNames[nextMonth]} ${nextYear}</h3>
+                ${statusHTML}
                 <div class="calendar-grid" id="unavail-grid"></div>
             `;
 
@@ -1301,11 +1310,13 @@
                 const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
 
+                const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('חסימת תאריכים זמינה רק בין ה-10 ל-15 בחודש.')"`;
+
                 gridHTML += `
-                    <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})" style="cursor:pointer;">
+                    <div class="cal-cell ${isUnavail ? 'unavail-cell' : ''}" ${clickAction} style="${isWindowOpen ? 'cursor:pointer;' : 'cursor:not-allowed; opacity:0.75;'}">
                         <div class="day-num">${day}</div>
                         <div style="font-size:0.65rem; color:${isUnavail ? 'var(--danger)' : 'transparent'}; font-weight:bold; margin-top:4px;">
-                            ${isUnavail ? 'לא פנוי' : ''}
+                            ${isUnavail ? 'לא זמין' : ''}
                         </div>
                     </div>
                 `;
@@ -1320,7 +1331,14 @@
                 return;
             }
 
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const today = new Date();
+            const dayOfMonth = today.getDate();
+            if (!isAdmin && (dayOfMonth < 10 || dayOfMonth > 15)) {
+                alert("⚠️ מערכת אי-הזמינות סגורה. ניתן לחסום תאריכים רק בין ה-10 ל-15 בחודש.");
+                return;
+            }
+
+            const todayStr = today.toISOString().slice(0, 10);
             if (dateStr < todayStr) {
                 alert("לא ניתן לעדכן אי-זמינות לתאריכי עבר.");
                 return;
@@ -1561,7 +1579,6 @@
         }
 
         async function loadReportsView() {
-            // ניקוי תוצאות דוחות ישנים בעת טעינת טאב דוחות
             const resultsDiv = document.getElementById('report-results');
             if (resultsDiv) resultsDiv.innerHTML = '';
 
