@@ -91,6 +91,7 @@
         .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
         .roster-item input { width: auto; margin: 0; }
         .roster-item.disabled-role { opacity: 0.35; }
+        .assignment-conflict-note { display: block; color: var(--danger); font-size: 0.72rem; margin-top: 3px; }
 
         .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; background: #333; color: var(--accent-gold); margin-right: 4px; }
         .badge-inactive { background: var(--danger); color: white; }
@@ -221,11 +222,57 @@
                 auditActionFilter: "סינון לפי פעולה:",
                 auditAllActions: "כל הפעולות",
                 auditNoResults: "לא נמצאו פעולות התואמות לסינון.",
+                auditActions: {
+                    "כשל בהתחברות": "כשל בהתחברות",
+                    "החלפת סיסמה זמנית": "החלפת סיסמה זמנית",
+                    "מחיקת הודעת תפוצה": "מחיקת הודעה כללית",
+                    "שליחת הודעת פוש": "שליחת הודעת פוש",
+                    "בקשת איפוס סיסמה": "בקשת איפוס סיסמה",
+                    "איפוס סיסמה ע\"י מנהל": "איפוס סיסמה על ידי מנהל",
+                    "הרשמה": "הרשמה",
+                    "עריכת סניף": "עריכת סניף",
+                    "הוספת סניף": "הוספת סניף",
+                    "עדכון איש צוות": "עדכון איש צוות",
+                    "הוספת איש צוות": "הוספת איש צוות",
+                    "שינוי הרשאות מנהל": "שינוי הרשאות מנהל",
+                    "מחיקת סניף": "מחיקת סניף",
+                    "גיבוי מערכת": "גיבוי מערכת",
+                    "אתחול מערכת": "איפוס מערכת",
+                    "מחיקת הופעה": "מחיקת הופעה",
+                    "בקשת ביטול": "בקשת ביטול הופעה",
+                    "ייצוא דוח": "ייצוא דוח",
+                    "אישור בקשת ביטול עם מחליף": "אישור ביטול ושיבוץ מחליף"
+                },
+                auditDetails: {
+                    loginSuccess: "המשתמש התחבר בהצלחה למערכת",
+                    logout: "המשתמש התנתק מהמערכת",
+                    temporaryPasswordChanged: "המשתמש עדכן בהצלחה סיסמה קבועה חדשה",
+                    broadcastDeleted: "ההודעה הכללית נמחקה והוסרה מתצוגת המשתמשים",
+                    backupCreated: "קובץ גיבוי מלא של הנתונים (JSON) הורד",
+                    systemReset: "בוצע איפוס מלא ונמחקו נתוני המערכת",
+                    loginFailed: "ניסיון התחברות נכשל עבור מספר הטלפון: {1}",
+                    passwordResetRequested: "נשלחה בקשת איפוס סיסמה עבור {1} ({2})",
+                    passwordResetByAdmin: "המנהל איפס את סיסמת {1} ({2}) לסיסמה זמנית",
+                    userRegistered: "המשתמש {1} ({2}) נרשם בתפקיד {3}",
+                    branchUpdated: "הסניף {1} עודכן. מנהל: {2}",
+                    branchAdded: "נוסף הסניף {1}. מנהל: {2}",
+                    staffUpdated: "פרטי {1} ({2}) עודכנו. סטטוס: {3}",
+                    staffAdded: "נוסף איש הצוות {1} ({2}), טלפון: {3}",
+                    adminGranted: "למשתמש {1} הוענקה הרשאת מנהל",
+                    adminRemoved: "הרשאת המנהל הוסרה ממשתמש {1}",
+                    branchDeleted: "הסניף {1} נמחק",
+                    showDeleted: "ההופעה בתאריך {1} בסניף {2} נמחקה",
+                    cancellationRequested: "{1} ביקש/ה לבטל הופעה בתאריך {2} בסניף {3}",
+                    reportExported: "יוצא דוח הופעות ({1} הופעות)",
+                    replacementAssigned: "{1} שובץ/ה במקום {2} בתאריך {3}",
+                    broadcastSent: "נשלחה הודעה לכל הצוות: {1}"
+                },
                 replacementStaffLabel: "בחירת מחליף מאותו תפקיד:",
                 selectReplacement: "בחר איש צוות מחליף...",
                 noReplacementAvailable: "אין איש צוות פנוי מאותו תפקיד בתאריך זה. לא ניתן לאשר את הבקשה.",
                 replacementRequired: "חובה לבחור מחליף מאותו תפקיד לפני אישור הבקשה.",
                 replacementNoLongerAvailable: "המחליף שנבחר כבר אינו פנוי. רענן את הרשימה ובחר מחליף אחר.",
+                staffAssignedElsewhereAtTime: "משובץ/ת בסניף אחר באותה שעה",
                 approveCancellation: "אישור החלפה",
                 rejectCancellation: "דחיית בקשה",
                 auditTitle: "📜 לוג פעולות מערכת:"
@@ -322,11 +369,57 @@
                 auditActionFilter: "Filter by action:",
                 auditAllActions: "All actions",
                 auditNoResults: "No actions match these filters.",
+                auditActions: {
+                    "כשל בהתחברות": "Login failed",
+                    "החלפת סיסמה זמנית": "Temporary password changed",
+                    "מחיקת הודעת תפוצה": "Broadcast deleted",
+                    "שליחת הודעת פוש": "Push notification sent",
+                    "בקשת איפוס סיסמה": "Password reset requested",
+                    "איפוס סיסמה ע\"י מנהל": "Password reset by administrator",
+                    "הרשמה": "Registration",
+                    "עריכת סניף": "Branch updated",
+                    "הוספת סניף": "Branch added",
+                    "עדכון איש צוות": "Staff member updated",
+                    "הוספת איש צוות": "Staff member added",
+                    "שינוי הרשאות מנהל": "Administrator permissions changed",
+                    "מחיקת סניף": "Branch deleted",
+                    "גיבוי מערכת": "System backup",
+                    "אתחול מערכת": "System reset",
+                    "מחיקת הופעה": "Show deleted",
+                    "בקשת ביטול": "Show cancellation requested",
+                    "ייצוא דוח": "Report exported",
+                    "אישור בקשת ביטול עם מחליף": "Cancellation approved with replacement"
+                },
+                auditDetails: {
+                    loginSuccess: "User successfully logged into the system",
+                    logout: "User logged out of the system",
+                    temporaryPasswordChanged: "User successfully set a new permanent password",
+                    broadcastDeleted: "The broadcast was deleted and removed from users' view",
+                    backupCreated: "A full JSON data backup was downloaded",
+                    systemReset: "The system was fully reset and its data deleted",
+                    loginFailed: "Failed login attempt for phone number: {1}",
+                    passwordResetRequested: "Password reset requested for {1} ({2})",
+                    passwordResetByAdmin: "Administrator reset the password for {1} ({2}) to a temporary password",
+                    userRegistered: "{1} ({2}) registered as {3}",
+                    branchUpdated: "Branch {1} updated. Manager: {2}",
+                    branchAdded: "Branch {1} added. Manager: {2}",
+                    staffUpdated: "Details updated for {1} ({2}). Status: {3}",
+                    staffAdded: "Staff member {1} ({2}) added, phone: {3}",
+                    adminGranted: "Administrator permissions granted to {1}",
+                    adminRemoved: "Administrator permissions removed from {1}",
+                    branchDeleted: "Branch {1} deleted",
+                    showDeleted: "Show on {1} at branch {2} deleted",
+                    cancellationRequested: "{1} requested a show cancellation on {2} at branch {3}",
+                    reportExported: "Show report exported ({1} shows)",
+                    replacementAssigned: "{1} assigned to replace {2} on {3}",
+                    broadcastSent: "Broadcast sent to the team: {1}"
+                },
                 replacementStaffLabel: "Choose a replacement with the same role:",
                 selectReplacement: "Select a replacement staff member...",
                 noReplacementAvailable: "No available staff member with the same role for this date. The request cannot be approved.",
                 replacementRequired: "Select a same-role replacement before approving this request.",
                 replacementNoLongerAvailable: "The selected replacement is no longer available. Refresh and choose another.",
+                staffAssignedElsewhereAtTime: "Already assigned at another branch at this time",
                 approveCancellation: "Approve replacement",
                 rejectCancellation: "Reject request",
                 auditTitle: "📜 System Audit Log:"
@@ -423,11 +516,57 @@
                 auditActionFilter: "Φιλτράρισμα ανά ενέργεια:",
                 auditAllActions: "Όλες οι ενέργειες",
                 auditNoResults: "Δεν βρέθηκαν ενέργειες για αυτά τα φίλτρα.",
+                auditActions: {
+                    "כשל בהתחברות": "Αποτυχία σύνδεσης",
+                    "החלפת סיסמה זמנית": "Αλλαγή προσωρινού κωδικού",
+                    "מחיקת הודעת תפוצה": "Διαγραφή γενικής ανακοίνωσης",
+                    "שליחת הודעת פוש": "Αποστολή ειδοποίησης push",
+                    "בקשת איפוס סיסמה": "Αίτημα επαναφοράς κωδικού",
+                    "איפוס סיסמה ע\"י מנהל": "Επαναφορά κωδικού από διαχειριστή",
+                    "הרשמה": "Εγγραφή",
+                    "עריכת סניף": "Ενημέρωση καταστήματος",
+                    "הוספת סניף": "Προσθήκη καταστήματος",
+                    "עדכון איש צוות": "Ενημέρωση μέλους ομάδας",
+                    "הוספת איש צוות": "Προσθήκη μέλους ομάδας",
+                    "שינוי הרשאות מנהל": "Αλλαγή δικαιωμάτων διαχειριστή",
+                    "מחיקת סניף": "Διαγραφή καταστήματος",
+                    "גיבוי מערכת": "Αντίγραφο ασφαλείας συστήματος",
+                    "אתחול מערכת": "Επαναφορά συστήματος",
+                    "מחיקת הופעה": "Διαγραφή εμφάνισης",
+                    "בקשת ביטול": "Αίτημα ακύρωσης εμφάνισης",
+                    "ייצוא דוח": "Εξαγωγή αναφοράς",
+                    "אישור בקשת ביטול עם מחליף": "Έγκριση ακύρωσης με αντικαταστάτη"
+                },
+                auditDetails: {
+                    loginSuccess: "Ο χρήστης συνδέθηκε επιτυχώς στο σύστημα",
+                    logout: "Ο χρήστης αποσυνδέθηκε από το σύστημα",
+                    temporaryPasswordChanged: "Ο χρήστης όρισε νέο μόνιμο κωδικό",
+                    broadcastDeleted: "Η γενική ανακοίνωση διαγράφηκε από την προβολή των χρηστών",
+                    backupCreated: "Λήφθηκε πλήρες αντίγραφο ασφαλείας δεδομένων JSON",
+                    systemReset: "Το σύστημα επαναφέρθηκε πλήρως και τα δεδομένα διαγράφηκαν",
+                    loginFailed: "Αποτυχημένη προσπάθεια σύνδεσης για το τηλέφωνο: {1}",
+                    passwordResetRequested: "Ζητήθηκε επαναφορά κωδικού για τον/την {1} ({2})",
+                    passwordResetByAdmin: "Ο διαχειριστής επανέφερε τον κωδικό του/της {1} ({2}) σε προσωρινό κωδικό",
+                    userRegistered: "Ο/Η {1} ({2}) εγγράφηκε με ρόλο {3}",
+                    branchUpdated: "Το κατάστημα {1} ενημερώθηκε. Διευθυντής: {2}",
+                    branchAdded: "Προστέθηκε το κατάστημα {1}. Διευθυντής: {2}",
+                    staffUpdated: "Ενημερώθηκαν τα στοιχεία του/της {1} ({2}). Κατάσταση: {3}",
+                    staffAdded: "Προστέθηκε το μέλος {1} ({2}), τηλέφωνο: {3}",
+                    adminGranted: "Χορηγήθηκαν δικαιώματα διαχειριστή στον/στην {1}",
+                    adminRemoved: "Αφαιρέθηκαν τα δικαιώματα διαχειριστή από τον/την {1}",
+                    branchDeleted: "Διαγράφηκε το κατάστημα {1}",
+                    showDeleted: "Διαγράφηκε η εμφάνιση στις {1} στο κατάστημα {2}",
+                    cancellationRequested: "Ο/Η {1} ζήτησε ακύρωση εμφάνισης στις {2} στο κατάστημα {3}",
+                    reportExported: "Εξήχθη αναφορά εμφανίσεων ({1} εμφανίσεις)",
+                    replacementAssigned: "Ο/Η {1} αντικατέστησε τον/την {2} στις {3}",
+                    broadcastSent: "Στάλθηκε ανακοίνωση στην ομάδα: {1}"
+                },
                 replacementStaffLabel: "Επιλογή αντικαταστάτη με τον ίδιο ρόλο:",
                 selectReplacement: "Επιλέξτε αντικαταστάτη από την ομάδα...",
                 noReplacementAvailable: "Δεν υπάρχει διαθέσιμο μέλος με τον ίδιο ρόλο για αυτή την ημερομηνία. Δεν είναι δυνατή η έγκριση.",
                 replacementRequired: "Επιλέξτε αντικαταστάτη με τον ίδιο ρόλο πριν από την έγκριση.",
                 replacementNoLongerAvailable: "Ο επιλεγμένος αντικαταστάτης δεν είναι πλέον διαθέσιμος. Ανανεώστε και επιλέξτε άλλον.",
+                staffAssignedElsewhereAtTime: "Έχει ήδη προγραμματιστεί σε άλλο κατάστημα την ίδια ώρα",
                 approveCancellation: "Έγκριση αντικατάστασης",
                 rejectCancellation: "Απόρριψη αιτήματος",
                 auditTitle: "📜 Καταγραφή Ενεργειών Συστήματος:"
@@ -499,7 +638,11 @@
         let allMusicians = [];
         let allBranches = [];
         let monthEvents = [];
+        let modalDayEvents = [];
         let allCancellationRequests = [];
+        let pendingPasswordResetCount = 0;
+        let unsubscribeCancellationRequests = null;
+        let unsubscribePasswordResetRequests = null;
         let userUnavailabilities = [];
         let isAdmin = false;
         let isBranchManager = false;
@@ -610,9 +753,12 @@
                         tabTarget,
                         createdAt: new Date()
                     });
+                    return true;
                 }
+                return false;
             } catch (e) {
                 console.error("Error queueing push:", e);
+                return false;
             }
         }
 
@@ -1769,6 +1915,7 @@
             
             const rosterContainer = document.getElementById('musicians-roster');
             rosterContainer.innerHTML = '';
+            modalDayEvents = [];
             const isPastEvent = dateStr < todayStr;
 
             if (!isAdmin || !currentBranchId || (isPastEvent && !isSuperOwner) || !navigator.onLine) {
@@ -1783,12 +1930,8 @@
             } else {
                 document.getElementById('save-event-form').classList.remove('hidden');
                 const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", dateStr)));
-                let existingEventInThisBranch = null;
-
-                dayEventsSnap.forEach(docSnap => {
-                    const evData = docSnap.id ? { id: docSnap.id, ...docSnap.data() } : docSnap.data();
-                    if (evData.branchId === currentBranchId) existingEventInThisBranch = evData;
-                });
+                modalDayEvents = dayEventsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                const existingEventInThisBranch = modalDayEvents.find(event => event.branchId === currentBranchId);
 
                 if (existingEventInThisBranch) {
                     document.getElementById('event-time-input').value = existingEventInThisBranch.time || "20:00";
@@ -1808,6 +1951,7 @@
                             <label for="m-${m.id}">
                                 ${m.name} <span class="badge">${m.role}</span>
                                 ${isUserMarkedUnavail ? `<br><small style="color:var(--danger); font-size:0.7rem;">(${i18n[currentLang].notAvailable})</small>` : ''}
+                                <small id="conflict-m-${m.id}" class="assignment-conflict-note hidden">${i18n[currentLang].staffAssignedElsewhereAtTime}</small>
                             </label>
                         </div>
                     `;
@@ -1828,15 +1972,30 @@
             document.querySelectorAll('.musician-checkbox').forEach(cb => {
                 const role = cb.getAttribute('data-role');
                 const parentDiv = document.getElementById(`item-${cb.id}`);
-                if (!cb.checked && selectedRoles.includes(role)) {
-                    cb.disabled = true;
-                    if(parentDiv) parentDiv.classList.add('disabled-role');
-                } else {
-                    cb.disabled = false;
-                    if(parentDiv) parentDiv.classList.remove('disabled-role');
-                }
+                const isAssignedElsewhere = isMusicianAssignedToOtherBranchAtTime(
+                    modalDayEvents,
+                    currentBranchId,
+                    document.getElementById('event-time-input').value,
+                    cb.dataset.name,
+                    role
+                );
+                const isRoleAlreadySelected = !cb.checked && selectedRoles.includes(role);
+                cb.disabled = (isAssignedElsewhere && !cb.checked) || isRoleAlreadySelected;
+                if (parentDiv) parentDiv.classList.toggle('disabled-role', cb.disabled);
+
+                const conflictNote = document.getElementById(`conflict-${cb.id}`);
+                if (conflictNote) conflictNote.classList.toggle('hidden', !isAssignedElsewhere);
             });
         };
+
+        function isMusicianAssignedToOtherBranchAtTime(events, branchId, time, musicianName, musicianRole) {
+            const assignment = `${musicianName} (${musicianRole})`.trim().toLowerCase();
+            return events.some(event =>
+                event.branchId !== branchId &&
+                event.time === time &&
+                (event.assignedStaff || []).some(staffEntry => String(staffEntry).trim().toLowerCase() === assignment)
+            );
+        }
         function renderExistingEvents(dateStr) {
             const existingList = document.getElementById('existing-day-events');
             const dayEvents = monthEvents.filter(e => e.date === dateStr);
@@ -1897,9 +2056,9 @@
             try {
                 await deleteDoc(doc(db, "events", eventId));
                 logAction("מחיקת הופעה", `נמחקה הופעה בתאריך ${dateStr} בסניף ${branchName}`, "הופעות ושיבוצים");
+                await loadCalendarView();
+                await openDayModal(dateStr);
                 alert("ההופעה נמחקה בהצלחה!");
-                openDayModal(dateStr);
-                loadCalendarView();
             } catch (err) {
                 alert("שגיאה במחיקת ההופעה: " + err.message);
             }
@@ -1928,13 +2087,25 @@
                 createdAt: new Date()
             });
 
+            const adminPhones = new Set(
+                allMusicians.filter(musician => musician.isAdmin).map(musician => cleanPhone(musician.phone)).filter(Boolean)
+            );
+            adminPhones.add("0547771121");
+            adminPhones.add("0500000000");
+
             const adminsSnap = await getDocs(collection(db, "users"));
-            adminsSnap.forEach(async (docUser) => {
+            adminsSnap.forEach(docUser => {
                 const uData = docUser.data();
-                if (uData.role === 'admin' || uData.isAdmin) {
-                    await sendPushNotificationToUser(uData.phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs');
+                if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
+                    adminPhones.add(cleanPhone(uData.phone));
                 }
             });
+            const pushResults = await Promise.all([...adminPhones].map(phone =>
+                sendPushNotificationToUser(phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs')
+            ));
+            if (!pushResults.some(Boolean)) {
+                console.warn("Cancellation request saved, but no administrator push token is registered.");
+            }
 
             logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
             alert("בקשת הביטול נשלחה בהצלחה!");
@@ -1949,7 +2120,7 @@
         }
 
         function updateNotificationBadge() {
-            let pendingCount = 0;
+            let pendingCount = isAdmin ? pendingPasswordResetCount : 0;
             allCancellationRequests.forEach(data => {
                 if (isDateInCurrentMonth(data.eventDate)) {
                     if (isAdmin && data.status === "pending") pendingCount++;
@@ -1967,13 +2138,29 @@
         }
 
         function listenToNotifications() {
-            onSnapshot(collection(db, "cancellation_requests"), (snapshot) => {
+            if (unsubscribeCancellationRequests) unsubscribeCancellationRequests();
+            if (unsubscribePasswordResetRequests) unsubscribePasswordResetRequests();
+
+            unsubscribeCancellationRequests = onSnapshot(collection(db, "cancellation_requests"), (snapshot) => {
                 allCancellationRequests = [];
                 snapshot.forEach(docSnap => {
                     allCancellationRequests.push({ id: docSnap.id, ...docSnap.data() });
                 });
                 updateNotificationBadge();
             });
+
+            pendingPasswordResetCount = 0;
+            if (isAdmin) {
+                unsubscribePasswordResetRequests = onSnapshot(
+                    query(collection(db, "password_reset_requests"), where("status", "==", "pending")),
+                    snapshot => {
+                        pendingPasswordResetCount = snapshot.size;
+                        updateNotificationBadge();
+                    }
+                );
+            } else {
+                updateNotificationBadge();
+            }
         }
 
         async function loadReportsView() {
@@ -2101,22 +2288,57 @@
         };
 
         function translateAuditLog(log, t) {
-            let action = log.actionType || '';
+            const actionKey = log.actionType || '';
+            let action = t.auditActions[actionKey] || actionKey;
             let details = log.details || '';
 
-            if (action === "התחברות") action = t.actionLogin;
-            if (action === "התנתקות") action = t.actionLogout;
-            if (details === "משתמש התחבר בהצלחה למערכת") details = t.descLoginSuccess;
-            if (details === "משתמש התנתק מהמערכת") details = t.descLogout;
+            if (actionKey === "התחברות") action = t.actionLogin;
+            if (actionKey === "התנתקות") action = t.actionLogout;
+            if (details === "משתמש התחבר בהצלחה למערכת") details = t.auditDetails.loginSuccess;
+            if (details === "משתמש התנתק מהמערכת") details = t.auditDetails.logout;
+            if (details === "המשתמש עדכן בהצלחה סיסמה קבועה חדשה") details = t.auditDetails.temporaryPasswordChanged;
+            if (details === "הודעת התפוצה הכללית נמחקה והוסרה מתצוגת המשתמשים") details = t.auditDetails.broadcastDeleted;
+            if (details === "הורד קובץ גיבוי נתונים מלא (JSON)") details = t.auditDetails.backupCreated;
+            if (details === "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת") details = t.auditDetails.systemReset;
 
-            if (action === "סימון אי-זמינות") {
+            if (actionKey === "סימון אי-זמינות") {
                 action = t.logUnavailabilitySet;
                 const date = details.match(/\d{4}-\d{2}-\d{2}/);
                 if (date) details = t.logUnavailabilitySetDetails.replace('{date}', date[0]);
-            } else if (action === "ביטול אי-זמינות") {
+            } else if (actionKey === "ביטול אי-זמינות") {
                 action = t.logUnavailabilityRemove;
                 const date = details.match(/\d{4}-\d{2}-\d{2}/);
                 if (date) details = t.logUnavailabilityRemoveDetails.replace('{date}', date[0]);
+            }
+
+            const detailRules = [
+                [/^ניסיון התחברות שנכשל עבור טלפון: (.+)$/, t.auditDetails.loginFailed],
+                [/^נשלחה בקשת איפוס סיסמה עבור (.+) \((.+)\)$/, t.auditDetails.passwordResetRequested],
+                [/^איפוס סיסמה בוצע עבור (.+) \((.+)\) לסיסמה גנרית$/, t.auditDetails.passwordResetByAdmin],
+                [/^משתמש חדש נרשם: (.+) \((.+)\) בתפקיד (.+)$/, t.auditDetails.userRegistered],
+                [/^עודכן סניף: (.*), מנהל: (.*)$/, t.auditDetails.branchUpdated],
+                [/^נוסף סניף חדש: (.*), מנהל: (.*)$/, t.auditDetails.branchAdded],
+                [/^עודכנו פרטי (.*) \((.*)\), סטטוס: (.*)$/, t.auditDetails.staffUpdated],
+                [/^נוסף איש צוות: (.*) \((.*)\), טלפון: (.*)$/, t.auditDetails.staffAdded],
+                [/^למשתמש (.*) הוגדר כמנהל מערכת$/, t.auditDetails.adminGranted],
+                [/^למשתמש (.*) הוסרה הרשאת מנהל מערכת$/, t.auditDetails.adminRemoved],
+                [/^נמחק סניף: (.*)$/, t.auditDetails.branchDeleted],
+                [/^נמחקה הופעה בתאריך (\d{4}-\d{2}-\d{2}) בסניף (.*)$/, t.auditDetails.showDeleted],
+                [/^בקשת ביטול נשלחה ע"י (.*) להופעה ב-(\d{4}-\d{2}-\d{2}) בסניף (.*)$/, t.auditDetails.cancellationRequested],
+                [/^הורד דוח הופעות לאקסל \((\d+) הופעות\)$/, t.auditDetails.reportExported],
+                [/^(.*) שובץ\/ה במקום (.*) בתאריך (\d{4}-\d{2}-\d{2})$/, t.auditDetails.replacementAssigned],
+                [/^שודרה הודעה חדשה לכל הצוות: (.*)$/, t.auditDetails.broadcastSent]
+            ];
+
+            for (const [pattern, template] of detailRules) {
+                const match = details.match(pattern);
+                if (!match) continue;
+                const values = match.slice(1);
+                if (actionKey === "עדכון איש צוות") {
+                    values[2] = values[2] === 'active' ? t.activeStatus : values[2] === 'inactive' ? t.inactiveStatus : values[2];
+                }
+                details = template.replace(/\{(\d+)\}/g, (_, index) => values[Number(index) - 1] || '');
+                break;
             }
 
             return { action, details };
@@ -2461,10 +2683,20 @@
             const assignedStaff = [];
             const selectedRoles = [];
 
+            const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", date)));
+            const currentDayEvents = dayEventsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
             document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
                 selectedRoles.push(cb.getAttribute('data-role'));
                 assignedStaff.push(cb.value);
             });
+
+            const conflictingMusician = [...document.querySelectorAll('.musician-checkbox:checked')].find(cb =>
+                isMusicianAssignedToOtherBranchAtTime(currentDayEvents, currentBranchId, time, cb.dataset.name, cb.dataset.role)
+            );
+            if (conflictingMusician) {
+                alert(`${conflictingMusician.dataset.name} כבר משובץ/ת בסניף אחר באותה שעה. נא לבחור איש צוות אחר.`);
+                return;
+            }
 
             if (!selectedRoles.includes("זמר/ת") || !selectedRoles.includes("קלידים")) {
                 alert("שגיאה: חובה לשבץ זמר/ת וקלידן להופעה זו!");
@@ -2473,7 +2705,7 @@
 
             const branchObj = allBranches.find(b => b.id === currentBranchId);
             const branchName = branchObj ? branchObj.name : 'סניף';
-            const existingEvent = monthEvents.find(ev => ev.date === date && ev.branchId === currentBranchId);
+            const existingEvent = currentDayEvents.find(ev => ev.branchId === currentBranchId);
 
             if (existingEvent) {
                 await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff });
@@ -2572,7 +2804,7 @@
             <div class="nav-tabs">
                 <button type="button" id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')" data-i18n="tabCalendar">📅 יומן הופעות</button>
                 <button type="button" id="btn-tab-unavail" class="tab-btn" onclick="switchTab('unavail')" data-i18n="tabUnavail">🚫 זמינות</button>
-                <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')" data-i18n="tabNotifs">🔔 התראות <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
+                <button type="button" id="btn-tab-notifs" class="tab-btn" onclick="switchTab('notifs')"><span data-i18n="tabNotifs">🔔 התראות</span> <span id="notif-count-badge" class="notif-badge hidden">0</span></button>
                 <button type="button" id="btn-tab-reports" class="tab-btn" onclick="switchTab('reports')" data-i18n="tabReports">📊 דוחות</button>
                 <button type="button" id="btn-tab-my-logs" class="tab-btn" onclick="switchTab('my-logs')" data-i18n="tabHistory">📜 היסטוריה</button>
                 <button type="button" id="btn-tab-admin" class="tab-btn hidden" onclick="switchTab('admin')" data-i18n="tabAdmin">⚙️ ניהול</button>
@@ -2684,7 +2916,7 @@
                 <form id="save-event-form">
                     <input type="hidden" id="event-date-input">
                     <label>שעת הופעה:</label>
-                    <input type="time" id="event-time-input" required value="20:00">
+                    <input type="time" id="event-time-input" required value="20:00" onchange="updateRoleDisabling()">
                     <label style="font-weight:bold; display:block; margin-top:10px;">שיבוץ צוות:</label>
                     <div id="musicians-roster" class="roster-grid"></div>
                     <button type="submit" style="margin-top:15px;">שמור הופעה</button>
