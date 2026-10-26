@@ -77,6 +77,15 @@
         
         .dots-container { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; align-items: center; padding-top: 2px; }
         .event-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 0 2px rgba(0,0,0,0.5); }
+        .branch-legend { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color); }
+        .branch-legend h4 { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 8px; }
+        .branch-legend-items { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+        .branch-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+        .branch-legend-swatch { width: 12px; height: 12px; flex: 0 0 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35); }
+        .audit-limit-note { color: var(--text-muted); font-size: 0.8rem; margin-top: 6px; }
+        .audit-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 12px 0; }
+        .audit-filters label { color: var(--text-muted); font-size: 0.85rem; }
+        .audit-filters select { margin: 4px 0 0; }
 
         .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .roster-item { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 8px; border-radius: 6px; }
@@ -101,7 +110,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
 
         const firebaseConfig = {
@@ -177,9 +186,48 @@
                 selectBranchManagerPlaceholder: "בחר מנהל סניף מתוך הצוות...",
                 addBranchBtn: "הוסף סניף",
                 existingBranchesTitle: "סניפים קיימים ומנהלים:",
+                branchLegendTitle: "מקרא צבעי סניפים",
                 teamMgmtTitle: "ניהול צוות ומתן הרשאות מנהל",
                 addMusicianBtn: "הוסף איש צוות",
                 existingTeamTitle: "צוות נגנים, זמרים ומנהלים:",
+                branchManagerLabel: "מנהל סניף:",
+                branchNotAssigned: "לא הוגדר",
+                editBtn: "ערוך",
+                deleteBtn: "מחק",
+                makeAdminBtn: "הגדר כמנהל",
+                removeAdminBtn: "הסר מנהל",
+                systemAdminBadge: "מנהל מערכת",
+                inactiveStatus: "לא פעיל",
+                activeStatus: "פעיל",
+                branchLabel: "סניף:",
+                noPhoneLabel: "אין טלפון",
+                updateBranchBtn: "עדכן סניף",
+                updateMusicianBtn: "עדכן איש צוות",
+                backupTitle: "💾 גיבוי נתונים",
+                downloadBackupBtn: "📥 הורד גיבוי (JSON)",
+                lockdownTitle: "🔒 נעילת מערכת (Kill Switch)",
+                lockdownButton: "נעילה / שחרור",
+                resetTitle: "🗑️ איפוס המערכת",
+                resetButton: "איפוס מוחלט",
+                actionByLabel: "מבוצע ע\"י:",
+                detailsLabel: "פרטים:",
+                logUnavailabilitySet: "סימון אי-זמינות",
+                logUnavailabilitySetDetails: "סימון אי-זמינות בתאריך {date}",
+                logUnavailabilityRemove: "ביטול אי-זמינות",
+                logUnavailabilityRemoveDetails: "ביטול חסימת תאריך {date}",
+                auditLimitNote: "מוצגות עד 1,000 הפעולות האחרונות",
+                auditStaffFilter: "סינון לפי איש צוות:",
+                auditAllStaff: "כל אנשי הצוות",
+                auditActionFilter: "סינון לפי פעולה:",
+                auditAllActions: "כל הפעולות",
+                auditNoResults: "לא נמצאו פעולות התואמות לסינון.",
+                replacementStaffLabel: "בחירת מחליף מאותו תפקיד:",
+                selectReplacement: "בחר איש צוות מחליף...",
+                noReplacementAvailable: "אין איש צוות פנוי מאותו תפקיד בתאריך זה. לא ניתן לאשר את הבקשה.",
+                replacementRequired: "חובה לבחור מחליף מאותו תפקיד לפני אישור הבקשה.",
+                replacementNoLongerAvailable: "המחליף שנבחר כבר אינו פנוי. רענן את הרשימה ובחר מחליף אחר.",
+                approveCancellation: "אישור החלפה",
+                rejectCancellation: "דחיית בקשה",
                 auditTitle: "📜 לוג פעולות מערכת:"
             },
             en: {
@@ -239,9 +287,48 @@
                 selectBranchManagerPlaceholder: "Select Branch Manager from staff...",
                 addBranchBtn: "Add Branch",
                 existingBranchesTitle: "Existing Branches & Managers:",
+                branchLegendTitle: "Branch Color Key",
                 teamMgmtTitle: "Team Management & Admin Rights",
                 addMusicianBtn: "Add Staff Member",
                 existingTeamTitle: "Musicians, Singers & Managers Team:",
+                branchManagerLabel: "Branch manager:",
+                branchNotAssigned: "Not assigned",
+                editBtn: "Edit",
+                deleteBtn: "Delete",
+                makeAdminBtn: "Make admin",
+                removeAdminBtn: "Remove admin",
+                systemAdminBadge: "System admin",
+                inactiveStatus: "Inactive",
+                activeStatus: "Active",
+                branchLabel: "Branch:",
+                noPhoneLabel: "No phone number",
+                updateBranchBtn: "Update Branch",
+                updateMusicianBtn: "Update Staff Member",
+                backupTitle: "💾 Data Backup",
+                downloadBackupBtn: "📥 Download Backup (JSON)",
+                lockdownTitle: "🔒 System Lockdown (Kill Switch)",
+                lockdownButton: "Lock / Unlock",
+                resetTitle: "🗑️ System Reset",
+                resetButton: "Full Reset",
+                actionByLabel: "Performed by:",
+                detailsLabel: "Details:",
+                logUnavailabilitySet: "Mark Unavailability",
+                logUnavailabilitySetDetails: "Marked unavailable on {date}",
+                logUnavailabilityRemove: "Cancel Unavailability",
+                logUnavailabilityRemoveDetails: "Removed unavailability for {date}",
+                auditLimitNote: "Showing up to the latest 1,000 actions",
+                auditStaffFilter: "Filter by staff member:",
+                auditAllStaff: "All staff members",
+                auditActionFilter: "Filter by action:",
+                auditAllActions: "All actions",
+                auditNoResults: "No actions match these filters.",
+                replacementStaffLabel: "Choose a replacement with the same role:",
+                selectReplacement: "Select a replacement staff member...",
+                noReplacementAvailable: "No available staff member with the same role for this date. The request cannot be approved.",
+                replacementRequired: "Select a same-role replacement before approving this request.",
+                replacementNoLongerAvailable: "The selected replacement is no longer available. Refresh and choose another.",
+                approveCancellation: "Approve replacement",
+                rejectCancellation: "Reject request",
                 auditTitle: "📜 System Audit Log:"
             },
             el: {
@@ -301,9 +388,48 @@
                 selectBranchManagerPlaceholder: "Επιλέξτε διευθυντή καταστήματος...",
                 addBranchBtn: "Προσθήκη Καταστήματος",
                 existingBranchesTitle: "Υπάρχοντα Καταστήματα & Διευθυντές:",
+                branchLegendTitle: "Υπόμνημα χρωμάτων καταστημάτων",
                 teamMgmtTitle: "Διαχείριση Ομάδας & Δικαιώματα",
                 addMusicianBtn: "Προσθήκη Μέλους",
                 existingTeamTitle: "Μουσικοί, Τραγουδιστές & Διευθυντές:",
+                branchManagerLabel: "Διευθυντής καταστήματος:",
+                branchNotAssigned: "Δεν έχει οριστεί",
+                editBtn: "Επεξεργασία",
+                deleteBtn: "Διαγραφή",
+                makeAdminBtn: "Ορισμός ως διαχειριστή",
+                removeAdminBtn: "Αφαίρεση διαχειριστή",
+                systemAdminBadge: "Διαχειριστής συστήματος",
+                inactiveStatus: "Ανενεργός",
+                activeStatus: "Ενεργός",
+                branchLabel: "Κατάστημα:",
+                noPhoneLabel: "Χωρίς τηλέφωνο",
+                updateBranchBtn: "Ενημέρωση καταστήματος",
+                updateMusicianBtn: "Ενημέρωση μέλους",
+                backupTitle: "💾 Αντίγραφο ασφαλείας",
+                downloadBackupBtn: "📥 Λήψη αντιγράφου (JSON)",
+                lockdownTitle: "🔒 Κλείδωμα συστήματος (Kill Switch)",
+                lockdownButton: "Κλείδωμα / Ξεκλείδωμα",
+                resetTitle: "🗑️ Επαναφορά συστήματος",
+                resetButton: "Πλήρης επαναφορά",
+                actionByLabel: "Εκτελέστηκε από:",
+                detailsLabel: "Λεπτομέρειες:",
+                logUnavailabilitySet: "Δήλωση μη διαθεσιμότητας",
+                logUnavailabilitySetDetails: "Δηλώθηκε μη διαθεσιμότητα στις {date}",
+                logUnavailabilityRemove: "Ακύρωση μη διαθεσιμότητας",
+                logUnavailabilityRemoveDetails: "Αφαιρέθηκε ο αποκλεισμός για τις {date}",
+                auditLimitNote: "Εμφανίζονται έως οι 1.000 πιο πρόσφατες ενέργειες",
+                auditStaffFilter: "Φιλτράρισμα ανά μέλος ομάδας:",
+                auditAllStaff: "Όλα τα μέλη ομάδας",
+                auditActionFilter: "Φιλτράρισμα ανά ενέργεια:",
+                auditAllActions: "Όλες οι ενέργειες",
+                auditNoResults: "Δεν βρέθηκαν ενέργειες για αυτά τα φίλτρα.",
+                replacementStaffLabel: "Επιλογή αντικαταστάτη με τον ίδιο ρόλο:",
+                selectReplacement: "Επιλέξτε αντικαταστάτη από την ομάδα...",
+                noReplacementAvailable: "Δεν υπάρχει διαθέσιμο μέλος με τον ίδιο ρόλο για αυτή την ημερομηνία. Δεν είναι δυνατή η έγκριση.",
+                replacementRequired: "Επιλέξτε αντικαταστάτη με τον ίδιο ρόλο πριν από την έγκριση.",
+                replacementNoLongerAvailable: "Ο επιλεγμένος αντικαταστάτης δεν είναι πλέον διαθέσιμος. Ανανεώστε και επιλέξτε άλλον.",
+                approveCancellation: "Έγκριση αντικατάστασης",
+                rejectCancellation: "Απόρριψη αιτήματος",
                 auditTitle: "📜 Καταγραφή Ενεργειών Συστήματος:"
             }
         };
@@ -328,6 +454,21 @@
             });
 
             applyTranslations();
+            if (document.getElementById('edit-branch-id').value) {
+                document.getElementById('branch-submit-btn').textContent = i18n[currentLang].updateBranchBtn;
+            }
+            if (document.getElementById('edit-musician-id').value) {
+                document.getElementById('musician-submit-btn').textContent = i18n[currentLang].updateMusicianBtn;
+            }
+            if (isAdmin && !document.getElementById('tab-admin').classList.contains('hidden')) {
+                loadAdminData();
+            }
+            if (!document.getElementById('tab-my-logs').classList.contains('hidden')) {
+                loadMyPersonalLogsView();
+            }
+            if (isSuperOwner && !document.getElementById('tab-audit').classList.contains('hidden')) {
+                loadAuditLogsView();
+            }
             if (monthEvents.length > 0 || currentBranchId !== undefined) {
                 loadCalendarView();
                 loadUnavailabilityCalendar();
@@ -363,6 +504,7 @@
         let isAdmin = false;
         let isBranchManager = false;
         let isSuperOwner = false;
+        let superOwnerAuditLogs = [];
         let currentUserPhone = '';
         let currentUserName = '';
         let userManagedBranchId = '';
@@ -550,6 +692,7 @@
         };
 
         async function logAction(actionType, details, category = "כללי", overridePhone = null, overrideName = null) {
+            if (actionType === "התחברות" || actionType === "התנתקות") return;
             try {
                 await addDoc(collection(db, "audit_logs"), {
                     timestamp: new Date(),
@@ -1193,7 +1336,7 @@
                     document.getElementById('edit-musician-id').value = '';
                     document.getElementById('musician-phone').disabled = false;
                     document.getElementById('phone-edit-note').classList.add('hidden');
-                    document.getElementById('musician-submit-btn').textContent = 'הוסף איש צוות';
+                    document.getElementById('musician-submit-btn').textContent = i18n[currentLang].addMusicianBtn;
                     alert("איש הצוות עודכן בהצלחה!");
                 } else {
                     await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active", isAdmin: false });
@@ -1218,22 +1361,23 @@
         }
         async function loadAdminData() {
             if(!isAdmin) return;
+            const t = i18n[currentLang];
             const bSnap = await getDocs(collection(db, "branches"));
             const bList = document.getElementById('branches-list');
-            bList.innerHTML = '<h4>סניפים קיימים ומנהלים:</h4>';
+            bList.innerHTML = `<h4>${t.existingBranchesTitle}</h4>`;
             bSnap.forEach(d => {
                 const data = d.data();
                 bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
-                    <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 מנהל סניף: ${data.managerName || 'לא הוגדר'} | 📱 ${data.managerPhone || ''}</small></span>
+                    <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 ${t.branchManagerLabel} ${data.managerName || t.branchNotAssigned} | 📱 ${data.managerPhone || ''}</small></span>
                     <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">ערוך</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">מחק</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">${t.editBtn}</button>
+                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">${t.deleteBtn}</button>
                     </div>
                 </div>`;
             });
 
             const mList = document.getElementById('musicians-list');
-            mList.innerHTML = '<h4 style="margin-top:10px;">צוות נגנים, זמרים ומנהלים:</h4>';
+            mList.innerHTML = `<h4 style="margin-top:10px;">${t.existingTeamTitle}</h4>`;
             allMusicians.forEach(m => {
                 const isInactive = m.status === 'inactive';
                 const isItemAdmin = m.isAdmin === true;
@@ -1241,17 +1385,17 @@
                 let adminToggleBtn = '';
                 if (isSuperOwner && cleanPhone(m.phone) !== "0547771121") {
                     if (isItemAdmin) {
-                        adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">הסר מנהל</button>`;
+                        adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
                     } else {
-                        adminToggleBtn = `<button type="button" class="btn-success" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', true)">הגדר כמנהל</button>`;
+                        adminToggleBtn = `<button type="button" class="btn-success" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', true)">${t.makeAdminBtn}</button>`;
                     }
                 }
 
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
-                    <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? '<span class="badge" style="background:var(--accent-gold); color:#000;">מנהל מערכת</span>' : ''} ${m.branchName ? `<small>| סניף: ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? 'לא פעיל' : 'פעיל'}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || 'אין טלפון'}</small></span>
+                    <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? `<span class="badge" style="background:var(--accent-gold); color:#000;">${t.systemAdminBadge}</span>` : ''} ${m.branchName ? `<small>| ${t.branchLabel} ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? t.inactiveStatus : t.activeStatus}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || t.noPhoneLabel}</small></span>
                     <div style="display:flex; gap:5px; align-items:center;">
                         ${adminToggleBtn}
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">ערוך</button>
+                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBtn}</button>
                     </div>
                 </div>`;
             });
@@ -1294,7 +1438,7 @@
                 if (colorContainer) colorContainer.classList.add('hidden');
             }
 
-            document.getElementById('branch-submit-btn').textContent = 'עדכן סניף';
+            document.getElementById('branch-submit-btn').textContent = i18n[currentLang].updateBranchBtn;
             document.getElementById('branch-cancel-btn').classList.remove('hidden');
             
             const formElement = document.getElementById('add-branch-form');
@@ -1312,7 +1456,7 @@
             const colorContainer = document.getElementById('branch-color-container');
             if (colorContainer) colorContainer.classList.remove('hidden');
 
-            document.getElementById('branch-submit-btn').textContent = 'הוסף סניף';
+            document.getElementById('branch-submit-btn').textContent = i18n[currentLang].addBranchBtn;
             document.getElementById('branch-cancel-btn').classList.add('hidden');
         };
 
@@ -1327,7 +1471,7 @@
             document.getElementById('phone-edit-note').classList.remove('hidden');
 
             document.getElementById('musician-status').value = status || 'active';
-            document.getElementById('musician-submit-btn').textContent = 'עדכן איש צוות';
+            document.getElementById('musician-submit-btn').textContent = i18n[currentLang].updateMusicianBtn;
             
             const formElement = document.getElementById('add-musician-form');
             if (formElement) {
@@ -1468,6 +1612,7 @@
                     <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">${t.nextMonth}</button>
                 </div>
                 <div id="calendar-grid" class="calendar-grid"></div>
+                <div id="branch-legend" class="branch-legend"></div>
             `;
 
             const firstDay = new Date(currentYear, currentMonth, 1).getDay();
@@ -1501,6 +1646,18 @@
             }
 
             document.getElementById('calendar-grid').innerHTML = gridHTML;
+            const legendBranches = allBranches.filter(branch => !currentBranchId || branch.id === currentBranchId);
+            document.getElementById('branch-legend').innerHTML = `
+                <h4>${t.branchLegendTitle}</h4>
+                <div class="branch-legend-items" role="list">
+                    ${legendBranches.map(branch => `
+                        <span class="branch-legend-item" role="listitem">
+                            <span class="branch-legend-swatch" aria-hidden="true" style="background-color:${branch.color || '#1e88e5'}"></span>
+                            <span>${branch.name}</span>
+                        </span>
+                    `).join('')}
+                </div>
+            `;
         }
 
         async function loadUnavailabilityCalendar() {
@@ -1943,22 +2100,109 @@
             logAction("ייצוא דוח", `הורד דוח הופעות לאקסל (${events.length} הופעות)`, "דוחות");
         };
 
+        function translateAuditLog(log, t) {
+            let action = log.actionType || '';
+            let details = log.details || '';
+
+            if (action === "התחברות") action = t.actionLogin;
+            if (action === "התנתקות") action = t.actionLogout;
+            if (details === "משתמש התחבר בהצלחה למערכת") details = t.descLoginSuccess;
+            if (details === "משתמש התנתק מהמערכת") details = t.descLogout;
+
+            if (action === "סימון אי-זמינות") {
+                action = t.logUnavailabilitySet;
+                const date = details.match(/\d{4}-\d{2}-\d{2}/);
+                if (date) details = t.logUnavailabilitySetDetails.replace('{date}', date[0]);
+            } else if (action === "ביטול אי-זמינות") {
+                action = t.logUnavailabilityRemove;
+                const date = details.match(/\d{4}-\d{2}-\d{2}/);
+                if (date) details = t.logUnavailabilityRemoveDetails.replace('{date}', date[0]);
+            }
+
+            return { action, details };
+        }
+
+        function getAuditStaffKey(log) {
+            return cleanPhone(log.userPhone) || log.userName || '';
+        }
+
+        function renderAuditLogs(logs, t) {
+            const results = document.getElementById('audit-logs-results');
+            if (logs.length === 0) {
+                results.innerHTML = `<p style="color:var(--text-muted);">${t.auditNoResults}</p>`;
+                return;
+            }
+
+            results.innerHTML = logs.map(log => {
+                const translated = translateAuditLog(log, t);
+                return `
+                    <div class="log-item">
+                        <strong style="color:var(--accent-gold);">${translated.action}</strong> | <small>${log.dateStr || ''}</small><br>
+                        <span>👤 ${t.actionByLabel} <strong>${log.userName || log.userPhone || ''}</strong></span><br>
+                        <span>📝 ${t.detailsLabel} ${translated.details}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.filterAuditLogs = () => {
+            if (!isSuperOwner) return;
+            const selectedStaff = document.getElementById('audit-staff-filter').value;
+            const selectedAction = document.getElementById('audit-action-filter').value;
+            const filteredLogs = superOwnerAuditLogs.filter(log =>
+                (!selectedStaff || getAuditStaffKey(log) === selectedStaff) &&
+                (!selectedAction || log.actionType === selectedAction)
+            );
+            renderAuditLogs(filteredLogs, i18n[currentLang]);
+        };
+
         async function loadAuditLogsView() {
             if (!isSuperOwner) return;
             const container = document.getElementById('audit-logs-container');
-            const snap = await getDocs(query(collection(db, "audit_logs"), orderBy("timestamp", "desc")));
-            let html = '<h4 data-i18n="auditTitle">📜 לוג פעולות מערכת:</h4><div style="margin-top:10px;">';
+            const t = i18n[currentLang];
+            const snap = await getDocs(query(collection(db, "audit_logs"), orderBy("timestamp", "desc"), limit(1000)));
+            superOwnerAuditLogs = [];
             snap.forEach(d => {
                 const log = d.data();
-                html += `
-                    <div class="log-item">
-                        <strong style="color:var(--accent-gold);">${log.actionType}</strong> | <small>${log.dateStr}</small><br>
-                        <span>👤 מבוצע ע"י: <strong>${log.userName}</strong></span><br>
-                        <span>📝 ${log.details}</span>
-                    </div>
-                `;
+                if (log.actionType !== "התחברות" && log.actionType !== "התנתקות") {
+                    superOwnerAuditLogs.push(log);
+                }
             });
-            container.innerHTML = html + '</div>';
+
+            container.innerHTML = `
+                <h4>${t.auditTitle}</h4>
+                <p class="audit-limit-note">${t.auditLimitNote}</p>
+                <div class="audit-filters">
+                    <label>${t.auditStaffFilter}
+                        <select id="audit-staff-filter" onchange="filterAuditLogs()"></select>
+                    </label>
+                    <label>${t.auditActionFilter}
+                        <select id="audit-action-filter" onchange="filterAuditLogs()"></select>
+                    </label>
+                </div>
+                <div id="audit-logs-results"></div>
+            `;
+
+            const staffFilter = document.getElementById('audit-staff-filter');
+            const actionFilter = document.getElementById('audit-action-filter');
+            staffFilter.add(new Option(t.auditAllStaff, ''));
+            actionFilter.add(new Option(t.auditAllActions, ''));
+
+            const staffOptions = new Map();
+            const actionOptions = new Map();
+            superOwnerAuditLogs.forEach(log => {
+                const staffKey = getAuditStaffKey(log);
+                if (staffKey && !staffOptions.has(staffKey)) {
+                    staffOptions.set(staffKey, log.userName || log.userPhone || staffKey);
+                }
+                if (log.actionType && !actionOptions.has(log.actionType)) {
+                    actionOptions.set(log.actionType, translateAuditLog(log, t).action);
+                }
+            });
+
+            staffOptions.forEach((name, key) => staffFilter.add(new Option(name, key)));
+            actionOptions.forEach((label, action) => actionFilter.add(new Option(label, action)));
+            renderAuditLogs(superOwnerAuditLogs, t);
         }
 
         async function loadMyPersonalLogsView() {
@@ -1984,18 +2228,12 @@
                 } else {
                     html += '<div style="margin-top:10px;">';
                     latest50.forEach(log => {
-                        let translatedAction = log.actionType;
-                        let translatedDetails = log.details;
-
-                        if (log.actionType === "התחברות") translatedAction = t.actionLogin;
-                        if (log.actionType === "התנתקות") translatedAction = t.actionLogout;
-                        if (log.details === "משתמש התחבר בהצלחה למערכת") translatedDetails = t.descLoginSuccess;
-                        if (log.details === "משתמש התנתק מהמערכת") translatedDetails = t.descLogout;
+                        const translated = translateAuditLog(log, t);
 
                         html += `
                             <div class="log-item">
-                                <strong style="color:var(--accent-gold);">${translatedAction || 'Action'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
-                                <span style="color:#fff;">📝 ${translatedDetails || ''}</span>
+                                <strong style="color:var(--accent-gold);">${translated.action || 'Action'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
+                                <span style="color:#fff;">📝 ${translated.details}</span>
                             </div>
                         `;
                     });
@@ -2006,6 +2244,54 @@
             } catch (err) {
                 container.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת היסטוריה: ${err.message}</p>`;
             }
+        }
+
+        async function getDaySchedulingSnapshot(date) {
+            const [eventsSnapshot, unavailableSnapshot] = await Promise.all([
+                getDocs(query(collection(db, "events"), where("date", "==", date))),
+                getDocs(query(collection(db, "unavailabilities"), where("date", "==", date)))
+            ]);
+
+            return {
+                dayEvents: eventsSnapshot.docs.map(eventDoc => ({ id: eventDoc.id, ...eventDoc.data() })),
+                unavailablePhones: new Set(unavailableSnapshot.docs.map(unavailableDoc => cleanPhone(unavailableDoc.data().phone)))
+            };
+        }
+
+        function findCancellationReplacementCandidates(request, schedulingSnapshot) {
+            const targetEvent = schedulingSnapshot.dayEvents.find(event => event.id === request.eventId);
+            if (!targetEvent) return { targetEvent: null, cancelledStaffEntry: '', candidates: [] };
+
+            const cancelledMusician = allMusicians.find(musician =>
+                cleanPhone(musician.phone) === cleanPhone(request.musicianPhone)
+            );
+            const assignedStaff = targetEvent.assignedStaff || [];
+            const cancelledStaffEntry = assignedStaff.find(staffEntry =>
+                cancelledMusician && staffEntry.startsWith(`${cancelledMusician.name} (`)
+            ) || assignedStaff.find(staffEntry => staffEntry.startsWith(`${request.musicianName} (`));
+            const roleFromAssignment = cancelledStaffEntry && cancelledStaffEntry.match(/\(([^()]*)\)$/)?.[1];
+            const cancelledRole = roleFromAssignment || (cancelledMusician && cancelledMusician.role);
+
+            if (!cancelledStaffEntry || !cancelledRole) {
+                return { targetEvent, cancelledStaffEntry: cancelledStaffEntry || '', candidates: [] };
+            }
+
+            const candidates = allMusicians.filter(musician => {
+                if (musician.status === 'inactive' || musician.role !== cancelledRole || !musician.phone) return false;
+                if (cleanPhone(musician.phone) === cleanPhone(request.musicianPhone)) return false;
+                if (schedulingSnapshot.unavailablePhones.has(cleanPhone(musician.phone))) return false;
+
+                const assignmentLabel = `${musician.name} (${musician.role})`;
+                const isAssignedThatDay = schedulingSnapshot.dayEvents.some(event =>
+                    (event.assignedStaff || []).some(staffEntry => {
+                        const assignedName = staffEntry.replace(/\s+\([^()]*\)$/, '').trim();
+                        return staffEntry === assignmentLabel || assignedName === musician.name;
+                    })
+                );
+                return !isAssignedThatDay;
+            });
+
+            return { targetEvent, cancelledStaffEntry, candidates };
         }
 
         async function loadNotificationsView() {
@@ -2032,21 +2318,55 @@
                     `;
                 });
 
-                allCancellationRequests.forEach(req => {
-                    if (req.status === 'pending' && isDateInCurrentMonth(req.eventDate)) {
-                        count++;
-                        html += `
-                            <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid #fb8c00;">
-                                <strong>📍 סניף: ${req.branchName}</strong> | 📅 ${req.eventDate}<br>
-                                <strong>👤 מבוקש ע"י:</strong> ${req.musicianName}
-                                <div style="margin-top:10px;">
-                                    <button class="btn-success" style="padding:6px;" onclick="approveRequest('${req.id}', '${req.eventId}', '${req.musicianName}', '${req.branchId}', '${req.musicianPhone}')">אישור</button>
-                                    <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}', '${req.musicianPhone}', '${req.branchName}')">דחה</button>
-                                </div>
-                            </div>
-                        `;
+                const pendingCancellationRequests = allCancellationRequests.filter(req =>
+                    req.status === 'pending' && isDateInCurrentMonth(req.eventDate)
+                );
+                const schedulingByDate = new Map();
+                const requestOptions = await Promise.all(pendingCancellationRequests.map(async req => {
+                    let schedulingSnapshot = schedulingByDate.get(req.eventDate);
+                    if (!schedulingSnapshot) {
+                        schedulingSnapshot = getDaySchedulingSnapshot(req.eventDate);
+                        schedulingByDate.set(req.eventDate, schedulingSnapshot);
                     }
+                    return {
+                        request: req,
+                        replacementInfo: findCancellationReplacementCandidates(req, await schedulingSnapshot)
+                    };
+                }));
+
+                const replacementsByRequest = new Map();
+                requestOptions.forEach(({ request: req, replacementInfo }) => {
+                    count++;
+                    replacementsByRequest.set(req.id, replacementInfo.candidates);
+                    const selectId = `cancellation-replacement-${req.id}`;
+                    const approveId = `approve-cancellation-${req.id}`;
+                    const hasCandidates = replacementInfo.candidates.length > 0;
+                    html += `
+                        <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid #fb8c00;">
+                            <strong>📍 סניף: ${req.branchName}</strong> | 📅 ${req.eventDate}<br>
+                            <strong>👤 מבוקש ע"י:</strong> ${req.musicianName}
+                            <div style="margin-top:10px;">
+                                ${hasCandidates ? `
+                                    <label for="${selectId}" style="font-size:0.85rem;">${t.replacementStaffLabel}</label>
+                                    <select id="${selectId}" onchange="document.getElementById('${approveId}').disabled = !this.value">
+                                        <option value="">${t.selectReplacement}</option>
+                                    </select>
+                                ` : `<p style="color:var(--danger); font-size:0.85rem;">${t.noReplacementAvailable}</p>`}
+                                <button id="${approveId}" class="btn-success" style="padding:6px;" disabled onclick="approveRequest('${req.id}', document.getElementById('${selectId}').value)">${t.approveCancellation}</button>
+                                <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}', '${req.musicianPhone}', '${req.branchName}')">${t.rejectCancellation}</button>
+                            </div>
+                        </div>
+                    `;
                 });
+
+                if (count === 0) html += `<p style="color:var(--text-muted);">${t.noNotifications}</p>`;
+                container.innerHTML = html;
+                replacementsByRequest.forEach((candidates, requestId) => {
+                    const select = document.getElementById(`cancellation-replacement-${requestId}`);
+                    if (!select) return;
+                    candidates.forEach(candidate => select.add(new Option(`${candidate.name} (${candidate.role})`, candidate.id)));
+                });
+                return;
             } else {
                 allCancellationRequests.forEach(req => {
                     if (cleanPhone(req.musicianPhone) === currentUserPhone && isDateInCurrentMonth(req.eventDate)) {
@@ -2063,21 +2383,53 @@
             container.innerHTML = html;
         }
 
-        window.approveRequest = async (requestId, eventId, cancellingMusicianName, branchId, cancellingPhone) => {
+        window.approveRequest = async (requestId, replacementMusicianId) => {
+            if (!isAdmin) return;
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
                 return;
             }
 
-            await updateDoc(doc(db, "cancellation_requests", requestId), { status: "approved" });
-            const eventRef = doc(db, "events", eventId);
-            const eventDoc = await getDoc(eventRef);
-            if (eventDoc.exists()) {
-                let staff = eventDoc.data().assignedStaff || [];
-                staff = staff.filter(s => !s.toLowerCase().includes(cancellingMusicianName.toLowerCase()));
-                await updateDoc(eventRef, { assignedStaff: staff });
+            const requestRef = doc(db, "cancellation_requests", requestId);
+            const requestDoc = await getDoc(requestRef);
+            if (!requestDoc.exists() || requestDoc.data().status !== 'pending') {
+                alert("הבקשה כבר טופלה או שאינה זמינה.");
+                loadNotificationsView();
+                return;
             }
-            await sendPushNotificationToUser(cancellingPhone, "✅ בקשת הביטול אושרה", "בקשתך לביטול הופעה אושרה.", 'notifs');
+
+            const request = { id: requestDoc.id, ...requestDoc.data() };
+            if (!replacementMusicianId) {
+                alert(i18n[currentLang].replacementRequired);
+                return;
+            }
+
+            const schedulingSnapshot = await getDaySchedulingSnapshot(request.eventDate);
+            const replacementInfo = findCancellationReplacementCandidates(request, schedulingSnapshot);
+            const replacement = replacementInfo.candidates.find(candidate => candidate.id === replacementMusicianId);
+            if (!replacement || !replacementInfo.targetEvent || !replacementInfo.cancelledStaffEntry) {
+                alert(i18n[currentLang].replacementNoLongerAvailable);
+                loadNotificationsView();
+                return;
+            }
+
+            const assignedStaff = (replacementInfo.targetEvent.assignedStaff || [])
+                .filter(staffEntry => staffEntry !== replacementInfo.cancelledStaffEntry);
+            assignedStaff.push(`${replacement.name} (${replacement.role})`);
+
+            const batch = writeBatch(db);
+            batch.update(doc(db, "events", request.eventId), { assignedStaff });
+            batch.update(requestRef, {
+                status: "approved",
+                replacementName: replacement.name,
+                replacementPhone: replacement.phone,
+                resolvedAt: new Date(),
+                resolvedBy: currentUserName
+            });
+            await batch.commit();
+
+            await sendPushNotificationToUser(request.musicianPhone, "✅ בקשת הביטול אושרה", `בקשתך אושרה. ${replacement.name} יחליף אותך בהופעה.`, 'notifs');
+            logAction("אישור בקשת ביטול עם מחליף", `${replacement.name} שובץ/ה במקום ${request.musicianName} בתאריך ${request.eventDate}`, "בקשות ביטול והחלפות");
             alert("הבקשה אושרה בהצלחה!");
             loadNotificationsView();
         };
@@ -2299,8 +2651,8 @@
                         <input type="tel" id="musician-phone" data-i18n-placeholder="phonePlaceholder" placeholder="מספר טלפון" required>
                         <p id="phone-edit-note" class="hidden" style="color:var(--text-muted); font-size:0.75rem;">⚠️ מספר טלפון אינו ניתן לשינוי.</p>
                         <select id="musician-status">
-                            <option value="active">פעיל</option>
-                            <option value="inactive">לא פעיל</option>
+                            <option value="active" data-i18n="activeStatus">פעיל</option>
+                            <option value="inactive" data-i18n="inactiveStatus">לא פעיל</option>
                         </select>
                         <button type="submit" id="musician-submit-btn" data-i18n="addMusicianBtn">הוסף איש צוות</button>
                     </form>
@@ -2308,18 +2660,18 @@
                 </div>
 
                 <div id="backup-btn-container" class="card hidden" style="border:1px solid var(--accent-gold);">
-                    <h3 style="color:var(--accent-gold); margin-bottom:8px;">💾 גיבוי נתונים</h3>
-                    <button type="button" class="btn-success" onclick="exportFullSystemBackup()">📥 הורד גיבוי (JSON)</button>
+                    <h3 style="color:var(--accent-gold); margin-bottom:8px;" data-i18n="backupTitle">💾 גיבוי נתונים</h3>
+                    <button type="button" class="btn-success" onclick="exportFullSystemBackup()" data-i18n="downloadBackupBtn">📥 הורד גיבוי (JSON)</button>
                 </div>
 
                 <div id="lockdown-btn-container" class="card hidden" style="border: 1px solid #ff9800;">
-                    <h3 style="color:#ff9800; margin-bottom:8px;">🔒 נעילת מערכת (Kill Switch)</h3>
-                    <button type="button" class="btn-danger" onclick="toggleSystemLockdown()" style="background-color:#ff9800; color:#000;">נעילה / שחרור</button>
+                    <h3 style="color:#ff9800; margin-bottom:8px;" data-i18n="lockdownTitle">🔒 נעילת מערכת (Kill Switch)</h3>
+                    <button type="button" class="btn-danger" onclick="toggleSystemLockdown()" style="background-color:#ff9800; color:#000;" data-i18n="lockdownButton">נעילה / שחרור</button>
                 </div>
                 
                 <div id="system-reset-section" class="card hidden" style="border: 2px solid var(--danger);">
-                    <h3 style="color:var(--danger); margin-bottom:8px;">🗑️ איפוס המערכת</h3>
-                    <button type="button" class="btn-danger" onclick="systemReset()">איפוס מוחלט</button>
+                    <h3 style="color:var(--danger); margin-bottom:8px;" data-i18n="resetTitle">🗑️ איפוס המערכת</h3>
+                    <button type="button" class="btn-danger" onclick="systemReset()" data-i18n="resetButton">איפוס מוחלט</button>
                 </div>
             </div>
 
