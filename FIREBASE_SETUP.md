@@ -2,11 +2,22 @@
 
 The app already writes push jobs to the `pending_pushes` collection. The Cloud Function in `functions/index.js` sends each new job through Firebase Cloud Messaging and removes it after delivery. Invalid device tokens are removed from `push_tokens`; transient delivery errors are retried by Cloud Functions.
 
-## Deploy the push function
+## Prepare admin authorization
+
+The password reset callable requires Firebase Authentication custom claims. This is deliberate: a role field read by the browser is not sufficient authorization for changing another user's password. The in-app admin promotion action now updates both the musician record and the Authentication claim; only the super owner claim can use that callable.
+
+1. In Firebase Console, open **Authentication > Users** and copy the UID for each system administrator.
+2. Set up Google Application Default Credentials locally with `gcloud auth application-default login`, using an account authorized to manage users in this Firebase project. Never commit a service-account key.
+3. From the `functions` directory, run `GCLOUD_PROJECT=salon-yevani-a node set-admin-claims.js <UID> admin` for each administrator. Run `GCLOUD_PROJECT=salon-yevani-a node set-admin-claims.js <OWNER_UID> superOwner` for the super owner. New claims take effect after that user signs out and signs in again.
+4. To revoke a claim, run `node set-admin-claims.js <UID> removeAdmin`.
+
+## Deploy Firebase functions
 
 1. Install Node.js 20 and the Firebase CLI, then sign in with `firebase login`.
-2. From this directory, run `firebase deploy --only functions:deliverPendingPush`.
+2. From the project directory, run `firebase deploy --only functions`.
 3. If prompted, enable Cloud Functions and the Cloud Messaging API for the Firebase project. Cloud Functions deployment may require the Blaze billing plan.
+
+When an administrator approves a password reset, the server changes the Firebase Authentication password and returns a newly generated temporary password to that administrator once. It is not stored in Firestore or sent in a push notification. The administrator must give it to the user through a private channel. The app requires the user to choose a permanent password before opening the main interface.
 
 ## Configure browser push tokens
 
