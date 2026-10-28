@@ -1464,13 +1464,25 @@
             const colorInput = document.getElementById('new-branch-color');
             const color = colorInput ? colorInput.value.toLowerCase() : '#d4af37';
 
-            const existingColorBranch = allBranches.find(b => b.id !== editId && b.color && b.color.toLowerCase() === color);
-            if (existingColorBranch) {
-                alert(`⚠️ הצבע שבחרת כבר בשימוש על ידי סניף "${existingColorBranch.name}". נא לבחור צבע ייחודי אחר.`);
-                return;
-            }
-
             try {
+                const normalizedName = name.replace(/\s+/g, ' ').toLowerCase();
+                const branchesSnapshot = await getDocs(collection(db, "branches"));
+                const duplicateBranch = branchesSnapshot.docs.find(branchDoc => {
+                    if (branchDoc.id === editId) return false;
+                    const existingName = String(branchDoc.data().name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+                    return existingName === normalizedName;
+                });
+                if (duplicateBranch) {
+                    alert(`כבר קיים סניף בשם "${duplicateBranch.data().name}". נא לבחור שם אחר.`);
+                    return;
+                }
+
+                const existingColorBranch = allBranches.find(b => b.id !== editId && b.color && b.color.toLowerCase() === color);
+                if (existingColorBranch) {
+                    alert(`⚠️ הצבע שבחרת כבר בשימוש על ידי סניף "${existingColorBranch.name}". נא לבחור צבע ייחודי אחר.`);
+                    return;
+                }
+
                 if (editId) {
                     const updatePayload = { name, managerId: managerSelect.value, managerName, managerPhone };
                     if (isSuperOwner && colorInput) {
