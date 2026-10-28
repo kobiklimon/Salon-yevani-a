@@ -110,7 +110,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
 
@@ -125,6 +125,8 @@
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        await setPersistence(auth, inMemoryPersistence);
+        await signOut(auth);
         const db = getFirestore(app);
         const messaging = getMessaging(app);
 
@@ -2174,7 +2176,7 @@
             if (isAdmin) {
                 musicianContainer.classList.remove('hidden');
                 musicianSelect.innerHTML = `<option value="">${t.allMusicians}</option>`;
-                allMusicians.forEach(m => {
+                allMusicians.filter(m => m.role !== "מנהל סניף").forEach(m => {
                     musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
                 });
             } else {
@@ -2226,9 +2228,9 @@
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
                 
-                const targetName = (isAdmin && selectedMusician) ? selectedMusician : currentUserName;
-                const userEntry = e.assignedStaff ? e.assignedStaff.find(s => s.toLowerCase().includes(targetName.toLowerCase())) : null;
-                const staffDisplay = userEntry || targetName;
+                const staffDisplay = selectedMusician
+                    ? (e.assignedStaff || []).find(staff => staff.toLowerCase().includes(selectedMusician.toLowerCase())) || selectedMusician
+                    : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
 
                 reportHTML += `
                     <tr>
@@ -2268,9 +2270,10 @@
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
                 
-                const targetName = (isAdmin && selectedMusician) ? selectedMusician : currentUserName;
-                const userEntry = e.assignedStaff ? e.assignedStaff.find(s => s.toLowerCase().includes(targetName.toLowerCase())) : null;
-                const staffStr = `"${userEntry || targetName}"`;
+                const staffDisplay = selectedMusician
+                    ? (e.assignedStaff || []).find(staff => staff.toLowerCase().includes(selectedMusician.toLowerCase())) || selectedMusician
+                    : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
+                const staffStr = `"${staffDisplay.replace(/"/g, '""')}"`;
 
                 csvContent += `${e.date},${bName},${e.time},${staffStr}\n`;
             });
