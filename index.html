@@ -113,6 +113,7 @@
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCis-H1d8436iH6vBkNfGWoy3ekkIDSflU",
@@ -129,6 +130,7 @@
         await signOut(auth);
         const db = getFirestore(app);
         const messaging = getMessaging(app);
+        const functions = getFunctions(app);
 
         // מילון תרגומים מלא ומעודכן לשפות (עברית, אנגלית, יוונית)
         const i18n = {
@@ -996,30 +998,32 @@
                 const isLocked = await checkSystemLockdownStatus();
                 if (isLocked) return;
 
+                const userDocSnap = await getDoc(doc(db, "users", user.uid));
+                if (userDocSnap.exists() && userDocSnap.data().mustChangePassword) {
+                    const newPassword = prompt("🔐 סיסמתך אופסה. כדי להמשיך, הגדר כעת סיסמה קבועה חדשה:");
+                    const passErr = newPassword ? validatePasswordRules(newPassword) : "יש להגדיר סיסמה כדי להמשיך.";
+
+                    if (passErr) {
+                        alert(passErr);
+                        await signOut(auth);
+                        return;
+                    }
+
+                    try {
+                        await updatePassword(user, newPassword);
+                        await updateDoc(doc(db, "users", user.uid), { mustChangePassword: false, tempPassword: null });
+                        logAction("החלפת סיסמה זמנית", "המשתמש עדכן בהצלחה סיסמה קבועה חדשה", "אבטחה והתחברות");
+                        alert("✅ הסיסמה החדשה נשמרה בהצלחה!");
+                    } catch (error) {
+                        alert("לא ניתן להשלים את החלפת הסיסמה: " + error.message);
+                        await signOut(auth);
+                        return;
+                    }
+                }
+
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
-
-                const userDocSnap = await getDoc(doc(db, "users", user.uid));
-                if (userDocSnap.exists() && userDocSnap.data().mustChangePassword) {
-                    setTimeout(async () => {
-                        const newPassword = prompt("🔐 סיסמתך אופסה לסיסמה זמנית.\nאנא הזן כעת סיסמה קבועה חדשה:");
-                        
-                        const passErr = validatePasswordRules(newPassword);
-                        if (newPassword && !passErr) {
-                            try {
-                                await updatePassword(auth.currentUser, newPassword);
-                                await updateDoc(doc(db, "users", user.uid), { mustChangePassword: false, tempPassword: null });
-                                alert("✅ הסיסמה החדשה נשמרה בהצלחה!");
-                                logAction("החלפת סיסמה זמנית", "המשתמש עדכן בהצלחה סיסמה קבועה חדשה", "אבטחה והתחברות");
-                            } catch (e) {
-                                alert("שגיאה בעדכון הסיסמה: " + e.message);
-                            }
-                        } else {
-                            alert("הסיסמה לא שונתה (" + (passErr || "בוטל") + "). תתבקש להחליף אותה שוב בהתחברות הבאה.");
-                        }
-                    }, 500);
-                }
 
                 await loadUnavailabilityData();
                 initPushToken(user.uid);
@@ -1266,33 +1270,21 @@
                 return;
             }
 
-            if (!confirm(`האם לאפס את הסיסמה עבור ${userName} לסיסמה הגנרית: Salon1234?`)) return;
+            if (!confirm(`לאפס את סיסמת ${userName}? תיווצר סיסמה זמנית חד-פעמית שתוצג רק לך. יש למסור אותה למשתמש בערוץ פרטי.`)) return;
 
             try {
-                await updateDoc(doc(db, "password_reset_requests", requestId), {
-                    status: "approved",
-                    resetBy: currentUserName,
-                    resetAt: new Date()
-                });
+                const resetPassword = httpsCallable(functions, "resetUserPassword");
+                const result = await resetPassword({ requestId });
+                const resetUserName = result.data.userName || userName;
+                logAction("איפוס סיסמה ע\"י מנהל", `אופסה סיסמת ${resetUserName} (${cleanPhone(userPhone)}) לסיסמה זמנית`, "אבטחה והתחברות");
 
-                const usersSnap = await getDocs(collection(db, "users"));
-                const matchingUsers = usersSnap.docs.filter(userDoc =>
-                    cleanPhone(userDoc.data().phone) === cleanPhone(userPhone)
-                );
-                await Promise.all(matchingUsers.map(userDoc =>
-                    updateDoc(doc(db, "users", userDoc.id), {
-                            mustChangePassword: true,
-                            tempPassword: "Salon1234"
-                    })
-                ));
-
-                await sendPushNotificationToUser(userPhone, "🔑 הסיסמה שלך אופסה!", "סיסמתך אופסה ל: Salon1234. בהתחברות הבאה תידרש לקבוע סיסמה חדשה.", 'login');
-                logAction("איפוס סיסמה ע\"י מנהל", `איפוס סיסמה בוצע עבור ${userName} (${userPhone}) לסיסמה גנרית`, "אבטחה והתחברות");
-
-                alert(`✅ הסיסמה של ${userName} אופסה בהצלחה ל-Salon1234 ונשלחה אליו התראת פוש!`);
+                const resetRecordNote = result.data.resetRequestRecorded
+                    ? ''
+                    : '\n\nאזהרה: לא ניתן לעדכן את סטטוס בקשת האיפוס. יש לבדוק זאת ב-Firestore.';
+                alert(`✅ הסיסמה של ${resetUserName} אופסה. הסיסמה הזמנית (להצגה חד-פעמית):\n\n${result.data.temporaryPassword}\n\nמסור אותה למשתמש בערוץ פרטי.${resetRecordNote}`);
                 loadNotificationsView();
             } catch (err) {
-                alert("שגיאה באיפוס הסיסמה: " + err.message);
+                alert("שגיאה באיפוס הסיסמה: " + (err.message || err));
             }
         };
 
@@ -1595,7 +1587,8 @@
             }
 
             try {
-                await updateDoc(doc(db, "musicians", musicianId), { isAdmin: makeAdmin });
+                const updateAdminRole = httpsCallable(functions, "setStaffAdminRole");
+                await updateAdminRole({ musicianId, makeAdmin });
                 const targetMusician = allMusicians.find(m => m.id === musicianId);
                 const actionDesc = makeAdmin ? "הוגדר כמנהל מערכת" : "הוסרה הרשאת מנהל מערכת";
                 
@@ -2568,7 +2561,7 @@
                             <span>👤 איש צוות: <strong>${req.userName}</strong> (📱 ${req.userPhone})</span>
                             <div style="margin-top:10px;">
                                 <button class="btn-success" style="padding:6px 12px; width:auto;" onclick="confirmResetPassword('${req.id}', '${req.userPhone}', '${req.userName}')">
-                                    🔄 אפס סיסמה ל-Salon1234
+                                    🔄 אפס סיסמה והצג קוד זמני
                                 </button>
                             </div>
                         </div>
