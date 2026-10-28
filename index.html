@@ -660,6 +660,40 @@
             return phone ? phone.replace(/\D/g, '') : '';
         }
 
+        function getAssignedStaffIds(event) {
+            if (Array.isArray(event.assignedStaffIds)) return event.assignedStaffIds;
+            if (Array.isArray(event.assignedStaffDetails)) {
+                return event.assignedStaffDetails.map(staff => staff.musicianId).filter(Boolean);
+            }
+
+            return [...new Set((event.assignedStaff || []).flatMap(assignment => {
+                const normalizedAssignment = String(assignment).trim().toLowerCase();
+                const matches = allMusicians.filter(musician =>
+                    `${musician.name} (${musician.role})`.trim().toLowerCase() === normalizedAssignment
+                );
+                return matches.length === 1 ? [matches[0].id] : [];
+            }))];
+        }
+
+        function getAssignedStaffDetails(event) {
+            if (Array.isArray(event.assignedStaffDetails)) return event.assignedStaffDetails;
+
+            return getAssignedStaffIds(event).map(musicianId => {
+                const musician = allMusicians.find(staff => staff.id === musicianId);
+                if (!musician) return null;
+                return {
+                    musicianId: musician.id,
+                    name: musician.name,
+                    role: musician.role,
+                    phoneId: cleanPhone(musician.phone)
+                };
+            }).filter(Boolean);
+        }
+
+        function isMusicianAssignedToEvent(event, musician) {
+            return Boolean(musician && getAssignedStaffIds(event).includes(musician.id));
+        }
+
         function phoneToEmail(phone) {
             return `user_${cleanPhone(phone)}@salonyevani.local`;
         }
@@ -767,7 +801,7 @@
         async function sendBroadcastPushToAll(title, body) {
             try {
                 const tokensSnap = await getDocs(collection(db, "push_tokens"));
-                tokensSnap.forEach(async (d) => {
+                await Promise.all(tokensSnap.docs.map(async d => {
                     const data = d.data();
                     if (data.token) {
                         await addDoc(collection(db, "pending_pushes"), {
@@ -778,7 +812,7 @@
                             createdAt: new Date()
                         });
                     }
-                });
+                }));
             } catch (e) {
                 console.error("Error broadcast push:", e);
             }
@@ -956,7 +990,8 @@
             if (user) {
                 await loadMusiciansData();
                 await loadBranchesSelect();
-                await checkUserAdminStatus(user);
+                const isActiveUser = await checkUserAdminStatus(user);
+                if (!isActiveUser) return;
 
                 const isLocked = await checkSystemLockdownStatus();
                 if (isLocked) return;
@@ -1098,8 +1133,8 @@
             
             if (matched && matched.status === 'inactive') {
                 alert("חשבונך הוגדר כלא פעיל במערכת. פנה למנהל.");
-                signOut(auth);
-                return;
+                await signOut(auth);
+                return false;
             }
 
             currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
@@ -1118,6 +1153,7 @@
                 isAdmin = false;
             }
 
+            userManagedBranchId = '';
             const managedBranch = allBranches.find(b => cleanPhone(b.managerPhone) === currentUserPhone || (matched && matched.role === "מנהל סניף" && matched.branchName === b.name));
             if (managedBranch) {
                 isBranchManager = true;
@@ -1158,6 +1194,7 @@
                 if (lockdownContainer) lockdownContainer.classList.add('hidden');
                 if (resetSection) resetSection.classList.add('hidden');
             }
+            return true;
         }
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1208,12 +1245,12 @@
                 });
 
                 const adminsSnap = await getDocs(collection(db, "users"));
-                adminsSnap.forEach(async (docUser) => {
+                await Promise.all(adminsSnap.docs.map(async docUser => {
                     const uData = docUser.data();
-                    if (uData.role === 'admin' || uData.isAdmin) {
+                    if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
                         await sendPushNotificationToUser(uData.phone, "🔑 בקשת איפוס סיסמה", `${userName} ביקש/ה איפוס סיסמה במערכת`, 'notifs');
                     }
-                });
+                }));
 
                 logAction("בקשת איפוס סיסמה", `נשלחה בקשת איפוס סיסמה עבור ${userName} (${cleaned})`, "אבטחה והתחברות", cleaned, userName);
                 alert("פנייתך עברה למנהלי המערכת. ברגע שהסיסמה תאופס, תקבל התראה.");
@@ -1239,14 +1276,15 @@
                 });
 
                 const usersSnap = await getDocs(collection(db, "users"));
-                usersSnap.forEach(async (uDoc) => {
-                    if (cleanPhone(uDoc.data().phone) === cleanPhone(userPhone)) {
-                        await updateDoc(doc(db, "users", uDoc.id), {
+                const matchingUsers = usersSnap.docs.filter(userDoc =>
+                    cleanPhone(userDoc.data().phone) === cleanPhone(userPhone)
+                );
+                await Promise.all(matchingUsers.map(userDoc =>
+                    updateDoc(doc(db, "users", userDoc.id), {
                             mustChangePassword: true,
                             tempPassword: "Salon1234"
-                        });
-                    }
-                });
+                    })
+                ));
 
                 await sendPushNotificationToUser(userPhone, "🔑 הסיסמה שלך אופסה!", "סיסמתך אופסה ל: Salon1234. בהתחברות הבאה תידרש לקבוע סיסמה חדשה.", 'login');
                 logAction("איפוס סיסמה ע\"י מנהל", `איפוס סיסמה בוצע עבור ${userName} (${userPhone}) לסיסמה גנרית`, "אבטחה והתחברות");
@@ -1737,11 +1775,9 @@
                 monthEvents = [];
                 snap.forEach(d => {
                     const eventData = d.data();
-                    const isBranchManagerForEvent = isBranchManager && (userManagedBranchId === eventData.branchId || !userManagedBranchId);
-                    const isUserAssigned = eventData.assignedStaff && eventData.assignedStaff.some(staffStr => {
-                        const lowerStaff = staffStr.toLowerCase();
-                        return lowerStaff.includes(currentUserName.toLowerCase()) || lowerStaff.includes(currentUserPhone);
-                    });
+                    const isBranchManagerForEvent = isBranchManager && userManagedBranchId === eventData.branchId;
+                    const currentMusician = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
+                    const isUserAssigned = isMusicianAssignedToEvent(eventData, currentMusician);
 
                     if (isAdmin || isBranchManagerForEvent || isUserAssigned) {
                         monthEvents.push({ id: d.id, ...eventData });
@@ -1943,13 +1979,13 @@
                 activeMusiciansAndSingers.forEach(m => {
                     const isUserMarkedUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === cleanPhone(m.phone) && u.date === dateStr);
                     let isAlreadyAssigned = false;
-                    if (existingEventInThisBranch && existingEventInThisBranch.assignedStaff) {
-                        isAlreadyAssigned = existingEventInThisBranch.assignedStaff.some(s => s.toLowerCase().includes(m.name.toLowerCase()) || s.includes(m.phone));
+                    if (existingEventInThisBranch) {
+                        isAlreadyAssigned = isMusicianAssignedToEvent(existingEventInThisBranch, m);
                     }
 
                     rosterContainer.innerHTML += `
                         <div class="roster-item" id="item-m-${m.id}">
-                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} onchange="updateRoleDisabling()">
+                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-musician-id="${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} onchange="updateRoleDisabling()">
                             <label for="m-${m.id}">
                                 ${m.name} <span class="badge">${m.role}</span>
                                 ${isUserMarkedUnavail ? `<br><small style="color:var(--danger); font-size:0.7rem;">(${i18n[currentLang].notAvailable})</small>` : ''}
@@ -1978,8 +2014,7 @@
                     modalDayEvents,
                     currentBranchId,
                     document.getElementById('event-time-input').value,
-                    cb.dataset.name,
-                    role
+                    cb.dataset.musicianId
                 );
                 const isRoleAlreadySelected = !cb.checked && selectedRoles.includes(role);
                 cb.disabled = (isAssignedElsewhere && !cb.checked) || isRoleAlreadySelected;
@@ -1990,12 +2025,11 @@
             });
         };
 
-        function isMusicianAssignedToOtherBranchAtTime(events, branchId, time, musicianName, musicianRole) {
-            const assignment = `${musicianName} (${musicianRole})`.trim().toLowerCase();
+        function isMusicianAssignedToOtherBranchAtTime(events, branchId, time, musicianId) {
             return events.some(event =>
                 event.branchId !== branchId &&
                 event.time === time &&
-                (event.assignedStaff || []).some(staffEntry => String(staffEntry).trim().toLowerCase() === assignment)
+                getAssignedStaffIds(event).includes(musicianId)
             );
         }
         function renderExistingEvents(dateStr) {
@@ -2015,10 +2049,8 @@
                 const bName = branch ? branch.name : 'סניף';
                 const bColor = branch ? (branch.color || '#d4af37') : '#d4af37';
 
-                const isUserInEvent = !isAdmin && e.assignedStaff && e.assignedStaff.some(s => {
-                    const lower = s.toLowerCase();
-                    return lower.includes(currentUserName.toLowerCase()) || lower.includes(currentUserPhone);
-                });
+                const currentMusician = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
+                const isUserInEvent = !isAdmin && isMusicianAssignedToEvent(e, currentMusician);
 
                 const pendingRequest = allCancellationRequests.find(req => 
                     req.eventId === e.id && 
@@ -2177,7 +2209,7 @@
                 musicianContainer.classList.remove('hidden');
                 musicianSelect.innerHTML = `<option value="">${t.allMusicians}</option>`;
                 allMusicians.filter(m => m.role !== "מנהל סניף").forEach(m => {
-                    musicianSelect.innerHTML += `<option value="${m.name}">${m.name} (${m.role})</option>`;
+                    musicianSelect.innerHTML += `<option value="${m.id}">${m.name} (${m.role})</option>`;
                 });
             } else {
                 musicianContainer.classList.add('hidden');
@@ -2195,7 +2227,7 @@
                 let matchBranch = true;
 
                 if (selectedMusician) {
-                    matchMusician = e.assignedStaff && e.assignedStaff.some(s => s.toLowerCase().includes(selectedMusician.toLowerCase()));
+                    matchMusician = getAssignedStaffIds(e).includes(selectedMusician);
                 }
                 if (selectedBranchId) {
                     matchBranch = e.branchId === selectedBranchId;
@@ -2228,8 +2260,10 @@
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
                 
+                const selectedStaffMember = allMusicians.find(musician => musician.id === selectedMusician);
+                const selectedAssignment = selectedStaffMember && `${selectedStaffMember.name} (${selectedStaffMember.role})`;
                 const staffDisplay = selectedMusician
-                    ? (e.assignedStaff || []).find(staff => staff.toLowerCase().includes(selectedMusician.toLowerCase())) || selectedMusician
+                    ? (e.assignedStaff || []).find(staff => staff === selectedAssignment) || selectedAssignment
                     : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
 
                 reportHTML += `
@@ -2270,8 +2304,10 @@
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
                 
+                const selectedStaffMember = allMusicians.find(musician => musician.id === selectedMusician);
+                const selectedAssignment = selectedStaffMember && `${selectedStaffMember.name} (${selectedStaffMember.role})`;
                 const staffDisplay = selectedMusician
-                    ? (e.assignedStaff || []).find(staff => staff.toLowerCase().includes(selectedMusician.toLowerCase())) || selectedMusician
+                    ? (e.assignedStaff || []).find(staff => staff === selectedAssignment) || selectedAssignment
                     : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
                 const staffStr = `"${staffDisplay.replace(/"/g, '""')}"`;
 
@@ -2492,8 +2528,10 @@
             );
             const assignedStaff = targetEvent.assignedStaff || [];
             const cancelledStaffEntry = assignedStaff.find(staffEntry =>
-                cancelledMusician && staffEntry.startsWith(`${cancelledMusician.name} (`)
-            ) || assignedStaff.find(staffEntry => staffEntry.startsWith(`${request.musicianName} (`));
+                cancelledMusician && staffEntry === `${cancelledMusician.name} (${cancelledMusician.role})`
+            ) || assignedStaff.find(staffEntry =>
+                String(staffEntry).startsWith(`${request.musicianName} (`)
+            );
             const roleFromAssignment = cancelledStaffEntry && cancelledStaffEntry.match(/\(([^()]*)\)$/)?.[1];
             const cancelledRole = roleFromAssignment || (cancelledMusician && cancelledMusician.role);
 
@@ -2506,13 +2544,7 @@
                 if (cleanPhone(musician.phone) === cleanPhone(request.musicianPhone)) return false;
                 if (schedulingSnapshot.unavailablePhones.has(cleanPhone(musician.phone))) return false;
 
-                const assignmentLabel = `${musician.name} (${musician.role})`;
-                const isAssignedThatDay = schedulingSnapshot.dayEvents.some(event =>
-                    (event.assignedStaff || []).some(staffEntry => {
-                        const assignedName = staffEntry.replace(/\s+\([^()]*\)$/, '').trim();
-                        return staffEntry === assignmentLabel || assignedName === musician.name;
-                    })
-                );
+                const isAssignedThatDay = schedulingSnapshot.dayEvents.some(event => isMusicianAssignedToEvent(event, musician));
                 return !isAssignedThatDay;
             });
 
@@ -2641,9 +2673,23 @@
             const assignedStaff = (replacementInfo.targetEvent.assignedStaff || [])
                 .filter(staffEntry => staffEntry !== replacementInfo.cancelledStaffEntry);
             assignedStaff.push(`${replacement.name} (${replacement.role})`);
+            const cancelledMusician = allMusicians.find(musician =>
+                cleanPhone(musician.phone) === cleanPhone(request.musicianPhone)
+            );
+            const assignedStaffIds = getAssignedStaffIds(replacementInfo.targetEvent)
+                .filter(musicianId => musicianId !== cancelledMusician?.id);
+            assignedStaffIds.push(replacement.id);
+            const assignedStaffDetails = getAssignedStaffDetails(replacementInfo.targetEvent)
+                .filter(staff => staff.musicianId !== cancelledMusician?.id);
+            assignedStaffDetails.push({
+                musicianId: replacement.id,
+                name: replacement.name,
+                role: replacement.role,
+                phoneId: cleanPhone(replacement.phone)
+            });
 
             const batch = writeBatch(db);
-            batch.update(doc(db, "events", request.eventId), { assignedStaff });
+            batch.update(doc(db, "events", request.eventId), { assignedStaff, assignedStaffIds, assignedStaffDetails });
             batch.update(requestRef, {
                 status: "approved",
                 replacementName: replacement.name,
@@ -2684,6 +2730,8 @@
             const date = document.getElementById('event-date-input').value;
             const time = document.getElementById('event-time-input').value;
             const assignedStaff = [];
+            const assignedStaffIds = [];
+            const assignedStaffDetails = [];
             const selectedRoles = [];
 
             const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", date)));
@@ -2691,10 +2739,17 @@
             document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
                 selectedRoles.push(cb.getAttribute('data-role'));
                 assignedStaff.push(cb.value);
+                assignedStaffIds.push(cb.dataset.musicianId);
+                assignedStaffDetails.push({
+                    musicianId: cb.dataset.musicianId,
+                    name: cb.dataset.name,
+                    role: cb.dataset.role,
+                    phoneId: cleanPhone(cb.dataset.phone)
+                });
             });
 
             const conflictingMusician = [...document.querySelectorAll('.musician-checkbox:checked')].find(cb =>
-                isMusicianAssignedToOtherBranchAtTime(currentDayEvents, currentBranchId, time, cb.dataset.name, cb.dataset.role)
+                isMusicianAssignedToOtherBranchAtTime(currentDayEvents, currentBranchId, time, cb.dataset.musicianId)
             );
             if (conflictingMusician) {
                 alert(`${conflictingMusician.dataset.name} כבר משובץ/ת בסניף אחר באותה שעה. נא לבחור איש צוות אחר.`);
@@ -2711,10 +2766,10 @@
             const existingEvent = currentDayEvents.find(ev => ev.branchId === currentBranchId);
 
             if (existingEvent) {
-                await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff });
+                await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff, assignedStaffIds, assignedStaffDetails });
                 alert("הופעה עודכנה בהצלחה!");
             } else {
-                await addDoc(collection(db, "events"), { branchId: currentBranchId, date, time, assignedStaff, createdAt: new Date() });
+                await addDoc(collection(db, "events"), { branchId: currentBranchId, date, time, assignedStaff, assignedStaffIds, assignedStaffDetails, createdAt: new Date() });
                 alert("הופעה חדשה נשמרה בהצלחה!");
             }
 
