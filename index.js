@@ -13,102 +13,121 @@ const db = getFirestore();
 const SUPER_OWNER_PHONE = "0547771121";
 
 exports.setStaffAdminRole = onCall(async request => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "יש להתחבר כדי לשנות הרשאות.");
-    }
-    const callerEmail = String(request.auth.token.email || "").toLowerCase();
-    if (callerEmail !== `user_${SUPER_OWNER_PHONE}@salonyevani.local`) {
-        throw new HttpsError("permission-denied", "רק בעל המערכת יכול לשנות הרשאות מנהל.");
-    }
-
-    const musicianId = request.data && request.data.musicianId;
-    const makeAdmin = request.data && request.data.makeAdmin;
-    if (typeof musicianId !== "string" || !musicianId || typeof makeAdmin !== "boolean") {
-        throw new HttpsError("invalid-argument", "פרטי שינוי ההרשאה אינם תקינים.");
-    }
-
-    const musicianRef = db.collection("musicians").doc(musicianId);
-    const musicianSnapshot = await musicianRef.get();
-    if (!musicianSnapshot.exists) {
-        throw new HttpsError("not-found", "איש הצוות לא נמצא.");
-    }
-
-    const targetPhone = normalizePhone(musicianSnapshot.data().phone);
-    if (!targetPhone) {
-        throw new HttpsError("failed-precondition", "לאיש הצוות לא הוגדר מספר טלפון תקין.");
-    }
-
-    const auth = getAuth();
-    let targetUser = null;
+    let operation = "אימות בעל המערכת";
     try {
-        targetUser = await auth.getUserByEmail(`user_${targetPhone}@salonyevani.local`);
-        const targetProfile = await db.collection("users").doc(targetUser.uid).get();
-        if (!targetProfile.exists || normalizePhone(targetProfile.data().phone) !== targetPhone) {
-            targetUser = null;
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "יש להתחבר כדי לשנות הרשאות.");
         }
-    } catch (error) {
-        if (error.code !== "auth/user-not-found") throw error;
-    }
-
-    if (!targetUser) {
-        const usersSnapshot = await db.collection("users").get();
-        const matchingUsers = usersSnapshot.docs.filter(userDocument =>
-            normalizePhone(userDocument.data().phone) === targetPhone
-        );
-        if (matchingUsers.length !== 1) {
-            throw new HttpsError("failed-precondition", "לא נמצא חשבון יחיד התואם לאיש הצוות. יש לוודא שמספר הטלפון מופיע פעם אחת בלבד בפרופילי המשתמשים.");
+        const callerEmail = String(request.auth.token.email || "").toLowerCase();
+        if (callerEmail !== `user_${SUPER_OWNER_PHONE}@salonyevani.local`) {
+            throw new HttpsError("permission-denied", "רק בעל המערכת יכול לשנות הרשאות מנהל.");
         }
-        targetUser = await auth.getUser(matchingUsers[0].id);
-    }
 
-    const previousClaims = { ...(targetUser.customClaims || {}) };
+        const musicianId = request.data && request.data.musicianId;
+        const makeAdmin = request.data && request.data.makeAdmin;
+        if (typeof musicianId !== "string" || !musicianId || typeof makeAdmin !== "boolean") {
+            throw new HttpsError("invalid-argument", "פרטי שינוי ההרשאה אינם תקינים.");
+        }
 
-    const previousAdminStatus = musicianSnapshot.data().isAdmin === true;
-    try {
-        await musicianRef.update({ isAdmin: makeAdmin });
+        const musicianRef = db.collection("musicians").doc(musicianId);
+        operation = "איתור איש הצוות";
+        const musicianSnapshot = await musicianRef.get();
+        if (!musicianSnapshot.exists) {
+            throw new HttpsError("not-found", "איש הצוות לא נמצא.");
+        }
+
+        const targetPhone = normalizePhone(musicianSnapshot.data().phone);
+        if (!targetPhone) {
+            throw new HttpsError("failed-precondition", "לאיש הצוות לא הוגדר מספר טלפון תקין.");
+        }
+
+        const auth = getAuth();
+        let targetUser = null;
+        operation = "איתור חשבון Firebase של איש הצוות";
+        try {
+            targetUser = await auth.getUserByEmail(`user_${targetPhone}@salonyevani.local`);
+            const targetProfile = await db.collection("users").doc(targetUser.uid).get();
+            if (!targetProfile.exists || normalizePhone(targetProfile.data().phone) !== targetPhone) {
+                targetUser = null;
+            }
+        } catch (error) {
+            if (error.code !== "auth/user-not-found") throw error;
+        }
+
+        if (!targetUser) {
+            operation = "התאמת חשבון המשתמש למספר הטלפון";
+            const usersSnapshot = await db.collection("users").get();
+            const matchingUsers = usersSnapshot.docs.filter(userDocument =>
+                normalizePhone(userDocument.data().phone) === targetPhone
+            );
+            if (matchingUsers.length !== 1) {
+                throw new HttpsError("failed-precondition", "לא נמצא חשבון יחיד התואם לאיש הצוות. יש לוודא שמספר הטלפון מופיע פעם אחת בלבד בפרופילי המשתמשים.");
+            }
+            targetUser = await auth.getUser(matchingUsers[0].id);
+        }
+
+        const previousClaims = { ...(targetUser.customClaims || {}) };
+
+        const previousAdminStatus = musicianSnapshot.data().isAdmin === true;
+        try {
+            operation = "עדכון רשומת איש הצוות";
+            await musicianRef.update({ isAdmin: makeAdmin });
+        } catch (error) {
+            logger.error("Could not update staff admin status", {
+                musicianId,
+                errorCode: String(error.code || "unknown"),
+                error: String(error.message || error)
+            });
+            throw new HttpsError(
+                "internal",
+                `עדכון רשומת איש הצוות נכשל (${error.code || "unknown"}).`
+            );
+        }
+
+        const updatedClaims = { ...previousClaims };
+        if (makeAdmin) updatedClaims.admin = true;
+        else delete updatedClaims.admin;
+        if (targetPhone === SUPER_OWNER_PHONE) updatedClaims.superOwner = true;
+        try {
+            operation = "שמירת הרשאת Firebase";
+            await auth.setCustomUserClaims(targetUser.uid, updatedClaims);
+        } catch (error) {
+            let rollbackSucceeded = false;
+            try {
+                await musicianRef.update({ isAdmin: previousAdminStatus });
+                rollbackSucceeded = true;
+            } catch (rollbackError) {
+                logger.error("Could not roll back staff admin status after a failed claims update", {
+                    musicianId,
+                    errorCode: String(rollbackError.code || "unknown"),
+                    error: String(rollbackError.message || rollbackError)
+                });
+            }
+            logger.error("Staff admin role update failed", {
+                musicianId,
+                targetUid: targetUser.uid,
+                errorCode: String(error.code || "unknown"),
+                error: String(error.message || error)
+            });
+            throw new HttpsError(
+                "failed-precondition",
+                `Firebase לא שמר את הרשאת החשבון (${error.code || "unknown"}).${rollbackSucceeded ? " הרשומה הוחזרה למצבה הקודם." : " גם שחזור רשומת הצוות נכשל; נדרשת בדיקה ביומני הפונקציה."}`
+            );
+        }
+
+        return { isAdmin: makeAdmin };
     } catch (error) {
-        logger.error("Could not update staff admin status", {
-            musicianId,
+        if (error instanceof HttpsError) throw error;
+        logger.error("Unexpected staff admin role update failure", {
+            operation,
             errorCode: String(error.code || "unknown"),
             error: String(error.message || error)
         });
         throw new HttpsError(
             "internal",
-            `עדכון רשומת איש הצוות נכשל (${error.code || "unknown"}).`
+            `שגיאה בשלב "${operation}" (${error.code || "unknown"}): ${error.message || error}`
         );
     }
-
-    const updatedClaims = { ...previousClaims };
-    if (makeAdmin) updatedClaims.admin = true;
-    else delete updatedClaims.admin;
-    if (targetPhone === SUPER_OWNER_PHONE) updatedClaims.superOwner = true;
-    try {
-        await auth.setCustomUserClaims(targetUser.uid, updatedClaims);
-    } catch (error) {
-        let rollbackSucceeded = false;
-        try {
-            await musicianRef.update({ isAdmin: previousAdminStatus });
-            rollbackSucceeded = true;
-        } catch (rollbackError) {
-            logger.error("Could not roll back staff admin status after a failed claims update", {
-                musicianId,
-                errorCode: String(rollbackError.code || "unknown"),
-                error: String(rollbackError.message || rollbackError)
-            });
-        }
-        logger.error("Staff admin role update failed", {
-            musicianId,
-            targetUid: targetUser.uid,
-            errorCode: String(error.code || "unknown"),
-            error: String(error.message || error)
-        });
-        throw new HttpsError(
-            "failed-precondition",
-            `Firebase לא שמר את הרשאת החשבון (${error.code || "unknown"}).${rollbackSucceeded ? " הרשומה הוחזרה למצבה הקודם." : " גם שחזור רשומת הצוות נכשל; נדרשת בדיקה ביומני הפונקציה."}`
-        );
-    }
-
-    return { isAdmin: makeAdmin };
 });
 
 function normalizePhone(phone) {
