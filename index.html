@@ -110,7 +110,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, setPersistence, inMemoryPersistence, RecaptchaVerifier, signInWithPhoneNumber, deleteUser } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
@@ -128,9 +128,14 @@
         const auth = getAuth(app);
         await setPersistence(auth, inMemoryPersistence);
         await signOut(auth);
+        const verificationApp = initializeApp(firebaseConfig, "phone-verification");
+        const verificationAuth = getAuth(verificationApp);
+        await setPersistence(verificationAuth, inMemoryPersistence);
+        await signOut(verificationAuth);
         const db = getFirestore(app);
         const messaging = getMessaging(app);
         const functions = getFunctions(app);
+        const firebaseVapidKey = 'BMl-9ZSo4jJZIyveqgMKw0-H0JW1miOAlnJmBd_DCKRLRPdzFYiLDhk-VEUdW-oKVmfMo6Tv_CL8LJBj_Lsj0AA';
 
         // מילון תרגומים מלא ומעודכן לשפות (עברית, אנגלית, יוונית)
         const i18n = {
@@ -139,6 +144,12 @@
                 loginTitle: "התחברות למערכת",
                 loginBtn: "התחבר",
                 signupBtn: "סיום הרשמה",
+                sendVerificationCodeBtn: "שלח קוד אימות",
+                verifyAndRegisterBtn: "אמת קוד והירשם",
+                verificationCodePlaceholder: "קוד האימות שקיבלת ב-SMS",
+                verificationCodeSent: "קוד אימות נשלח למספר הטלפון.",
+                invalidIsraeliMobile: "יש להזין מספר נייד ישראלי תקין, למשל 0501234567.",
+                enterVerificationCode: "נא להזין את קוד האימות שנשלח ב-SMS.",
                 forgotPass: "🔑 שכחתי סיסמה",
                 noAccount: "אין לך חשבון? הירשם כאן",
                 hasAccount: "רשום כבר? התחבר כאן",
@@ -160,6 +171,7 @@
                 allBranches: "כל הסניפים (הצג הכל)",
                 unavailOpen: "🟢 <strong>מערכת אי-הזמינות פתוחה כעת!</strong> חלון העדכונים פעיל בין ה-10 ל-15 בחודש. נא לסמן תאריכים שאינך פנוي בהם לחודש ",
                 unavailClosed: "🔒 <strong>מערכת אי-הזמינות נעולה.</strong> העדכון פתוח בין ה-10 ל-15 בכל חודש עבור החודש הבא.",
+                ownerUnavailOpen: "🟢 לבעל המערכת אפשרות לעדכן זמינות בכל עת ולכל איש צוות.",
                 unavailTitle: "📅 אי-זמינות לחודש ",
                 notAvailable: "לא זמין",
                 singer: "זמר/ת",
@@ -178,7 +190,31 @@
                 generateReportBtn: "הפק דוח",
                 historyTitle: "📜 היסטוריה (50 פעולות אחרונות)",
                 notificationsTitle: "🔔 התראות ובקשות",
+                enablePushNotifications: "🔔 הפעלת התראות פוש במכשיר זה",
+                pushNotificationsEnabled: "התראות הפוש הופעלו במכשיר זה.",
+                pushNotificationsDenied: "ההתראות לא אושרו. יש לאפשר אותן בהגדרות הדפדפן.",
+                pushNotificationsUnsupported: "הדפדפן או האתר אינם תומכים בהתראות פוש. יש להשתמש באתר HTTPS בדפדפן נתמך.",
                 noNotifications: "אין התראות חדשות.",
+                notificationPasswordResetTitle: "🔑 בקשת איפוס סיסמה",
+                notificationStaffLabel: "איש צוות:",
+                notificationBranchLabel: "סניף:",
+                notificationRequestedBy: "מבוקש ע\"י:",
+                resetPasswordAction: "אפס סיסמה והצג קוד זמני",
+                cancellationApproved: "בקשת ביטול הופעה בתאריך {date} אושרה",
+                cancellationRejected: "בקשת ביטול הופעה בתאריך {date} נדחתה",
+                availabilityFilterLabel: "סינון לפי איש קשר:",
+                allStaffContacts: "כל אנשי הצוות",
+                staffReplacementTitle: "החלפת איש צוות לפני השבתה או מחיקה",
+                staffReplacementDescription: "יש לבחור איש צוות פעיל באותו תפקיד לכל הופעה עתידית:",
+                staffReplacementConfirm: "אשר החלפות והמשך",
+                staffReplacementCancel: "ביטול",
+                staffReplacementNoEvents: "לא נמצאו הופעות עתידיות שבהן איש הצוות משובץ.",
+                staffReplacementNoCandidate: "אין איש צוות זמין באותו תפקיד לתאריך זה.",
+                staffReplacementRequired: "יש לבחור מחליף באותו תפקיד לכל ההופעות המפורטות.",
+                staffContactDeleteConfirm: "למחוק את איש הקשר ואת כל השיבוצים העתידיים שלו?",
+                staffContactDeactivated: "איש הצוות הוגדר כלא פעיל והשיבוצים העתידיים הוחלפו.",
+                staffContactDeleted: "איש הקשר נמחק והשיבוצים העתידיים הוחלפו.",
+                authAccountDeleteWarning: " איש הקשר הוסר, אך לא ניתן היה למחוק את חשבון ההתחברות שלו. יש לפנות לתמיכה.",
                 actionLogin: "התחברות",
                 actionLogout: "התנתקות",
                 descLoginSuccess: "משתמש התחבר בהצלחה למערכת",
@@ -240,6 +276,7 @@
                     "הוספת איש צוות": "הוספת איש צוות",
                     "שינוי הרשאות מנהל": "שינוי הרשאות מנהל",
                     "מחיקת סניף": "מחיקת סניף",
+                    "מחיקת איש צוות": "מחיקת איש צוות",
                     "גיבוי מערכת": "גיבוי מערכת",
                     "אתחול מערכת": "איפוס מערכת",
                     "מחיקת הופעה": "מחיקת הופעה",
@@ -286,6 +323,12 @@
                 loginTitle: "System Login",
                 loginBtn: "Log In",
                 signupBtn: "Complete Registration",
+                sendVerificationCodeBtn: "Send verification code",
+                verifyAndRegisterBtn: "Verify code and register",
+                verificationCodePlaceholder: "SMS verification code",
+                verificationCodeSent: "A verification code was sent to your phone.",
+                invalidIsraeliMobile: "Enter a valid Israeli mobile number, for example 0501234567.",
+                enterVerificationCode: "Enter the verification code sent by SMS.",
                 forgotPass: "🔑 Forgot Password",
                 noAccount: "Don't have an account? Register here",
                 hasAccount: "Already registered? Log in here",
@@ -307,6 +350,7 @@
                 allBranches: "All Branches (Show All)",
                 unavailOpen: "🟢 <strong>Unavailability system is OPEN!</strong> Window active between 10th-15th. Mark dates you are unavailable for ",
                 unavailClosed: "🔒 <strong>Unavailability system is LOCKED.</strong> Updates open between 10th-15th of each month for next month.",
+                ownerUnavailOpen: "🟢 The system owner can update availability for any staff member at any time.",
                 unavailTitle: "📅 Unavailability for ",
                 notAvailable: "Unavailable",
                 singer: "Singer",
@@ -325,7 +369,31 @@
                 generateReportBtn: "Generate Report",
                 historyTitle: "📜 History (Last 50 Actions)",
                 notificationsTitle: "🔔 Notifications & Requests",
+                enablePushNotifications: "🔔 Enable push notifications on this device",
+                pushNotificationsEnabled: "Push notifications are enabled on this device.",
+                pushNotificationsDenied: "Notifications were not allowed. Enable them in browser settings.",
+                pushNotificationsUnsupported: "Push notifications are unavailable. Use the site over HTTPS in a supported browser.",
                 noNotifications: "No new notifications.",
+                notificationPasswordResetTitle: "🔑 Password reset request",
+                notificationStaffLabel: "Staff member:",
+                notificationBranchLabel: "Branch:",
+                notificationRequestedBy: "Requested by:",
+                resetPasswordAction: "Reset password and show temporary code",
+                cancellationApproved: "Show cancellation request for {date} was approved",
+                cancellationRejected: "Show cancellation request for {date} was rejected",
+                availabilityFilterLabel: "Filter by staff contact:",
+                allStaffContacts: "All staff members",
+                staffReplacementTitle: "Replace staff before deactivation or deletion",
+                staffReplacementDescription: "Choose an active staff member with the same role for every future show:",
+                staffReplacementConfirm: "Confirm replacements and continue",
+                staffReplacementCancel: "Cancel",
+                staffReplacementNoEvents: "No future shows were found for this staff member.",
+                staffReplacementNoCandidate: "No available staff member with the same role for this date.",
+                staffReplacementRequired: "Choose a same-role replacement for every listed show.",
+                staffContactDeleteConfirm: "Delete this contact and replace all of their future assignments?",
+                staffContactDeactivated: "Staff member deactivated and future assignments replaced.",
+                staffContactDeleted: "Contact deleted and future assignments replaced.",
+                authAccountDeleteWarning: " The contact was removed, but their sign-in account could not be deleted. Contact support.",
                 actionLogin: "Login",
                 actionLogout: "Logout",
                 descLoginSuccess: "User successfully logged into the system",
@@ -387,6 +455,7 @@
                     "הוספת איש צוות": "Staff member added",
                     "שינוי הרשאות מנהל": "Administrator permissions changed",
                     "מחיקת סניף": "Branch deleted",
+                    "מחיקת איש צוות": "Staff member deleted",
                     "גיבוי מערכת": "System backup",
                     "אתחול מערכת": "System reset",
                     "מחיקת הופעה": "Show deleted",
@@ -433,6 +502,12 @@
                 loginTitle: "Σύνδεση στο Σύστημα",
                 loginBtn: "Σύνδεση",
                 signupBtn: "Ολοκλήρωση Εγγραφής",
+                sendVerificationCodeBtn: "Αποστολή κωδικού επιβεβαίωσης",
+                verifyAndRegisterBtn: "Επιβεβαίωση κωδικού και εγγραφή",
+                verificationCodePlaceholder: "Κωδικός SMS",
+                verificationCodeSent: "Ο κωδικός επιβεβαίωσης στάλθηκε στο τηλέφωνό σας.",
+                invalidIsraeliMobile: "Εισαγάγετε έγκυρο ισραηλινό κινητό, π.χ. 0501234567.",
+                enterVerificationCode: "Εισαγάγετε τον κωδικό που στάλθηκε με SMS.",
                 forgotPass: "🔑 Ξέχασα τον κωδικό",
                 noAccount: "Δεν έχετε λογαριασμό; Εγγραφείτε εδώ",
                 hasAccount: "Έχετε ήδη λογαριασμό; Σύνδεση εδώ",
@@ -454,6 +529,7 @@
                 allBranches: "Όλα τα καταστήματα",
                 unavailOpen: "🟢 <strong>Η διαθεσιμότητα είναι ΑΝΟΙΧΤΗ!</strong> Ενεργή 10-15 του μηνός. Σημειώστε μη διαθέσιμες μέρες για ",
                 unavailClosed: "🔒 <strong>Η διαθεσιμότητα είναι ΚΛΕΙΔΩΜΕΝΗ.</strong> Ενημερώσεις μόνο 10-15 κάθε μήνα για τον επόμενο.",
+                ownerUnavailOpen: "🟢 Ο ιδιοκτήτης μπορεί να ενημερώνει τη διαθεσιμότητα οποιουδήποτε μέλους ανά πάσα στιγμή.",
                 unavailTitle: "📅 Μη διαθεσιμότητα για ",
                 notAvailable: "Μη διαθέσιμος",
                 singer: "Τραγουδιστής",
@@ -472,7 +548,31 @@
                 generateReportBtn: "Έκδοση Αναφοράς",
                 historyTitle: "📜 Ιστορικό (Τελευταίες 50 ενέργειες)",
                 notificationsTitle: "🔔 Ειδοποιήσεις & Αιτήματα",
+                enablePushNotifications: "🔔 Ενεργοποίηση ειδοποιήσεων σε αυτή τη συσκευή",
+                pushNotificationsEnabled: "Οι ειδοποιήσεις ενεργοποιήθηκαν σε αυτή τη συσκευή.",
+                pushNotificationsDenied: "Δεν επιτράπηκαν οι ειδοποιήσεις. Ενεργοποιήστε τις από τις ρυθμίσεις του προγράμματος περιήγησης.",
+                pushNotificationsUnsupported: "Οι ειδοποιήσεις δεν είναι διαθέσιμες. Ανοίξτε τον ιστότοπο μέσω HTTPS σε υποστηριζόμενο πρόγραμμα περιήγησης.",
                 noNotifications: "Δεν υπάρχουν νέες ειδοποιήσεις.",
+                notificationPasswordResetTitle: "🔑 Αίτημα επαναφοράς κωδικού",
+                notificationStaffLabel: "Μέλος ομάδας:",
+                notificationBranchLabel: "Κατάστημα:",
+                notificationRequestedBy: "Ζητήθηκε από:",
+                resetPasswordAction: "Επαναφορά κωδικού και εμφάνιση προσωρινού κωδικού",
+                cancellationApproved: "Το αίτημα ακύρωσης για τις {date} εγκρίθηκε",
+                cancellationRejected: "Το αίτημα ακύρωσης για τις {date} απορρίφθηκε",
+                availabilityFilterLabel: "Φιλτράρισμα ανά μέλος ομάδας:",
+                allStaffContacts: "Όλα τα μέλη ομάδας",
+                staffReplacementTitle: "Αντικατάσταση μέλους πριν από απενεργοποίηση ή διαγραφή",
+                staffReplacementDescription: "Επιλέξτε ενεργό μέλος με τον ίδιο ρόλο για κάθε μελλοντική εμφάνιση:",
+                staffReplacementConfirm: "Επιβεβαίωση αντικαταστάσεων",
+                staffReplacementCancel: "Ακύρωση",
+                staffReplacementNoEvents: "Δεν βρέθηκαν μελλοντικές εμφανίσεις για αυτό το μέλος.",
+                staffReplacementNoCandidate: "Δεν υπάρχει διαθέσιμο μέλος με τον ίδιο ρόλο για αυτή την ημερομηνία.",
+                staffReplacementRequired: "Επιλέξτε αντικαταστάτη με τον ίδιο ρόλο για κάθε εμφάνιση.",
+                staffContactDeleteConfirm: "Να διαγραφεί η επαφή και να αντικατασταθούν όλες οι μελλοντικές αναθέσεις;",
+                staffContactDeactivated: "Το μέλος απενεργοποιήθηκε και οι μελλοντικές αναθέσεις αντικαταστάθηκαν.",
+                staffContactDeleted: "Η επαφή διαγράφηκε και οι μελλοντικές αναθέσεις αντικαταστάθηκαν.",
+                authAccountDeleteWarning: " Η επαφή αφαιρέθηκε, αλλά δεν ήταν δυνατή η διαγραφή του λογαριασμού σύνδεσης. Επικοινωνήστε με την υποστήριξη.",
                 actionLogin: "Σύνδεση",
                 actionLogout: "Αποσύνδεση",
                 descLoginSuccess: "Ο χρήστης συνδέθηκε επιτυχώς στο σύστημα",
@@ -534,6 +634,7 @@
                     "הוספת איש צוות": "Προσθήκη μέλους ομάδας",
                     "שינוי הרשאות מנהל": "Αλλαγή δικαιωμάτων διαχειριστή",
                     "מחיקת סניף": "Διαγραφή καταστήματος",
+                    "מחיקת איש צוות": "Διαγραφή μέλους ομάδας",
                     "גיבוי מערכת": "Αντίγραφο ασφαλείας συστήματος",
                     "אתחול מערכת": "Επαναφορά συστήματος",
                     "מחיקת הופעה": "Διαγραφή εμφάνισης",
@@ -648,6 +749,11 @@
         let unsubscribeCancellationRequests = null;
         let unsubscribePasswordResetRequests = null;
         let userUnavailabilities = [];
+        let selectedAvailabilityStaffId = '';
+        let registrationConfirmationResult = null;
+        let registrationRecaptchaVerifier = null;
+        let pendingRegistrationDetails = null;
+        let pendingStaffReplacement = null;
         let isAdmin = false;
         let isBranchManager = false;
         let isSuperOwner = false;
@@ -659,12 +765,25 @@
         const defaultColors = ['#d4af37', '#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
 
         function cleanPhone(phone) {
-            return phone ? phone.replace(/\D/g, '') : '';
+            const digits = phone ? String(phone).replace(/\D/g, '') : '';
+            return /^9725\d{8}$/.test(digits) ? `0${digits.slice(3)}` : digits;
+        }
+
+        function normalizeIsraeliMobile(phone) {
+            const cleaned = cleanPhone(phone);
+            if (/^05\d{8}$/.test(cleaned)) return `+972${cleaned.slice(1)}`;
+            if (/^9725\d{8}$/.test(cleaned)) return `+${cleaned}`;
+            return '';
+        }
+
+        function canonicalIsraeliMobile(phone) {
+            const normalized = normalizeIsraeliMobile(phone);
+            return normalized ? `0${normalized.slice(4)}` : '';
         }
 
         function getAssignedStaffIds(event) {
-            if (Array.isArray(event.assignedStaffIds)) return event.assignedStaffIds;
-            if (Array.isArray(event.assignedStaffDetails)) {
+            if (Array.isArray(event.assignedStaffIds) && event.assignedStaffIds.length) return event.assignedStaffIds;
+            if (Array.isArray(event.assignedStaffDetails) && event.assignedStaffDetails.length) {
                 return event.assignedStaffDetails.map(staff => staff.musicianId).filter(Boolean);
             }
 
@@ -697,7 +816,8 @@
         }
 
         function phoneToEmail(phone) {
-            return `user_${cleanPhone(phone)}@salonyevani.local`;
+            const canonicalPhone = canonicalIsraeliMobile(phone) || cleanPhone(phone);
+            return `user_${cleanPhone(canonicalPhone)}@salonyevani.local`;
         }
 
         function validatePasswordRules(password) {
@@ -741,31 +861,50 @@
             setAppLanguage(currentLang);
         });
 
-        async function initPushToken(userId) {
-            try {
-                if ('serviceWorker' in navigator) {
-                    const registration = await navigator.serviceWorker.register('/sw.js');
-                    const permission = await Notification.requestPermission();
-                    if (permission === 'granted') {
-                        const currentToken = await getToken(messaging, { 
-                            serviceWorkerRegistration: registration,
-                            vapidKey: 'BPOxK7...' 
-                        }).catch(e => console.log('Token info:', e));
-                        
-                        if (currentToken) {
-                            await setDoc(doc(db, "push_tokens", userId), {
-                                token: currentToken,
-                                userPhone: currentUserPhone,
-                                userName: currentUserName,
-                                updatedAt: new Date()
-                            }, { merge: true });
-                        }
-                    }
-                }
-            } catch (err) {
-                console.log("Push Init Info: ", err);
+        async function initPushToken(userId, requestPermission = false) {
+            if (!('serviceWorker' in navigator) || !('Notification' in window)) {
+                if (requestPermission) alert(i18n[currentLang].pushNotificationsUnsupported);
+                return false;
             }
+            if (!firebaseVapidKey || firebaseVapidKey.includes('...')) {
+                throw new Error("יש להגדיר מפתח VAPID ציבורי של Firebase לפני הפעלת התראות פוש.");
+            }
+
+            let permission = Notification.permission;
+            if (requestPermission && permission === 'default') {
+                permission = await Notification.requestPermission();
+            }
+            if (permission !== 'granted') return false;
+
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            const currentToken = await getToken(messaging, {
+                serviceWorkerRegistration: registration,
+                vapidKey: firebaseVapidKey
+            });
+            if (!currentToken) {
+                throw new Error("Firebase לא החזיר טוקן להתראות עבור הדפדפן.");
+            }
+
+            await setDoc(doc(db, "push_tokens", userId), {
+                token: currentToken,
+                userPhone: currentUserPhone,
+                userName: currentUserName,
+                updatedAt: new Date()
+            }, { merge: true });
+            return true;
         }
+
+        window.enablePushNotifications = async () => {
+            if (!auth.currentUser) return;
+            try {
+                const enabled = await initPushToken(auth.currentUser.uid, true);
+                if (enabled) alert(i18n[currentLang].pushNotificationsEnabled);
+                else if (Notification.permission === 'denied') alert(i18n[currentLang].pushNotificationsDenied);
+            } catch (error) {
+                console.error("Could not enable push notifications:", error);
+                alert("שגיאה בהפעלת התראות פוש: " + (error.message || error));
+            }
+        };
 
         onMessage(messaging, (payload) => {
             alert(`📢 הודעה חדשה:\n\n${payload.notification ? payload.notification.body : payload.data.message}`);
@@ -909,6 +1048,7 @@
         };
 
         window.toggleAuthMode = (isRegister) => {
+            clearRegistrationVerification();
             if(isRegister) {
                 document.getElementById('register-fields').classList.remove('hidden');
                 document.getElementById('login-submit-btn').classList.add('hidden');
@@ -923,6 +1063,36 @@
                 document.getElementById('toggle-to-login').classList.add('hidden');
             }
         };
+
+        async function clearRegistrationVerification() {
+            registrationConfirmationResult = null;
+            pendingRegistrationDetails = null;
+            if (registrationRecaptchaVerifier) {
+                registrationRecaptchaVerifier.clear();
+                registrationRecaptchaVerifier = null;
+            }
+            const codeInput = document.getElementById('registration-verification-code');
+            const verifyButton = document.getElementById('register-submit-btn');
+            const phoneInput = document.getElementById('login-phone');
+            if (codeInput) {
+                codeInput.value = '';
+                codeInput.classList.add('hidden');
+            }
+            if (verifyButton) {
+                verifyButton.dataset.i18n = 'sendVerificationCodeBtn';
+                verifyButton.textContent = i18n[currentLang].sendVerificationCodeBtn;
+            }
+            if (phoneInput) phoneInput.readOnly = false;
+            ['login-password', 'reg-name'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.readOnly = false;
+            });
+            ['reg-role', 'reg-branch-select'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.disabled = false;
+            });
+            await signOut(verificationAuth);
+        }
 
         window.onRoleChange = () => {
             const role = document.getElementById('reg-role').value;
@@ -1026,7 +1196,9 @@
                 document.getElementById('main-app').classList.remove('hidden');
 
                 await loadUnavailabilityData();
-                initPushToken(user.uid);
+                initPushToken(user.uid).catch(error => {
+                    console.error("Could not refresh push notification token:", error);
+                });
                 listenToNotifications();
                 listenToBroadcastMessages();
                 loadCalendarView();
@@ -1127,10 +1299,13 @@
 
         async function checkUserAdminStatus(user) {
             const userDoc = await getDoc(doc(db, "users", user.uid));
-            let rawPhone = '';
-            if (userDoc.exists()) {
-                rawPhone = userDoc.data().phone || '';
+            if (!userDoc.exists()) {
+                alert("חשבון המשתמש אינו מוגדר במערכת. יש לפנות למנהל.");
+                await signOut(auth);
+                return false;
             }
+            let rawPhone = '';
+            rawPhone = userDoc.data().phone || '';
 
             currentUserPhone = cleanPhone(rawPhone);
             const matched = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
@@ -1205,10 +1380,16 @@
             const phone = document.getElementById('login-phone').value.trim();
             const password = document.getElementById('login-password').value;
             const fakeEmail = phoneToEmail(phone);
+            const legacyFakeEmail = `user_${String(phone).replace(/\D/g, '')}@salonyevani.local`;
             const cleanedInputPhone = cleanPhone(phone);
 
             try {
-                await signInWithEmailAndPassword(auth, fakeEmail, password);
+                try {
+                    await signInWithEmailAndPassword(auth, fakeEmail, password);
+                } catch (error) {
+                    if (legacyFakeEmail === fakeEmail) throw error;
+                    await signInWithEmailAndPassword(auth, legacyFakeEmail, password);
+                }
                 
                 await loadMusiciansData();
                 const matchedMusician = allMusicians.find(m => cleanPhone(m.phone) === cleanedInputPhone);
@@ -1294,36 +1475,93 @@
                 return;
             }
 
-            const phone = document.getElementById('login-phone').value.trim();
-            const password = document.getElementById('login-password').value;
-            const name = document.getElementById('reg-name').value.trim();
-            const role = document.getElementById('reg-role').value;
-            const branchName = document.getElementById('reg-branch-select').value;
+            const t = i18n[currentLang];
+            if (!registrationConfirmationResult) {
+                const enteredPhone = document.getElementById('login-phone').value.trim();
+                const normalizedPhone = normalizeIsraeliMobile(enteredPhone);
+                const phone = canonicalIsraeliMobile(enteredPhone);
+                const password = document.getElementById('login-password').value;
+                const name = document.getElementById('reg-name').value.trim();
+                const role = document.getElementById('reg-role').value;
+                const branchName = document.getElementById('reg-branch-select').value;
 
-            if (!phone || !password || !name) {
-                alert("נא למלא שם מלא, מספר טלפון וסיסמה להרשמה.");
+                if (!normalizedPhone) {
+                    alert(t.invalidIsraeliMobile);
+                    return;
+                }
+                if (!password || !name) {
+                    alert("נא למלא שם מלא, מספר טלפון וסיסמה להרשמה.");
+                    return;
+                }
+
+                const passwordErr = validatePasswordRules(password);
+                if (passwordErr) {
+                    alert("⚠️ הנחיות לבחירת סיסמה:\n\n" + passwordErr);
+                    return;
+                }
+                if (role === "מנהל סניף" && !branchName) {
+                    alert("חובה לבחור את שם הסניף שעבורו הוגדרת מנהל.");
+                    return;
+                }
+
+                try {
+                    registrationRecaptchaVerifier = new RecaptchaVerifier(verificationAuth, "recaptcha-container", {
+                        size: "invisible"
+                    });
+                    registrationConfirmationResult = await signInWithPhoneNumber(
+                        verificationAuth,
+                        normalizedPhone,
+                        registrationRecaptchaVerifier
+                    );
+                    pendingRegistrationDetails = { phone, normalizedPhone, password, name, role, branchName };
+                    document.getElementById('registration-verification-code').classList.remove('hidden');
+                    document.getElementById('register-submit-btn').dataset.i18n = 'verifyAndRegisterBtn';
+                    document.getElementById('register-submit-btn').textContent = t.verifyAndRegisterBtn;
+                    document.getElementById('login-phone').readOnly = true;
+                    ['login-password', 'reg-name'].forEach(id => {
+                        document.getElementById(id).readOnly = true;
+                    });
+                    ['reg-role', 'reg-branch-select'].forEach(id => {
+                        document.getElementById(id).disabled = true;
+                    });
+                    alert(t.verificationCodeSent);
+                } catch (err) {
+                    await clearRegistrationVerification();
+                    alert("שגיאה בשליחת קוד האימות: " + (err.message || err));
+                }
                 return;
             }
 
-            const passwordErr = validatePasswordRules(password);
-            if (passwordErr) {
-                alert("⚠️ הנחיות לבחירת סיסמה:\n\n" + passwordErr);
+            const verificationCode = document.getElementById('registration-verification-code').value.trim();
+            if (!verificationCode) {
+                alert(t.enterVerificationCode);
                 return;
             }
 
-            if (role === "מנהל סניף" && !branchName) {
-                alert("חובה לבחור את שם הסניף שעבורו הוגדרת מנהל.");
-                return;
-            }
-
-            const fakeEmail = phoneToEmail(phone);
-
+            let verifiedUser = null;
+            let registrationCompleted = false;
             try {
-                const userCred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
-                await setDoc(doc(db, "users", userCred.user.uid), { phone, role: "user", name, branchName: branchName || '' });
-                
+                const verifiedCredential = await registrationConfirmationResult.confirm(verificationCode);
+                verifiedUser = verifiedCredential.user;
+                if (verifiedUser.phoneNumber !== pendingRegistrationDetails.normalizedPhone) {
+                    throw new Error("מספר הטלפון שאומת אינו תואם למספר שנרשם.");
+                }
+
+                const { phone, password, name, role, branchName } = pendingRegistrationDetails;
+                const userCred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), password);
+                await setDoc(doc(db, "users", userCred.user.uid), {
+                    phone,
+                    phoneVerified: true,
+                    role: "user",
+                    name,
+                    branchName: branchName || ''
+                });
+
+                await loadMusiciansData();
                 const cleaned = cleanPhone(phone);
-                const existingM = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
+                const existingM = allMusicians.find(m =>
+                    canonicalIsraeliMobile(m.phone) === phone || cleanPhone(m.phone) === cleaned
+                );
                 if (!existingM) {
                     await addDoc(collection(db, "musicians"), {
                         name,
@@ -1335,14 +1573,25 @@
                     });
                 }
 
+                registrationCompleted = true;
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
                 logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות", cleaned, name);
             } catch (err) {
                 if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
                     alert("שגיאה בהרשמה: מספר טלפון כבר קיים במערכת.");
                 } else {
-                    alert("שגיאה בהרשמה: " + err.message);
+                    alert("שגיאה בהרשמה: " + (err.message || err));
                 }
+            } finally {
+                if (verifiedUser) {
+                    try {
+                        await deleteUser(verifiedUser);
+                    } catch (err) {
+                        console.error("Could not remove temporary phone-verification account:", err);
+                        if (registrationCompleted) alert("ההרשמה הצליחה, אך נדרש ניקוי חשבון האימות הזמני על ידי מנהל.");
+                    }
+                }
+                await clearRegistrationVerification();
             }
         });
 
@@ -1355,6 +1604,7 @@
             const reportResults = document.getElementById('report-results');
             if (reportResults) reportResults.innerHTML = '';
             window.currentReportEvents = [];
+            window.currentReportStaffId = '';
 
             currentUserPhone = '';
             currentUserName = '';
@@ -1505,6 +1755,149 @@
             }
         });
 
+        async function startStaffContactChange(musicianId, action, profileUpdates = null) {
+            if (!isAdmin) return;
+            if (!navigator.onLine) {
+                alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
+                return;
+            }
+            const musician = allMusicians.find(item => item.id === musicianId);
+            if (!musician) {
+                alert("איש הצוות לא נמצא. נא לטעון מחדש.");
+                return;
+            }
+            if (action === 'delete' && !confirm(i18n[currentLang].staffContactDeleteConfirm)) return;
+
+            try {
+                const [eventsSnapshot, unavailableSnapshot] = await Promise.all([
+                    getDocs(collection(db, "events")),
+                    getDocs(collection(db, "unavailabilities"))
+                ]);
+                const events = eventsSnapshot.docs.map(eventDoc => ({ id: eventDoc.id, ...eventDoc.data() }));
+                const today = new Date().toISOString().slice(0, 10);
+                const upcomingEvents = events.filter(event =>
+                    event.date >= today && isMusicianAssignedToEvent(event, musician)
+                );
+                const unavailable = new Set(unavailableSnapshot.docs.map(unavailableDoc => {
+                    const data = unavailableDoc.data();
+                    return `${cleanPhone(data.phone)}|${data.date}`;
+                }));
+                const replacementsByEvent = new Map(upcomingEvents.map(event => {
+                    const candidates = allMusicians.filter(candidate =>
+                        candidate.id !== musician.id &&
+                        candidate.status !== 'inactive' &&
+                        candidate.role === musician.role &&
+                        candidate.phone &&
+                        !isMusicianAssignedToEvent(event, candidate) &&
+                        !unavailable.has(`${cleanPhone(candidate.phone)}|${event.date}`) &&
+                        !isMusicianAssignedToOtherBranchAtTime(events, event.branchId, event.time, candidate.id)
+                    );
+                    return [event.id, candidates];
+                }));
+
+                pendingStaffReplacement = { musicianId, action, profileUpdates, musician, events, replacementsByEvent };
+                const container = document.getElementById('staff-replacement-modal');
+                const title = document.getElementById('staff-replacement-title');
+                const content = document.getElementById('staff-replacement-content');
+                const t = i18n[currentLang];
+                title.textContent = t.staffReplacementTitle;
+                document.getElementById('staff-replacement-confirm').textContent = t.staffReplacementConfirm;
+                document.getElementById('staff-replacement-cancel').textContent = t.staffReplacementCancel;
+
+                if (upcomingEvents.length === 0) {
+                    content.innerHTML = `<p>${t.staffReplacementNoEvents}</p>`;
+                    document.getElementById('staff-replacement-confirm').disabled = false;
+                } else {
+                    content.innerHTML = `
+                        <p style="margin-bottom:10px;">${t.staffReplacementDescription}</p>
+                        ${upcomingEvents.map(event => {
+                            const branch = allBranches.find(item => item.id === event.branchId);
+                            const candidates = replacementsByEvent.get(event.id);
+                            return `
+                                <div style="margin-bottom:12px;">
+                                    <strong>${event.date} | ${branch ? branch.name : t.notificationBranchLabel} | ${event.time}</strong>
+                                    ${candidates.length ? `
+                                        <select class="staff-replacement-select" data-event-id="${event.id}" required>
+                                            <option value="">${t.selectReplacement}</option>
+                                            ${candidates.map(candidate => `<option value="${candidate.id}">${candidate.name} (${candidate.role})</option>`).join('')}
+                                        </select>
+                                    ` : `<p style="color:var(--danger);">${t.staffReplacementNoCandidate}</p>`}
+                                </div>
+                            `;
+                        }).join('')}
+                    `;
+                    const hasMissingCandidates = [...replacementsByEvent.values()].some(candidates => candidates.length === 0);
+                    document.getElementById('staff-replacement-confirm').disabled = hasMissingCandidates;
+                }
+
+                container.classList.remove('hidden');
+            } catch (err) {
+                alert("שגיאה בטעינת השיבוצים והמחליפים: " + (err.message || err));
+            }
+        }
+
+        async function commitStaffContactChange(replacements) {
+            if (!pendingStaffReplacement) return;
+            const pending = pendingStaffReplacement;
+            try {
+                const changeContact = httpsCallable(functions, "changeStaffContact");
+                const payload = {
+                    musicianId: pending.musicianId,
+                    action: pending.action,
+                    replacements
+                };
+                if (pending.profileUpdates) payload.profileUpdates = pending.profileUpdates;
+                const result = await changeContact(payload);
+                const t = i18n[currentLang];
+                const actionDescription = pending.action === 'delete'
+                    ? t.staffContactDeleted
+                    : t.staffContactDeactivated;
+                await logAction(
+                    pending.action === 'delete' ? "מחיקת איש צוות" : "עדכון איש צוות",
+                    `${actionDescription} ${pending.musician.name} (${pending.musician.role})`,
+                    "ניהול סניפים וצוות"
+                );
+                alert(actionDescription + (result.data.authAccountDeleted === false ? t.authAccountDeleteWarning : ""));
+
+                if (document.getElementById('edit-musician-id').value === pending.musicianId) {
+                    document.getElementById('edit-musician-id').value = '';
+                    document.getElementById('musician-name').value = '';
+                    document.getElementById('musician-phone').value = '';
+                    document.getElementById('musician-phone').disabled = false;
+                    document.getElementById('phone-edit-note').classList.add('hidden');
+                    document.getElementById('musician-submit-btn').textContent = i18n[currentLang].addMusicianBtn;
+                }
+                document.getElementById('staff-replacement-modal').classList.add('hidden');
+                pendingStaffReplacement = null;
+                await loadMusiciansData();
+                await loadBranchesSelect();
+                await loadAdminData();
+                await loadCalendarView();
+            } catch (err) {
+                alert("שגיאה בעדכון איש הצוות והשיבוצים: " + (err.message || err));
+            }
+        }
+
+        window.confirmStaffContactChange = async () => {
+            if (!pendingStaffReplacement) return;
+            const replacements = [...document.querySelectorAll('.staff-replacement-select')].map(select => ({
+                eventId: select.dataset.eventId,
+                replacementMusicianId: select.value
+            }));
+            if (replacements.some(item => !item.replacementMusicianId)) {
+                alert(i18n[currentLang].staffReplacementRequired);
+                return;
+            }
+            await commitStaffContactChange(replacements);
+        };
+
+        window.cancelStaffContactChange = () => {
+            pendingStaffReplacement = null;
+            document.getElementById('staff-replacement-modal').classList.add('hidden');
+        };
+
+        window.deleteMusician = async musicianId => startStaffContactChange(musicianId, 'delete');
+
         document.getElementById('add-musician-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             if(!isAdmin) return;
@@ -1521,6 +1914,11 @@
 
             try {
                 if (editId) {
+                    const existingMusician = allMusicians.find(musician => musician.id === editId);
+                    if (status === 'inactive' && existingMusician && existingMusician.status !== 'inactive') {
+                        await startStaffContactChange(editId, 'deactivate', { name, role });
+                        return;
+                    }
                     await updateDoc(doc(db, "musicians", editId), { name, role, status });
                     logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`, "ניהול סניפים וצוות");
                     document.getElementById('edit-musician-id').value = '';
@@ -1586,6 +1984,7 @@
                     <div style="display:flex; gap:5px; align-items:center;">
                         ${adminToggleBtn}
                         <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBtn}</button>
+                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteMusician('${m.id}')">${t.deleteBtn}</button>
                     </div>
                 </div>`;
             });
@@ -1694,7 +2093,20 @@
         window.exportFullSystemBackup = async () => {
             if (!isSuperOwner) return;
             try {
-                alert("מכין קובץ גיבוי נתונים...");
+                const fileName = `salon_yevani_backup_${new Date().toISOString().slice(0,10)}.json`;
+                let fileHandle = null;
+                if (typeof window.showSaveFilePicker === "function") {
+                    try {
+                        fileHandle = await window.showSaveFilePicker({
+                            suggestedName: fileName,
+                            types: [{ description: "JSON backup", accept: { "application/json": [".json"] } }]
+                        });
+                    } catch (error) {
+                        if (error.name === "AbortError") return;
+                        throw error;
+                    }
+                }
+
                 const backupData = {};
                 const cols = ["users", "musicians", "branches", "events", "cancellation_requests", "audit_logs", "unavailabilities", "broadcasts"];
 
@@ -1704,13 +2116,21 @@
                     snap.forEach(d => backupData[colName].push({ id: d.id, ...d.data() }));
                 }
 
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
-                const downloadAnchor = document.createElement('a');
-                downloadAnchor.setAttribute("href", dataStr);
-                downloadAnchor.setAttribute("download", `salon_yevani_backup_${new Date().toISOString().slice(0,10)}.json`);
-                document.body.appendChild(downloadAnchor);
-                downloadAnchor.click();
-                downloadAnchor.remove();
+                const backupBlob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json;charset=utf-8" });
+                if (fileHandle) {
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(backupBlob);
+                    await writable.close();
+                } else {
+                    const backupUrl = URL.createObjectURL(backupBlob);
+                    const downloadAnchor = document.createElement('a');
+                    downloadAnchor.setAttribute("href", backupUrl);
+                    downloadAnchor.setAttribute("download", fileName);
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                    setTimeout(() => URL.revokeObjectURL(backupUrl), 1000);
+                }
 
                 logAction("גיבוי מערכת", "הורד קובץ גיבוי נתונים מלא (JSON)", "כללי");
             } catch (err) {
@@ -1855,16 +2275,33 @@
             
             const today = new Date();
             const dayOfMonth = today.getDate();
-            const isWindowOpen = (dayOfMonth >= 10 && dayOfMonth <= 15);
+            const isWindowOpen = isSuperOwner || (dayOfMonth >= 10 && dayOfMonth <= 15);
 
             const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
             const nextYear = nextMonthDate.getFullYear();
             const nextMonth = nextMonthDate.getMonth();
 
             await loadUnavailabilityData();
+            let targetStaff = allMusicians.find(musician => musician.id === selectedAvailabilityStaffId);
+            if (isSuperOwner) {
+                if (!targetStaff) {
+                    targetStaff = allMusicians.find(musician => cleanPhone(musician.phone) === currentUserPhone)
+                        || allMusicians[0];
+                    selectedAvailabilityStaffId = targetStaff ? targetStaff.id : '';
+                }
+            } else {
+                targetStaff = allMusicians.find(musician => cleanPhone(musician.phone) === currentUserPhone);
+            }
+            const targetPhone = targetStaff ? cleanPhone(targetStaff.phone) : currentUserPhone;
 
             let statusHTML = '';
-            if (isWindowOpen) {
+            if (isSuperOwner) {
+                statusHTML = `
+                    <div style="background:#1b5e20; border:1px solid #43a047; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
+                        ${t.ownerUnavailOpen}
+                    </div>
+                `;
+            } else if (isWindowOpen) {
                 statusHTML = `
                     <div style="background:#1b5e20; border:1px solid #43a047; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
                         ${t.unavailOpen} ${t.months[nextMonth]}.
@@ -1879,6 +2316,12 @@
             }
 
             container.innerHTML = `
+                ${isSuperOwner ? `
+                    <label for="unavailability-staff-filter" style="font-size:0.85rem;">${t.availabilityFilterLabel}</label>
+                    <select id="unavailability-staff-filter" onchange="onAvailabilityStaffSelect(event)">
+                        ${allMusicians.map(musician => `<option value="${musician.id}" ${musician.id === selectedAvailabilityStaffId ? 'selected' : ''}>${musician.name} (${musician.role})</option>`).join('')}
+                    </select>
+                ` : ''}
                 <h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[nextMonth]} ${nextYear}</h3>
                 ${statusHTML}
                 <div class="calendar-grid" id="unavail-grid"></div>
@@ -1895,7 +2338,7 @@
 
             for (let day = 1; day <= daysInMonth; day++) {
                 const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
+                const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === targetPhone && u.date === dateStr);
 
                 const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('${t.unavailClosed}')"`;
 
@@ -1912,6 +2355,12 @@
             document.getElementById('unavail-grid').innerHTML = gridHTML;
         }
 
+        window.onAvailabilityStaffSelect = (event) => {
+            if (!isSuperOwner) return;
+            selectedAvailabilityStaffId = event.target.value;
+            loadUnavailabilityCalendar();
+        };
+
         window.toggleDayUnavailability = async (dateStr, isCurrentlyUnavail) => {
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. עדכון זמינות זמין במצב מקוון בלבד.");
@@ -1920,7 +2369,7 @@
 
             const today = new Date();
             const dayOfMonth = today.getDate();
-            if (dayOfMonth < 10 || dayOfMonth > 15) {
+            if (!isSuperOwner && (dayOfMonth < 10 || dayOfMonth > 15)) {
                 alert(i18n[currentLang].unavailClosed);
                 return;
             }
@@ -1931,20 +2380,29 @@
                 return;
             }
 
+            const targetStaff = isSuperOwner
+                ? allMusicians.find(musician => musician.id === selectedAvailabilityStaffId)
+                : allMusicians.find(musician => cleanPhone(musician.phone) === currentUserPhone);
+            if (!targetStaff) {
+                alert("לא נמצא איש צוות לעדכון זמינות.");
+                return;
+            }
+            const targetPhone = cleanPhone(targetStaff.phone);
+
             if (isCurrentlyUnavail) {
-                const record = userUnavailabilities.find(u => cleanPhone(u.phone) === currentUserPhone && u.date === dateStr);
+                const record = userUnavailabilities.find(u => cleanPhone(u.phone) === targetPhone && u.date === dateStr);
                 if (record) {
                     await deleteDoc(doc(db, "unavailabilities", record.id));
-                    logAction("ביטול אי-זמינות", `ביטול חסימת תאריך ${dateStr}`, "אי-זמינות צוות");
+                    logAction("ביטול אי-זמינות", `ביטול חסימת תאריך ${dateStr} עבור ${targetStaff.name}`, "אי-זמינות צוות");
                 }
             } else {
                 await addDoc(collection(db, "unavailabilities"), {
-                    phone: currentUserPhone,
-                    name: currentUserName,
+                    phone: targetPhone,
+                    name: targetStaff.name,
                     date: dateStr,
                     createdAt: new Date()
                 });
-                logAction("סימון אי-זמינות", `סימון אי-זמינות בתאריך ${dateStr}`, "אי-זמינות צוות");
+                logAction("סימון אי-זמינות", `סימון אי-זמינות בתאריך ${dateStr} עבור ${targetStaff.name}`, "אי-זמינות צוות");
             }
             loadUnavailabilityCalendar();
         };
@@ -1987,13 +2445,13 @@
                     if (existingEventInThisBranch) {
                         isAlreadyAssigned = isMusicianAssignedToEvent(existingEventInThisBranch, m);
                     }
+                    if (isUserMarkedUnavail) return;
 
                     rosterContainer.innerHTML += `
                         <div class="roster-item" id="item-m-${m.id}">
                             <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-musician-id="${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} onchange="updateRoleDisabling()">
                             <label for="m-${m.id}">
                                 ${m.name} <span class="badge">${m.role}</span>
-                                ${isUserMarkedUnavail ? `<br><small style="color:var(--danger); font-size:0.7rem;">(${i18n[currentLang].notAvailable})</small>` : ''}
                                 <small id="conflict-m-${m.id}" class="assignment-conflict-note hidden">${i18n[currentLang].staffAssignedElsewhereAtTime}</small>
                             </label>
                         </div>
@@ -2224,15 +2682,23 @@
         window.generateAccountingReport = async () => {
             const musicianSelectEl = document.getElementById('report-musician-select');
             const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
+            const currentMusician = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
+            const reportMusicianId = isAdmin ? selectedMusician : (currentMusician ? currentMusician.id : '');
             const selectedBranchId = document.getElementById('report-branch-select').value;
             const resultsDiv = document.getElementById('report-results');
+            window.currentReportEvents = [];
+            window.currentReportStaffId = reportMusicianId;
 
             let filteredEvents = monthEvents.filter(e => {
                 let matchMusician = true;
                 let matchBranch = true;
 
-                if (selectedMusician) {
-                    matchMusician = getAssignedStaffIds(e).includes(selectedMusician);
+                if (reportMusicianId) {
+                    matchMusician = getAssignedStaffIds(e).includes(reportMusicianId);
+                } else if (!isAdmin && !currentMusician) {
+                    matchMusician = false;
+                } else if (!isAdmin && currentMusician) {
+                    matchMusician = (e.assignedStaff || []).includes(`${currentMusician.name} (${currentMusician.role})`);
                 }
                 if (selectedBranchId) {
                     matchBranch = e.branchId === selectedBranchId;
@@ -2247,6 +2713,7 @@
             }
 
             window.currentReportEvents = filteredEvents;
+            window.currentReportStaffId = reportMusicianId;
 
             let reportHTML = `
                 <table class="report-table" id="export-report-table">
@@ -2265,11 +2732,15 @@
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
                 
-                const selectedStaffMember = allMusicians.find(musician => musician.id === selectedMusician);
-                const selectedAssignment = selectedStaffMember && `${selectedStaffMember.name} (${selectedStaffMember.role})`;
-                const staffDisplay = selectedMusician
-                    ? (e.assignedStaff || []).find(staff => staff === selectedAssignment) || selectedAssignment
-                    : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
+                const selectedStaffMember = allMusicians.find(musician => musician.id === reportMusicianId);
+                let staffDisplay;
+                if (reportMusicianId && selectedStaffMember) {
+                    staffDisplay = selectedStaffMember.name;
+                } else if (!isAdmin && currentMusician) {
+                    staffDisplay = currentMusician.name;
+                } else {
+                    staffDisplay = (e.assignedStaff || []).join(' / ') || 'לא שובצו';
+                }
 
                 reportHTML += `
                     <tr>
@@ -2303,16 +2774,15 @@
             let csvContent = "\uFEFFתאריך,סניף,שעה,שם המבצע / נגן\n";
 
             const musicianSelectEl = document.getElementById('report-musician-select');
-            const selectedMusician = musicianSelectEl ? musicianSelectEl.value : '';
+            const selectedMusician = window.currentReportStaffId || (musicianSelectEl ? musicianSelectEl.value : '');
 
             events.forEach(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
                 
                 const selectedStaffMember = allMusicians.find(musician => musician.id === selectedMusician);
-                const selectedAssignment = selectedStaffMember && `${selectedStaffMember.name} (${selectedStaffMember.role})`;
-                const staffDisplay = selectedMusician
-                    ? (e.assignedStaff || []).find(staff => staff === selectedAssignment) || selectedAssignment
+                const staffDisplay = selectedMusician && selectedStaffMember
+                    ? selectedStaffMember.name
                     : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
                 const staffStr = `"${staffDisplay.replace(/"/g, '""')}"`;
 
@@ -2559,7 +3029,10 @@
         async function loadNotificationsView() {
             const container = document.getElementById('notifs-container');
             const t = i18n[currentLang];
-            let html = `<h3 style="color:var(--accent-gold); margin-bottom:12px;">${t.notificationsTitle}</h3>`;
+            let html = `
+                <h3 style="color:var(--accent-gold); margin-bottom:12px;">${t.notificationsTitle}</h3>
+                <button type="button" class="btn-secondary" style="margin-bottom:14px;" onclick="enablePushNotifications()">${t.enablePushNotifications}</button>
+            `;
             let count = 0;
 
             if (isAdmin) {
@@ -2569,11 +3042,11 @@
                     count++;
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid #fb8c00;">
-                            <strong>🔑 בקשת איפוס סיסמה</strong><br>
-                            <span>👤 איש צוות: <strong>${req.userName}</strong> (📱 ${req.userPhone})</span>
+                            <strong>${t.notificationPasswordResetTitle}</strong><br>
+                            <span>👤 ${t.notificationStaffLabel} <strong>${req.userName}</strong> (📱 ${req.userPhone})</span>
                             <div style="margin-top:10px;">
                                 <button class="btn-success" style="padding:6px 12px; width:auto;" onclick="confirmResetPassword('${req.id}', '${req.userPhone}', '${req.userName}')">
-                                    🔄 אפס סיסמה והצג קוד זמני
+                                    🔄 ${t.resetPasswordAction}
                                 </button>
                             </div>
                         </div>
@@ -2605,8 +3078,8 @@
                     const hasCandidates = replacementInfo.candidates.length > 0;
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid #fb8c00;">
-                            <strong>📍 סניף: ${req.branchName}</strong> | 📅 ${req.eventDate}<br>
-                            <strong>👤 מבוקש ע"י:</strong> ${req.musicianName}
+                            <strong>📍 ${t.notificationBranchLabel} ${req.branchName}</strong> | 📅 ${req.eventDate}<br>
+                            <strong>👤 ${t.notificationRequestedBy}</strong> ${req.musicianName}
                             <div style="margin-top:10px;">
                                 ${hasCandidates ? `
                                     <label for="${selectId}" style="font-size:0.85rem;">${t.replacementStaffLabel}</label>
@@ -2634,8 +3107,10 @@
                     if (cleanPhone(req.musicianPhone) === currentUserPhone && isDateInCurrentMonth(req.eventDate)) {
                         if (req.status === 'approved' || req.status === 'rejected') {
                             count++;
-                            const statusTxt = req.status === 'approved' ? '✅ הבקשה אושרה' : '❌ הבקשה נדחתה';
-                            html += `<div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px;">סניף ${req.branchName} (${req.eventDate}): <strong>${statusTxt}</strong></div>`;
+                            const statusTxt = req.status === 'approved'
+                                ? t.cancellationApproved.replace('{date}', req.eventDate)
+                                : t.cancellationRejected.replace('{date}', req.eventDate);
+                            html += `<div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px;">${t.notificationBranchLabel} ${req.branchName}<br><strong>${statusTxt}</strong></div>`;
                         }
                     }
                 });
@@ -2834,9 +3309,11 @@
                 </div>
 
                 <input type="password" id="login-password" required data-i18n-placeholder="passPlaceholder" placeholder="סיסמה" autocomplete="new-password">
+                <input type="text" id="registration-verification-code" class="hidden" inputmode="numeric" autocomplete="one-time-code" maxlength="6" data-i18n-placeholder="verificationCodePlaceholder" placeholder="קוד האימות שקיבלת ב-SMS">
+                <div id="recaptcha-container"></div>
                 
                 <button type="submit" id="login-submit-btn" data-i18n="loginBtn">התחבר</button>
-                <button type="button" id="register-submit-btn" class="btn-success hidden" data-i18n="signupBtn">סיום הרשמה</button>
+                <button type="button" id="register-submit-btn" class="btn-success hidden" data-i18n="sendVerificationCodeBtn">שלח קוד אימות</button>
 
                 <div style="text-align:center; margin-top:12px;">
                     <a href="#" style="color:var(--text-muted); font-size:0.85rem; display:block; margin-bottom:6px;" onclick="requestPasswordReset()" data-i18n="forgotPass">🔑 שכחתי סיסמה</a>
@@ -2972,6 +3449,15 @@
 
             <div id="tab-audit" class="tab-content hidden">
                 <div class="card" id="audit-logs-container"></div>
+            </div>
+
+            <div id="staff-replacement-modal" class="card hidden" role="dialog" aria-modal="true" style="position:fixed; top:8%; left:5%; right:5%; max-height:84%; z-index:1100; overflow-y:auto; border:2px solid var(--accent-gold);">
+                <h3 id="staff-replacement-title" style="color:var(--accent-gold); margin-bottom:10px;"></h3>
+                <div id="staff-replacement-content"></div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" id="staff-replacement-confirm" class="btn-success" onclick="confirmStaffContactChange()"></button>
+                    <button type="button" id="staff-replacement-cancel" class="btn-secondary" onclick="cancelStaffContactChange()"></button>
+                </div>
             </div>
 
             <div id="event-modal" class="card hidden" style="position:fixed; top:5%; left:5%; right:5%; bottom:5%; z-index:1000; overflow-y:auto; border:2px solid var(--accent-gold);">

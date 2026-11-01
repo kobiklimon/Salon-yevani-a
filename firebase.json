@@ -1,9 +1,16 @@
 {
   "functions": {
-    "source": "functions",
+    "source": ".",
     "ignore": [
       "node_modules",
       ".git",
+      ".firebase",
+      "index.html",
+      "icon.png",
+      "sw.js",
+      "FIREBASE_SETUP.md",
+      "firebase.json",
+      "set-admin-claims.js",
       "firebase-debug.log",
       "firebase-debug.*.log",
       "*.local"
