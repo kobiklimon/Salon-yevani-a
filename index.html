@@ -1969,7 +1969,7 @@
                 const isItemAdmin = m.isAdmin === true;
                 
                 let adminToggleBtn = '';
-                if (isSuperOwner && cleanPhone(m.phone) !== superOwnerPhone) {
+                if (isSuperOwner) {
                     if (isItemAdmin) {
                         adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
                     } else {

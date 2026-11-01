@@ -35,9 +35,6 @@ exports.setStaffAdminRole = onCall(async request => {
     }
 
     const targetPhone = normalizePhone(musicianSnapshot.data().phone);
-    if (targetPhone === SUPER_OWNER_PHONE && !makeAdmin) {
-        throw new HttpsError("failed-precondition", "לא ניתן להסיר הרשאת מנהל מבעל המערכת.");
-    }
     const usersSnapshot = await db.collection("users").get();
     const matchingUsers = usersSnapshot.docs.filter(userDocument =>
         normalizePhone(userDocument.data().phone) === targetPhone
