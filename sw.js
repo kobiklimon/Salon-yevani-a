@@ -24,7 +24,7 @@ messaging.onBackgroundMessage((payload) => {
 });
 
 // מטמון (Cache) בסיסי לתמיכה במצב אופליין
-const CACHE_NAME = 'salon-yevani-cache-v1';
+const CACHE_NAME = 'salon-yevani-cache-v2';
 const urlsToCache = [
     '/',
     '/index.html',

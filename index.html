@@ -771,10 +771,8 @@
         }
 
         function isAuthenticatedSuperOwner() {
-            const authenticatedPhone = String(auth.currentUser?.email || '')
-                .match(/^user_(\d+)@salonyevani\.local$/i)?.[1];
-            return currentUserPhone === superOwnerPhone &&
-                cleanPhone(authenticatedPhone) === superOwnerPhone;
+            return String(auth.currentUser?.email || '').toLowerCase() ===
+                `user_${superOwnerPhone}@salonyevani.local`;
         }
 
         function normalizeIsraeliMobile(phone) {
@@ -3119,7 +3117,10 @@
                             const statusTxt = req.status === 'approved'
                                 ? t.cancellationApproved.replace('{date}', req.eventDate)
                                 : t.cancellationRejected.replace('{date}', req.eventDate);
-                            html += `<div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px;">${t.notificationBranchLabel} ${req.branchName}<br><strong>${statusTxt}</strong></div>`;
+                            const statusIcon = req.status === 'approved'
+                                ? '<span aria-label="אושר" style="color:#43a047;">✓</span>'
+                                : '<span aria-label="נדחה" style="color:#e53935;">✕</span>';
+                            html += `<div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px;">${t.notificationBranchLabel} ${req.branchName}<br><strong>${statusIcon} ${statusTxt}</strong></div>`;
                         }
                     }
                 });

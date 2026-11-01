@@ -16,9 +16,8 @@ exports.setStaffAdminRole = onCall(async request => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "יש להתחבר כדי לשנות הרשאות.");
     }
-    const callerEmail = String(request.auth.token.email || "");
-    const callerPhone = callerEmail.match(/^user_(\d+)@salonyevani\.local$/i)?.[1];
-    if (normalizePhone(callerPhone) !== SUPER_OWNER_PHONE) {
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    if (callerEmail !== `user_${SUPER_OWNER_PHONE}@salonyevani.local`) {
         throw new HttpsError("permission-denied", "רק בעל המערכת יכול לשנות הרשאות מנהל.");
     }
 
@@ -67,26 +66,46 @@ exports.setStaffAdminRole = onCall(async request => {
     const previousAdminStatus = musicianSnapshot.data().isAdmin === true;
     try {
         await musicianRef.update({ isAdmin: makeAdmin });
-        const updatedClaims = { ...previousClaims };
-        if (makeAdmin) updatedClaims.admin = true;
-        else delete updatedClaims.admin;
-        if (targetPhone === SUPER_OWNER_PHONE) updatedClaims.superOwner = true;
+    } catch (error) {
+        logger.error("Could not update staff admin status", {
+            musicianId,
+            errorCode: String(error.code || "unknown"),
+            error: String(error.message || error)
+        });
+        throw new HttpsError(
+            "internal",
+            `עדכון רשומת איש הצוות נכשל (${error.code || "unknown"}).`
+        );
+    }
+
+    const updatedClaims = { ...previousClaims };
+    if (makeAdmin) updatedClaims.admin = true;
+    else delete updatedClaims.admin;
+    if (targetPhone === SUPER_OWNER_PHONE) updatedClaims.superOwner = true;
+    try {
         await auth.setCustomUserClaims(targetUser.uid, updatedClaims);
     } catch (error) {
+        let rollbackSucceeded = false;
         try {
             await musicianRef.update({ isAdmin: previousAdminStatus });
+            rollbackSucceeded = true;
         } catch (rollbackError) {
             logger.error("Could not roll back staff admin status after a failed claims update", {
                 musicianId,
+                errorCode: String(rollbackError.code || "unknown"),
                 error: String(rollbackError.message || rollbackError)
             });
         }
         logger.error("Staff admin role update failed", {
             musicianId,
             targetUid: targetUser.uid,
+            errorCode: String(error.code || "unknown"),
             error: String(error.message || error)
         });
-        throw new HttpsError("internal", `עדכון הרשאות המנהל נכשל: ${error.message || error}`);
+        throw new HttpsError(
+            "failed-precondition",
+            `Firebase לא שמר את הרשאת החשבון (${error.code || "unknown"}).${rollbackSucceeded ? " הרשומה הוחזרה למצבה הקודם." : " גם שחזור רשומת הצוות נכשל; נדרשת בדיקה ביומני הפונקציה."}`
+        );
     }
 
     return { isAdmin: makeAdmin };
