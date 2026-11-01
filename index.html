@@ -770,6 +770,13 @@
             return /^9725\d{8}$/.test(digits) ? `0${digits.slice(3)}` : digits;
         }
 
+        function isAuthenticatedSuperOwner() {
+            const authenticatedPhone = String(auth.currentUser?.email || '')
+                .match(/^user_(\d+)@salonyevani\.local$/i)?.[1];
+            return currentUserPhone === superOwnerPhone &&
+                cleanPhone(authenticatedPhone) === superOwnerPhone;
+        }
+
         function normalizeIsraeliMobile(phone) {
             const cleaned = cleanPhone(phone);
             if (/^05\d{8}$/.test(cleaned)) return `+972${cleaned.slice(1)}`;
@@ -1320,8 +1327,7 @@
             currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
             document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
 
-            const authenticatedPhone = String(user.email || "").match(/^user_(\d+)@salonyevani\.local$/i)?.[1];
-            isSuperOwner = cleanPhone(authenticatedPhone) === superOwnerPhone;
+            isSuperOwner = isAuthenticatedSuperOwner();
 
             const isDatabaseAdmin = matched && matched.isAdmin === true;
             if (isSuperOwner || currentUserPhone === "0500000000" || isDatabaseAdmin || (userDoc.exists() && userDoc.data().role === "admin")) {
@@ -1360,7 +1366,7 @@
                 switchTab('calendar');
             }
 
-            if (isSuperOwner) {
+            if (isAuthenticatedSuperOwner()) {
                 auditTabBtn.classList.remove('hidden');
                 if (backupBtn) backupBtn.classList.remove('hidden');
                 if (lockdownContainer) lockdownContainer.classList.remove('hidden');
@@ -1969,7 +1975,7 @@
                 const isItemAdmin = m.isAdmin === true;
                 
                 let adminToggleBtn = '';
-                if (isSuperOwner) {
+                if (isAuthenticatedSuperOwner()) {
                     if (isItemAdmin) {
                         adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
                     } else {
@@ -1989,7 +1995,7 @@
         }
 
         window.toggleMusicianAdmin = async (musicianId, makeAdmin) => {
-            if (!isSuperOwner) return;
+            if (!isAuthenticatedSuperOwner()) return;
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
                 return;
@@ -2007,7 +2013,9 @@
                 await loadMusiciansData();
                 loadAdminData();
             } catch (err) {
-                alert("שגיאה בעדכון הרשאות: " + err.message);
+                const errorCode = err?.code ? ` (${err.code})` : "";
+                const errorDetails = err?.details ? `\n${err.details}` : "";
+                alert(`שגיאה בעדכון הרשאות${errorCode}: ${err?.message || err}${errorDetails}`);
             }
         };
 
@@ -2280,11 +2288,14 @@
             const nextMonth = nextMonthDate.getMonth();
 
             await loadUnavailabilityData();
-            let targetStaff = allMusicians.find(musician => musician.id === selectedAvailabilityStaffId);
+            const availabilityStaff = isSuperOwner
+                ? allMusicians.filter(musician => musician.role !== "מנהל סניף")
+                : allMusicians;
+            let targetStaff = availabilityStaff.find(musician => musician.id === selectedAvailabilityStaffId);
             if (isSuperOwner) {
                 if (!targetStaff) {
-                    targetStaff = allMusicians.find(musician => cleanPhone(musician.phone) === currentUserPhone)
-                        || allMusicians[0];
+                    targetStaff = availabilityStaff.find(musician => cleanPhone(musician.phone) === currentUserPhone)
+                        || availabilityStaff[0];
                     selectedAvailabilityStaffId = targetStaff ? targetStaff.id : '';
                 }
             } else {
@@ -2317,7 +2328,7 @@
                 ${isSuperOwner ? `
                     <label for="unavailability-staff-filter" style="font-size:0.85rem;">${t.availabilityFilterLabel}</label>
                     <select id="unavailability-staff-filter" onchange="onAvailabilityStaffSelect(event)">
-                        ${allMusicians.map(musician => `<option value="${musician.id}" ${musician.id === selectedAvailabilityStaffId ? 'selected' : ''}>${musician.name} (${musician.role})</option>`).join('')}
+                        ${availabilityStaff.map(musician => `<option value="${musician.id}" ${musician.id === selectedAvailabilityStaffId ? 'selected' : ''}>${musician.name} (${musician.role})</option>`).join('')}
                     </select>
                 ` : ''}
                 <h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[nextMonth]} ${nextYear}</h3>

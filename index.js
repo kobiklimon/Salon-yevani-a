@@ -35,15 +35,33 @@ exports.setStaffAdminRole = onCall(async request => {
     }
 
     const targetPhone = normalizePhone(musicianSnapshot.data().phone);
-    const usersSnapshot = await db.collection("users").get();
-    const matchingUsers = usersSnapshot.docs.filter(userDocument =>
-        normalizePhone(userDocument.data().phone) === targetPhone
-    );
-    if (!targetPhone || matchingUsers.length !== 1) {
-        throw new HttpsError("failed-precondition", "לא נמצא חשבון יחיד התואם לאיש הצוות.");
+    if (!targetPhone) {
+        throw new HttpsError("failed-precondition", "לאיש הצוות לא הוגדר מספר טלפון תקין.");
     }
 
-    const targetUser = await getAuth().getUser(matchingUsers[0].id);
+    const auth = getAuth();
+    let targetUser = null;
+    try {
+        targetUser = await auth.getUserByEmail(`user_${targetPhone}@salonyevani.local`);
+        const targetProfile = await db.collection("users").doc(targetUser.uid).get();
+        if (!targetProfile.exists || normalizePhone(targetProfile.data().phone) !== targetPhone) {
+            targetUser = null;
+        }
+    } catch (error) {
+        if (error.code !== "auth/user-not-found") throw error;
+    }
+
+    if (!targetUser) {
+        const usersSnapshot = await db.collection("users").get();
+        const matchingUsers = usersSnapshot.docs.filter(userDocument =>
+            normalizePhone(userDocument.data().phone) === targetPhone
+        );
+        if (matchingUsers.length !== 1) {
+            throw new HttpsError("failed-precondition", "לא נמצא חשבון יחיד התואם לאיש הצוות. יש לוודא שמספר הטלפון מופיע פעם אחת בלבד בפרופילי המשתמשים.");
+        }
+        targetUser = await auth.getUser(matchingUsers[0].id);
+    }
+
     const previousClaims = { ...(targetUser.customClaims || {}) };
 
     const previousAdminStatus = musicianSnapshot.data().isAdmin === true;
@@ -52,7 +70,8 @@ exports.setStaffAdminRole = onCall(async request => {
         const updatedClaims = { ...previousClaims };
         if (makeAdmin) updatedClaims.admin = true;
         else delete updatedClaims.admin;
-        await getAuth().setCustomUserClaims(targetUser.uid, updatedClaims);
+        if (targetPhone === SUPER_OWNER_PHONE) updatedClaims.superOwner = true;
+        await auth.setCustomUserClaims(targetUser.uid, updatedClaims);
     } catch (error) {
         try {
             await musicianRef.update({ isAdmin: previousAdminStatus });
