@@ -4,7 +4,7 @@ The app already writes push jobs to the `pending_pushes` collection. The Cloud F
 
 ## Prepare admin authorization
 
-The password reset callable requires Firebase Authentication custom claims. This is deliberate: a role field read by the browser is not sufficient authorization for changing another user's password. The in-app admin promotion action now updates both the musician record and the Authentication claim; only the super owner claim can use that callable.
+The password reset callable requires Firebase Authentication custom claims. This is deliberate: a role field read by the browser is not sufficient authorization for changing another user's password. The in-app admin promotion action updates both the musician record and the Authentication claim; only the account registered to phone number `0547771121` can use that action. The server verifies that account from its Firebase Authentication email identity, so admin promotion does not depend on a separately configured `superOwner` claim. Other administrator claims are still required for the password reset and other protected callables.
 
 1. In Firebase Console, open **Authentication > Users** and copy the UID for each system administrator.
 2. Set up Google Application Default Credentials locally with `gcloud auth application-default login`, using an account authorized to manage users in this Firebase project. Never commit a service-account key.

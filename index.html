@@ -757,6 +757,7 @@
         let isAdmin = false;
         let isBranchManager = false;
         let isSuperOwner = false;
+        const superOwnerPhone = "0547771121";
         let superOwnerAuditLogs = [];
         let currentUserPhone = '';
         let currentUserName = '';
@@ -1319,11 +1320,8 @@
             currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
             document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
 
-            if (currentUserPhone === "0547771121") {
-                isSuperOwner = true;
-            } else {
-                isSuperOwner = false;
-            }
+            const authenticatedPhone = String(user.email || "").match(/^user_(\d+)@salonyevani\.local$/i)?.[1];
+            isSuperOwner = cleanPhone(authenticatedPhone) === superOwnerPhone;
 
             const isDatabaseAdmin = matched && matched.isAdmin === true;
             if (isSuperOwner || currentUserPhone === "0500000000" || isDatabaseAdmin || (userDoc.exists() && userDoc.data().role === "admin")) {
@@ -1971,7 +1969,7 @@
                 const isItemAdmin = m.isAdmin === true;
                 
                 let adminToggleBtn = '';
-                if (isSuperOwner && cleanPhone(m.phone) !== "0547771121") {
+                if (isSuperOwner && cleanPhone(m.phone) !== superOwnerPhone) {
                     if (isItemAdmin) {
                         adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
                     } else {

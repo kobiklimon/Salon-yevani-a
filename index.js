@@ -10,12 +10,15 @@ const { randomInt } = require("node:crypto");
 initializeApp();
 
 const db = getFirestore();
+const SUPER_OWNER_PHONE = "0547771121";
 
 exports.setStaffAdminRole = onCall(async request => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "יש להתחבר כדי לשנות הרשאות.");
     }
-    if (request.auth.token.superOwner !== true) {
+    const callerEmail = String(request.auth.token.email || "");
+    const callerPhone = callerEmail.match(/^user_(\d+)@salonyevani\.local$/i)?.[1];
+    if (normalizePhone(callerPhone) !== SUPER_OWNER_PHONE) {
         throw new HttpsError("permission-denied", "רק בעל המערכת יכול לשנות הרשאות מנהל.");
     }
 
@@ -32,6 +35,9 @@ exports.setStaffAdminRole = onCall(async request => {
     }
 
     const targetPhone = normalizePhone(musicianSnapshot.data().phone);
+    if (targetPhone === SUPER_OWNER_PHONE && !makeAdmin) {
+        throw new HttpsError("failed-precondition", "לא ניתן להסיר הרשאת מנהל מבעל המערכת.");
+    }
     const usersSnapshot = await db.collection("users").get();
     const matchingUsers = usersSnapshot.docs.filter(userDocument =>
         normalizePhone(userDocument.data().phone) === targetPhone
@@ -42,9 +48,6 @@ exports.setStaffAdminRole = onCall(async request => {
 
     const targetUser = await getAuth().getUser(matchingUsers[0].id);
     const previousClaims = { ...(targetUser.customClaims || {}) };
-    if (previousClaims.superOwner === true && !makeAdmin) {
-        throw new HttpsError("failed-precondition", "לא ניתן להסיר הרשאת מנהל מבעל המערכת.");
-    }
 
     const previousAdminStatus = musicianSnapshot.data().isAdmin === true;
     try {
