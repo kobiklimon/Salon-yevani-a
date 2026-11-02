@@ -1777,7 +1777,7 @@
                 alert("איש הצוות לא נמצא. נא לטעון מחדש.");
                 return;
             }
-            if (isSuperOwnerMusician(musician)) {
+            if (isSuperOwnerMusician(musician) && (!isAuthenticatedSuperOwner() || action === 'delete')) {
                 alert("לא ניתן למחוק או להשבית את קובי קלימון, בעל המערכת.");
                 return;
             }
@@ -1979,7 +1979,7 @@
                 const isOwnerMusician = isSuperOwnerMusician(m);
                 
                 let adminToggleBtn = '';
-                if (isAuthenticatedSuperOwner()) {
+                if (isAuthenticatedSuperOwner() && !isOwnerMusician) {
                     if (isItemAdmin) {
                         adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
                     } else {
@@ -1987,9 +1987,12 @@
                     }
                 }
 
-                const staffActions = isOwnerMusician ? '' : `
+                const canManageOwnerRecord = isOwnerMusician && isAuthenticatedSuperOwner();
+                const staffActions = isOwnerMusician && !canManageOwnerRecord ? '' : `
                     <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBtn}</button>
-                    <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteMusician('${m.id}')">${t.deleteBtn}</button>
+                    ${isOwnerMusician
+                        ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; opacity:0.55; cursor:not-allowed;" disabled title="חשבון בעל המערכת מוגן">${t.deleteBtn}</button>`
+                        : `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteMusician('${m.id}')">${t.deleteBtn}</button>`}
                 `;
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
                     <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? `<span class="badge" style="background:var(--accent-gold); color:#000;">${t.systemAdminBadge}</span>` : ''} ${m.branchName ? `<small>| ${t.branchLabel} ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? t.inactiveStatus : t.activeStatus}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || t.noPhoneLabel}</small></span>
@@ -2086,7 +2089,7 @@
         window.editMusician = (id, name, role, phone, status) => {
             if (!isAdmin) return;
             const musician = allMusicians.find(item => item.id === id);
-            if (!musician || isSuperOwnerMusician(musician)) {
+            if (!musician || (isSuperOwnerMusician(musician) && !isAuthenticatedSuperOwner())) {
                 alert("אין הרשאה לערוך את איש הצוות שנבחר.");
                 return;
             }

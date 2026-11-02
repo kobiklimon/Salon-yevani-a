@@ -208,7 +208,7 @@ exports.updateStaffProfile = onCall(async request => {
         throw new HttpsError("not-found", "איש הצוות לא נמצא.");
     }
     const previousMusician = musicianSnapshot.data();
-    if (normalizePhone(previousMusician.phone) === SUPER_OWNER_PHONE) {
+    if (normalizePhone(previousMusician.phone) === SUPER_OWNER_PHONE && !isSuperOwner) {
         throw new HttpsError("failed-precondition", "לא ניתן לערוך את איש הצוות קובי קלימון.");
     }
     if (status === "inactive" && previousMusician.status !== "inactive") {
