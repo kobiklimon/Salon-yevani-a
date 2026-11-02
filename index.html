@@ -208,7 +208,6 @@
                 staffReplacementDescription: "יש לבחור איש צוות פעיל באותו תפקיד לכל הופעה עתידית:",
                 staffReplacementConfirm: "אשר החלפות והמשך",
                 staffReplacementCancel: "ביטול",
-                staffReplacementNoEvents: "לא נמצאו הופעות עתידיות שבהן איש הצוות משובץ.",
                 staffReplacementNoCandidate: "אין איש צוות זמין באותו תפקיד לתאריך זה.",
                 staffReplacementRequired: "יש לבחור מחליף באותו תפקיד לכל ההופעות המפורטות.",
                 staffContactDeleteConfirm: "למחוק את איש הקשר ואת כל השיבוצים העתידיים שלו?",
@@ -387,7 +386,6 @@
                 staffReplacementDescription: "Choose an active staff member with the same role for every future show:",
                 staffReplacementConfirm: "Confirm replacements and continue",
                 staffReplacementCancel: "Cancel",
-                staffReplacementNoEvents: "No future shows were found for this staff member.",
                 staffReplacementNoCandidate: "No available staff member with the same role for this date.",
                 staffReplacementRequired: "Choose a same-role replacement for every listed show.",
                 staffContactDeleteConfirm: "Delete this contact and replace all of their future assignments?",
@@ -566,7 +564,6 @@
                 staffReplacementDescription: "Επιλέξτε ενεργό μέλος με τον ίδιο ρόλο για κάθε μελλοντική εμφάνιση:",
                 staffReplacementConfirm: "Επιβεβαίωση αντικαταστάσεων",
                 staffReplacementCancel: "Ακύρωση",
-                staffReplacementNoEvents: "Δεν βρέθηκαν μελλοντικές εμφανίσεις για αυτό το μέλος.",
                 staffReplacementNoCandidate: "Δεν υπάρχει διαθέσιμο μέλος με τον ίδιο ρόλο για αυτή την ημερομηνία.",
                 staffReplacementRequired: "Επιλέξτε αντικαταστάτη με τον ίδιο ρόλο για κάθε εμφάνιση.",
                 staffContactDeleteConfirm: "Να διαγραφεί η επαφή και να αντικατασταθούν όλες οι μελλοντικές αναθέσεις;",
@@ -1810,7 +1807,14 @@
                     return [event.id, candidates];
                 }));
 
-                pendingStaffReplacement = { musicianId, action, profileUpdates, musician, events, replacementsByEvent };
+                const pending = { musicianId, action, profileUpdates, musician, events, replacementsByEvent };
+                pendingStaffReplacement = pending;
+                if (upcomingEvents.length === 0) {
+                    await commitStaffContactChange([]);
+                    if (pendingStaffReplacement === pending) pendingStaffReplacement = null;
+                    return;
+                }
+
                 const container = document.getElementById('staff-replacement-modal');
                 const title = document.getElementById('staff-replacement-title');
                 const content = document.getElementById('staff-replacement-content');
@@ -1819,31 +1823,26 @@
                 document.getElementById('staff-replacement-confirm').textContent = t.staffReplacementConfirm;
                 document.getElementById('staff-replacement-cancel').textContent = t.staffReplacementCancel;
 
-                if (upcomingEvents.length === 0) {
-                    content.innerHTML = `<p>${t.staffReplacementNoEvents}</p>`;
-                    document.getElementById('staff-replacement-confirm').disabled = false;
-                } else {
-                    content.innerHTML = `
-                        <p style="margin-bottom:10px;">${t.staffReplacementDescription}</p>
-                        ${upcomingEvents.map(event => {
-                            const branch = allBranches.find(item => item.id === event.branchId);
-                            const candidates = replacementsByEvent.get(event.id);
-                            return `
-                                <div style="margin-bottom:12px;">
-                                    <strong>${event.date} | ${branch ? branch.name : t.notificationBranchLabel} | ${event.time}</strong>
-                                    ${candidates.length ? `
-                                        <select class="staff-replacement-select" data-event-id="${event.id}" required>
-                                            <option value="">${t.selectReplacement}</option>
-                                            ${candidates.map(candidate => `<option value="${candidate.id}">${candidate.name} (${candidate.role})</option>`).join('')}
-                                        </select>
-                                    ` : `<p style="color:var(--danger);">${t.staffReplacementNoCandidate}</p>`}
-                                </div>
-                            `;
-                        }).join('')}
-                    `;
-                    const hasMissingCandidates = [...replacementsByEvent.values()].some(candidates => candidates.length === 0);
-                    document.getElementById('staff-replacement-confirm').disabled = hasMissingCandidates;
-                }
+                content.innerHTML = `
+                    <p style="margin-bottom:10px;">${t.staffReplacementDescription}</p>
+                    ${upcomingEvents.map(event => {
+                        const branch = allBranches.find(item => item.id === event.branchId);
+                        const candidates = replacementsByEvent.get(event.id);
+                        return `
+                            <div style="margin-bottom:12px;">
+                                <strong>${event.date} | ${branch ? branch.name : t.notificationBranchLabel} | ${event.time}</strong>
+                                ${candidates.length ? `
+                                    <select class="staff-replacement-select" data-event-id="${event.id}" required>
+                                        <option value="">${t.selectReplacement}</option>
+                                        ${candidates.map(candidate => `<option value="${candidate.id}">${candidate.name} (${candidate.role})</option>`).join('')}
+                                    </select>
+                                ` : `<p style="color:var(--danger);">${t.staffReplacementNoCandidate}</p>`}
+                            </div>
+                        `;
+                    }).join('')}
+                `;
+                const hasMissingCandidates = [...replacementsByEvent.values()].some(candidates => candidates.length === 0);
+                document.getElementById('staff-replacement-confirm').disabled = hasMissingCandidates;
 
                 container.classList.remove('hidden');
             } catch (err) {
