@@ -16,6 +16,7 @@ The password reset callable requires Firebase Authentication custom claims. This
 1. Install Node.js 20 and the Firebase CLI, then sign in with `firebase login`.
 2. From the project root, run `firebase deploy --only functions`. The root `index.js` and `package.json` are the configured Functions source.
 3. If prompted, enable Cloud Functions and the Cloud Messaging API for the Firebase project. Cloud Functions deployment may require the Blaze billing plan.
+4. The function runtime service account must be allowed to manage Firebase Authentication users and write Firestore documents. If changing an admin role reports a permission error, check the deployed function logs and grant its runtime service account the Firebase Authentication Admin role and the required Firestore write role in Google Cloud IAM.
 
 When an administrator approves a password reset, the server changes the Firebase Authentication password and returns a newly generated temporary password to that administrator once. It is not stored in Firestore or sent in a push notification. The administrator must give it to the user through a private channel. The app requires the user to choose a permanent password before opening the main interface.
 

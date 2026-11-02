@@ -79,8 +79,8 @@ exports.setStaffAdminRole = onCall(async request => {
                 error: String(error.message || error)
             });
             throw new HttpsError(
-                "internal",
-                `עדכון רשומת איש הצוות נכשל (${error.code || "unknown"}).`
+                "failed-precondition",
+                `עדכון רשומת איש הצוות נכשל (${error.code || "unknown"}). יש לבדוק הרשאות כתיבה של חשבון השירות ל-Firestore.`
             );
         }
 
@@ -109,9 +109,10 @@ exports.setStaffAdminRole = onCall(async request => {
                 errorCode: String(error.code || "unknown"),
                 error: String(error.message || error)
             });
+            const isPermissionError = String(error.code || "").toLowerCase().includes("permission");
             throw new HttpsError(
                 "failed-precondition",
-                `Firebase לא שמר את הרשאת החשבון (${error.code || "unknown"}).${rollbackSucceeded ? " הרשומה הוחזרה למצבה הקודם." : " גם שחזור רשומת הצוות נכשל; נדרשת בדיקה ביומני הפונקציה."}`
+                `Firebase לא שמר את הרשאת החשבון (${error.code || "unknown"}).${isPermissionError ? " יש להעניק לחשבון השירות של הפונקציה תפקיד Firebase Authentication Admin." : ""}${rollbackSucceeded ? " הרשומה הוחזרה למצבה הקודם." : " גם שחזור רשומת הצוות נכשל; נדרשת בדיקה ביומני הפונקציה."}`
             );
         }
 
@@ -181,6 +182,42 @@ function validateReplacement(event, target, replacement, allEvents, unavailableP
         throw new HttpsError("failed-precondition", "המחליף משובץ בסניף אחר באותה שעה.");
     }
 }
+
+exports.updateStaffProfile = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לעדכן איש צוות.");
+    }
+
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
+        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
+    }
+
+    const { musicianId, name, role, status } = request.data || {};
+    if (typeof musicianId !== "string" || !musicianId ||
+        typeof name !== "string" || !name.trim() ||
+        !["זמר/ת", "קלידים", "בוזוקי", "מנהל סניף"].includes(role) ||
+        !["active", "inactive"].includes(status)) {
+        throw new HttpsError("invalid-argument", "פרטי איש הצוות אינם תקינים.");
+    }
+
+    const musicianRef = db.collection("musicians").doc(musicianId);
+    const musicianSnapshot = await musicianRef.get();
+    if (!musicianSnapshot.exists) {
+        throw new HttpsError("not-found", "איש הצוות לא נמצא.");
+    }
+    const previousMusician = musicianSnapshot.data();
+    if (normalizePhone(previousMusician.phone) === SUPER_OWNER_PHONE) {
+        throw new HttpsError("failed-precondition", "לא ניתן לערוך את איש הצוות קובי קלימון.");
+    }
+    if (status === "inactive" && previousMusician.status !== "inactive") {
+        throw new HttpsError("failed-precondition", "יש להשתמש בתהליך ההשבתה כדי לשמור על שיבוצים עתידיים.");
+    }
+
+    await musicianRef.update({ name: name.trim(), role, status });
+    return { musicianId, name: name.trim(), role, status };
+});
 
 exports.changeStaffContact = onCall(async request => {
     if (!request.auth) {

@@ -740,6 +740,9 @@
         let currentBranchId = '';
         let currentYear = new Date().getFullYear();
         let currentMonth = new Date().getMonth();
+        const initialAvailabilityDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+        let availabilityYear = initialAvailabilityDate.getFullYear();
+        let availabilityMonth = initialAvailabilityDate.getMonth();
         let allMusicians = [];
         let allBranches = [];
         let monthEvents = [];
@@ -771,8 +774,13 @@
         }
 
         function isAuthenticatedSuperOwner() {
-            return String(auth.currentUser?.email || '').toLowerCase() ===
-                `user_${superOwnerPhone}@salonyevani.local`;
+            return currentUserPhone === superOwnerPhone &&
+                String(auth.currentUser?.email || '').toLowerCase() ===
+                    `user_${superOwnerPhone}@salonyevani.local`;
+        }
+
+        function isSuperOwnerMusician(musician) {
+            return cleanPhone(musician?.phone) === superOwnerPhone;
         }
 
         function normalizeIsraeliMobile(phone) {
@@ -1613,6 +1621,7 @@
             isAdmin = false;
             isBranchManager = false;
             isSuperOwner = false;
+            resetMusicianEditForm();
 
             signOut(auth);
         });
@@ -1768,6 +1777,10 @@
                 alert("איש הצוות לא נמצא. נא לטעון מחדש.");
                 return;
             }
+            if (isSuperOwnerMusician(musician)) {
+                alert("לא ניתן למחוק או להשבית את קובי קלימון, בעל המערכת.");
+                return;
+            }
             if (action === 'delete' && !confirm(i18n[currentLang].staffContactDeleteConfirm)) return;
 
             try {
@@ -1862,12 +1875,7 @@
                 alert(actionDescription + (result.data.authAccountDeleted === false ? t.authAccountDeleteWarning : ""));
 
                 if (document.getElementById('edit-musician-id').value === pending.musicianId) {
-                    document.getElementById('edit-musician-id').value = '';
-                    document.getElementById('musician-name').value = '';
-                    document.getElementById('musician-phone').value = '';
-                    document.getElementById('musician-phone').disabled = false;
-                    document.getElementById('phone-edit-note').classList.add('hidden');
-                    document.getElementById('musician-submit-btn').textContent = i18n[currentLang].addMusicianBtn;
+                    resetMusicianEditForm();
                 }
                 document.getElementById('staff-replacement-modal').classList.add('hidden');
                 pendingStaffReplacement = null;
@@ -1909,36 +1917,33 @@
             }
 
             const editId = document.getElementById('edit-musician-id').value;
+            if (!editId) {
+                alert("אנשי צוות חדשים מצטרפים באמצעות הרשמה לאפליקציה.");
+                return;
+            }
+            const existingMusician = allMusicians.find(musician => musician.id === editId);
+            if (!existingMusician || isSuperOwnerMusician(existingMusician)) {
+                alert("אין הרשאה לערוך את איש הצוות שנבחר.");
+                resetMusicianEditForm();
+                return;
+            }
             const name = document.getElementById('musician-name').value;
             const role = document.getElementById('musician-role').value;
-            const phone = document.getElementById('musician-phone').value.trim();
             const status = document.getElementById('musician-status').value;
 
             try {
-                if (editId) {
-                    const existingMusician = allMusicians.find(musician => musician.id === editId);
-                    if (status === 'inactive' && existingMusician && existingMusician.status !== 'inactive') {
-                        await startStaffContactChange(editId, 'deactivate', { name, role });
-                        return;
-                    }
-                    await updateDoc(doc(db, "musicians", editId), { name, role, status });
-                    logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`, "ניהול סניפים וצוות");
-                    document.getElementById('edit-musician-id').value = '';
-                    document.getElementById('musician-phone').disabled = false;
-                    document.getElementById('phone-edit-note').classList.add('hidden');
-                    document.getElementById('musician-submit-btn').textContent = i18n[currentLang].addMusicianBtn;
-                    alert("איש הצוות עודכן בהצלחה!");
-                } else {
-                    await addDoc(collection(db, "musicians"), { name, role, phone, status: status || "active", isAdmin: false });
-                    logAction("הוספת איש צוות", `נוסף איש צוות: ${name} (${role}), טלפון: ${phone}`, "ניהול סניפים וצוות");
-                    alert("איש צוות נוסף בהצלחה!");
+                if (status === 'inactive' && existingMusician.status !== 'inactive') {
+                    await startStaffContactChange(editId, 'deactivate', { name, role });
+                    return;
                 }
 
-                document.getElementById('musician-name').value = '';
-                document.getElementById('musician-phone').value = '';
+                const updateStaffProfile = httpsCallable(functions, "updateStaffProfile");
+                await updateStaffProfile({ musicianId: editId, name, role, status });
+                await logAction("עדכון איש צוות", `עודכנו פרטי ${name} (${role}), סטטוס: ${status}`, "ניהול סניפים וצוות");
+                alert("איש הצוות עודכן בהצלחה!");
+                resetMusicianEditForm();
                 await loadMusiciansData();
-                loadBranchesSelect();
-                loadAdminData();
+                await loadAdminData();
             } catch (err) {
                 alert("שגיאה בשמירת איש צוות: " + err.message);
             }
@@ -1971,6 +1976,7 @@
             allMusicians.forEach(m => {
                 const isInactive = m.status === 'inactive';
                 const isItemAdmin = m.isAdmin === true;
+                const isOwnerMusician = isSuperOwnerMusician(m);
                 
                 let adminToggleBtn = '';
                 if (isAuthenticatedSuperOwner()) {
@@ -1981,12 +1987,15 @@
                     }
                 }
 
+                const staffActions = isOwnerMusician ? '' : `
+                    <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBtn}</button>
+                    <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteMusician('${m.id}')">${t.deleteBtn}</button>
+                `;
                 mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
                     <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? `<span class="badge" style="background:var(--accent-gold); color:#000;">${t.systemAdminBadge}</span>` : ''} ${m.branchName ? `<small>| ${t.branchLabel} ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? t.inactiveStatus : t.activeStatus}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || t.noPhoneLabel}</small></span>
                     <div style="display:flex; gap:5px; align-items:center;">
                         ${adminToggleBtn}
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBtn}</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteMusician('${m.id}')">${t.deleteBtn}</button>
+                        ${staffActions}
                     </div>
                 </div>`;
             });
@@ -2002,18 +2011,23 @@
             try {
                 const updateAdminRole = httpsCallable(functions, "setStaffAdminRole");
                 await updateAdminRole({ musicianId, makeAdmin });
-                const targetMusician = allMusicians.find(m => m.id === musicianId);
-                const actionDesc = makeAdmin ? "הוגדר כמנהל מערכת" : "הוסרה הרשאת מנהל מערכת";
-                
-                logAction("שינוי הרשאות מנהל", `למשתמש ${targetMusician ? targetMusician.name : musicianId} ${actionDesc}`, "ניהול סניפים וצוות");
-                alert(makeAdmin ? "✅ איש הצוות הוגדר כמנהל מערכת בהצלחה!" : "ℹ️ הרשאת המנהל הוסרה בהצלחה.");
-                
-                await loadMusiciansData();
-                loadAdminData();
             } catch (err) {
                 const errorCode = err?.code ? ` (${err.code})` : "";
                 const errorDetails = err?.details ? `\n${err.details}` : "";
                 alert(`שגיאה בעדכון הרשאות${errorCode}: ${err?.message || err}${errorDetails}`);
+                return;
+            }
+
+            const targetMusician = allMusicians.find(m => m.id === musicianId);
+            const actionDesc = makeAdmin ? "הוגדר כמנהל מערכת" : "הוסרה הרשאת מנהל מערכת";
+            await logAction("שינוי הרשאות מנהל", `למשתמש ${targetMusician ? targetMusician.name : musicianId} ${actionDesc}`, "ניהול סניפים וצוות");
+            alert(makeAdmin ? "✅ איש הצוות הוגדר כמנהל מערכת בהצלחה!" : "ℹ️ הרשאת המנהל הוסרה בהצלחה.");
+
+            try {
+                await loadMusiciansData();
+                await loadAdminData();
+            } catch (err) {
+                alert(`ההרשאה עודכנה, אך רענון הרשימה נכשל: ${err?.message || err}`);
             }
         };
 
@@ -2054,7 +2068,28 @@
             document.getElementById('branch-cancel-btn').classList.add('hidden');
         };
 
+        function resetMusicianEditForm() {
+            document.getElementById('add-musician-form').classList.add('hidden');
+            document.getElementById('edit-musician-id').value = '';
+            document.getElementById('musician-name').value = '';
+            document.getElementById('musician-role').value = 'זמר/ת';
+            const phoneInput = document.getElementById('musician-phone');
+            phoneInput.value = '';
+            phoneInput.disabled = false;
+            document.getElementById('phone-edit-note').classList.add('hidden');
+            document.getElementById('musician-status').value = 'active';
+            document.getElementById('musician-submit-btn').textContent = i18n[currentLang].updateMusicianBtn;
+        }
+
+        window.cancelEditMusician = resetMusicianEditForm;
+
         window.editMusician = (id, name, role, phone, status) => {
+            if (!isAdmin) return;
+            const musician = allMusicians.find(item => item.id === id);
+            if (!musician || isSuperOwnerMusician(musician)) {
+                alert("אין הרשאה לערוך את איש הצוות שנבחר.");
+                return;
+            }
             document.getElementById('edit-musician-id').value = id;
             document.getElementById('musician-name').value = name;
             document.getElementById('musician-role').value = role;
@@ -2069,6 +2104,7 @@
             
             const formElement = document.getElementById('add-musician-form');
             if (formElement) {
+                formElement.classList.remove('hidden');
                 formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         };
@@ -2280,10 +2316,8 @@
             const today = new Date();
             const dayOfMonth = today.getDate();
             const isWindowOpen = isSuperOwner || (dayOfMonth >= 10 && dayOfMonth <= 15);
-
-            const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-            const nextYear = nextMonthDate.getFullYear();
-            const nextMonth = nextMonthDate.getMonth();
+            const displayYear = availabilityYear;
+            const displayMonth = availabilityMonth;
 
             await loadUnavailabilityData();
             const availabilityStaff = isSuperOwner
@@ -2311,7 +2345,7 @@
             } else if (isWindowOpen) {
                 statusHTML = `
                     <div style="background:#1b5e20; border:1px solid #43a047; color:#fff; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-size:0.85rem;">
-                        ${t.unavailOpen} ${t.months[nextMonth]}.
+                        ${t.unavailOpen} ${t.months[displayMonth]}.
                     </div>
                 `;
             } else {
@@ -2328,14 +2362,19 @@
                     <select id="unavailability-staff-filter" onchange="onAvailabilityStaffSelect(event)">
                         ${availabilityStaff.map(musician => `<option value="${musician.id}" ${musician.id === selectedAvailabilityStaffId ? 'selected' : ''}>${musician.name} (${musician.role})</option>`).join('')}
                     </select>
+                    <div class="calendar-header">
+                        <button type="button" class="btn-secondary" style="width:auto; padding:5px 12px;" onclick="changeAvailabilityMonth(-1)">${t.prevMonth}</button>
+                        <h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[displayMonth]} ${displayYear}</h3>
+                        <button type="button" class="btn-secondary" style="width:auto; padding:5px 12px;" onclick="changeAvailabilityMonth(1)">${t.nextMonth}</button>
+                    </div>
                 ` : ''}
-                <h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[nextMonth]} ${nextYear}</h3>
+                ${isSuperOwner ? '' : `<h3 style="color:var(--accent-gold); margin-bottom:5px;">${t.unavailTitle} ${t.months[displayMonth]} ${displayYear}</h3>`}
                 ${statusHTML}
                 <div class="calendar-grid" id="unavail-grid"></div>
             `;
 
-            const firstDay = new Date(nextYear, nextMonth, 1).getDay();
-            const daysInMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
+            const firstDay = new Date(displayYear, displayMonth, 1).getDay();
+            const daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
 
             let gridHTML = t.daysShort.map(d => `<div class="cal-day-name">${d}</div>`).join('');
 
@@ -2344,7 +2383,7 @@
             }
 
             for (let day = 1; day <= daysInMonth; day++) {
-                const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dateStr = `${displayYear}-${String(displayMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const isUnavail = userUnavailabilities.some(u => cleanPhone(u.phone) === targetPhone && u.date === dateStr);
 
                 const clickAction = isWindowOpen ? `onclick="toggleDayUnavailability('${dateStr}', ${isUnavail})"` : `onclick="alert('${t.unavailClosed}')"`;
@@ -2361,6 +2400,14 @@
 
             document.getElementById('unavail-grid').innerHTML = gridHTML;
         }
+
+        window.changeAvailabilityMonth = direction => {
+            if (!isAuthenticatedSuperOwner() || !Number.isInteger(direction)) return;
+            const monthDate = new Date(availabilityYear, availabilityMonth + direction, 1);
+            availabilityYear = monthDate.getFullYear();
+            availabilityMonth = monthDate.getMonth();
+            loadUnavailabilityCalendar();
+        };
 
         window.onAvailabilityStaffSelect = (event) => {
             if (!isSuperOwner) return;
@@ -3421,7 +3468,7 @@
 
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="teamMgmtTitle">ניהול צוות ומתן הרשאות מנהל</h3>
-                    <form id="add-musician-form">
+                    <form id="add-musician-form" class="hidden">
                         <input type="hidden" id="edit-musician-id">
                         <input type="text" id="musician-name" data-i18n-placeholder="fullNamePlaceholder" placeholder="שם מלא" required>
                         <select id="musician-role">
@@ -3436,7 +3483,10 @@
                             <option value="active" data-i18n="activeStatus">פעיל</option>
                             <option value="inactive" data-i18n="inactiveStatus">לא פעיל</option>
                         </select>
-                        <button type="submit" id="musician-submit-btn" data-i18n="addMusicianBtn">הוסף איש צוות</button>
+                        <div style="display:flex; gap:8px;">
+                            <button type="submit" id="musician-submit-btn" style="flex:2;" data-i18n="updateMusicianBtn">עדכן איש צוות</button>
+                            <button type="button" class="btn-danger" style="flex:1;" onclick="cancelEditMusician()">ביטול</button>
+                        </div>
                     </form>
                     <div id="musicians-list"></div>
                 </div>
