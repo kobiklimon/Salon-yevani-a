@@ -13,6 +13,14 @@ The password reset callable requires Firebase Authentication custom claims. This
 3. From the project root, run `GCLOUD_PROJECT=salon-yevani-a node set-admin-claims.js <UID> admin` for each administrator. Run `GCLOUD_PROJECT=salon-yevani-a node set-admin-claims.js <OWNER_UID> superOwner` for the super owner. New claims take effect after that user signs out and signs in again.
 4. To revoke a claim, run `node set-admin-claims.js <UID> removeAdmin`.
 
+## Add missing staff admin fields
+
+The migration script only fills in `isAdmin: false` on documents in the `musicians` collection where `isAdmin` is absent. Existing values (including `true`) are preserved. It uses a Firestore transaction per document so a field added by another operation after the initial scan is not overwritten.
+
+1. Authenticate locally with Application Default Credentials as described above, and ensure the project dependencies are installed.
+2. From the project root, run `node migrate-staff-admin-field.js` to preview how many documents are missing the field. This does not write any data.
+3. If the preview is as expected, run `node migrate-staff-admin-field.js --apply` to update the Firebase project `salon-yevani-a`.
+
 ## Deploy Firebase functions
 
 1. Install Node.js 20 and the Firebase CLI, then sign in with `firebase login`.
