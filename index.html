@@ -2019,7 +2019,6 @@
         }
 
         window.toggleMusicianAdmin = async (musicianId, makeAdmin) => {
-            console.log("Musician ID received:",musicianId);
             if (!isAuthenticatedSuperOwner()) return;
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
