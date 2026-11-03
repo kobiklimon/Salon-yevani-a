@@ -504,72 +504,101 @@ function createTemporaryPassword() {
 }
 
 exports.resetUserPassword = onCall(async request => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "יש להתחבר כדי לאפס סיסמה.");
-    }
-    if (request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
-        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
-    }
-
-    const requestId = request.data && request.data.requestId;
-    if (typeof requestId !== "string" || !requestId.trim()) {
-        throw new HttpsError("invalid-argument", "בקשת איפוס לא תקינה.");
-    }
-
-    const resetRequestRef = db.collection("password_reset_requests").doc(requestId);
-    const resetRequestSnapshot = await resetRequestRef.get();
-    if (!resetRequestSnapshot.exists || resetRequestSnapshot.data().status !== "pending") {
-        throw new HttpsError("failed-precondition", "בקשת האיפוס כבר טופלה או שאינה קיימת.");
-    }
-
-    const requestedPhone = normalizePhone(resetRequestSnapshot.data().userPhone);
-    if (!requestedPhone) {
-        throw new HttpsError("failed-precondition", "לבקשה אין מספר טלפון תקין.");
-    }
-
-    const usersSnapshot = await db.collection("users").get();
-    const matchingUsers = usersSnapshot.docs.filter(userDocument =>
-        normalizePhone(userDocument.data().phone) === requestedPhone
-    );
-    if (matchingUsers.length !== 1) {
-        throw new HttpsError("failed-precondition", "לא נמצא חשבון יחיד התואם למספר הטלפון.");
-    }
-
-    const targetUserDocument = matchingUsers[0];
-    const processingAt = FieldValue.serverTimestamp();
-    await db.runTransaction(async transaction => {
-        const currentRequest = await transaction.get(resetRequestRef);
-        if (!currentRequest.exists || currentRequest.data().status !== "pending") {
-            throw new HttpsError("failed-precondition", "בקשת האיפוס כבר טופלה.");
-        }
-        transaction.update(resetRequestRef, {
-            status: "processing",
-            resetByUid: request.auth.uid,
-            processingAt
-        });
-    });
-
-    const temporaryPassword = createTemporaryPassword();
-    const mustChangePasswordBeforeReset = targetUserDocument.data().mustChangePassword === true;
+    let operation = "אימות מנהל";
+    let requestId = "";
     try {
-        await targetUserDocument.ref.update({
-            mustChangePassword: true,
-            tempPassword: FieldValue.delete()
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "יש להתחבר כדי לאפס סיסמה.");
+        }
+        if (request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
+            throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
+        }
+
+        requestId = request.data && request.data.requestId;
+        if (typeof requestId !== "string" || !requestId.trim()) {
+            throw new HttpsError("invalid-argument", "בקשת איפוס לא תקינה.");
+        }
+
+        operation = "קריאת בקשת האיפוס";
+        const resetRequestRef = db.collection("password_reset_requests").doc(requestId);
+        const resetRequestSnapshot = await resetRequestRef.get();
+        if (!resetRequestSnapshot.exists || resetRequestSnapshot.data().status !== "pending") {
+            throw new HttpsError("failed-precondition", "בקשת האיפוס כבר טופלה או שאינה קיימת.");
+        }
+
+        const requestedPhone = normalizePhone(resetRequestSnapshot.data().userPhone);
+        if (!requestedPhone) {
+            throw new HttpsError("failed-precondition", "לבקשה אין מספר טלפון תקין.");
+        }
+
+        operation = "איתור חשבון המשתמש";
+        const usersSnapshot = await db.collection("users").get();
+        const matchingUsers = usersSnapshot.docs.filter(userDocument =>
+            normalizePhone(userDocument.data().phone) === requestedPhone
+        );
+        if (matchingUsers.length !== 1) {
+            throw new HttpsError("failed-precondition", "לא נמצא חשבון יחיד התואם למספר הטלפון.");
+        }
+
+        const targetUserDocument = matchingUsers[0];
+        const processingAt = FieldValue.serverTimestamp();
+        operation = "סימון בקשת האיפוס כבטיפול";
+        await db.runTransaction(async transaction => {
+            const currentRequest = await transaction.get(resetRequestRef);
+            if (!currentRequest.exists || currentRequest.data().status !== "pending") {
+                throw new HttpsError("failed-precondition", "בקשת האיפוס כבר טופלה.");
+            }
+            transaction.update(resetRequestRef, {
+                status: "processing",
+                resetByUid: request.auth.uid,
+                processingAt
+            });
         });
-        await getAuth().updateUser(targetUserDocument.id, { password: temporaryPassword });
+
+        const temporaryPassword = createTemporaryPassword();
+        const mustChangePasswordBeforeReset = targetUserDocument.data().mustChangePassword === true;
+        try {
+            operation = "עדכון פרופיל המשתמש";
+            await targetUserDocument.ref.update({
+                mustChangePassword: true,
+                tempPassword: FieldValue.delete()
+            });
+            operation = "עדכון סיסמת Firebase Authentication";
+            await getAuth().updateUser(targetUserDocument.id, { password: temporaryPassword });
+        } catch (error) {
+            const rollback = await Promise.allSettled([
+                resetRequestRef.update({ status: "pending", processingAt: FieldValue.delete() }),
+                targetUserDocument.ref.update({
+                    mustChangePassword: mustChangePasswordBeforeReset ? true : FieldValue.delete()
+                })
+            ]);
+            rollback.forEach((result, index) => {
+                if (result.status === "rejected") {
+                    logger.error("Password reset rollback failed", {
+                        requestId,
+                        rollbackOperation: index === 0 ? "reset request" : "user profile",
+                        errorCode: String(result.reason?.code || "unknown"),
+                        error: String(result.reason?.message || result.reason)
+                    });
+                }
+            });
+            throw error;
+        }
 
         let resetRequestRecorded = true;
         try {
+            operation = "עדכון סטטוס בקשת האיפוס";
             await resetRequestRef.update({
-            status: "approved",
-            resetByUid: request.auth.uid,
-            processingAt: FieldValue.delete(),
-            resetAt: FieldValue.serverTimestamp()
-        });
+                status: "approved",
+                resetByUid: request.auth.uid,
+                processingAt: FieldValue.delete(),
+                resetAt: FieldValue.serverTimestamp()
+            });
         } catch (recordError) {
             resetRequestRecorded = false;
             logger.error("Password changed, but reset request status could not be finalized", {
                 requestId,
+                errorCode: String(recordError.code || "unknown"),
                 error: String(recordError.message || recordError)
             });
         }
@@ -580,15 +609,18 @@ exports.resetUserPassword = onCall(async request => {
             resetRequestRecorded
         };
     } catch (error) {
-        const rollback = [
-            resetRequestRef.update({ status: "pending", processingAt: FieldValue.delete() })
-        ];
-        rollback.push(targetUserDocument.ref.update({
-            mustChangePassword: mustChangePasswordBeforeReset ? true : FieldValue.delete()
-        }));
-        await Promise.allSettled(rollback);
-        logger.error("Password reset failed", { requestId, error: String(error.message || error) });
-        throw new HttpsError("internal", "איפוס הסיסמה נכשל. ניתן לנסות שוב.");
+        if (error instanceof HttpsError) throw error;
+        const errorCode = String(error.code || "unknown");
+        logger.error("Password reset failed", {
+            requestId,
+            operation,
+            errorCode,
+            error: String(error.message || error)
+        });
+        throw new HttpsError(
+            "internal",
+            `איפוס הסיסמה נכשל בשלב "${operation}" (${errorCode}). יש לבדוק את יומני הפונקציה ואת הרשאות חשבון השירות.`
+        );
     }
 });
 

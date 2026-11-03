@@ -2,6 +2,8 @@
 
 The app already writes push jobs to the `pending_pushes` collection. The Cloud Function in the project-root `index.js` sends each new job through Firebase Cloud Messaging and removes it after delivery. Invalid device tokens are removed from `push_tokens`; transient delivery errors are retried by Cloud Functions.
 
+Cloud Functions are configured with `"source": "."` in `firebase.json`, and `package.json` points to the root `index.js`. A separate `functions/` directory is not required. Updating the files on GitHub does not by itself deploy Cloud Functions; deploy them separately with the Firebase CLI as described below. An `internal` callable error means the deployed function encountered a server-side failure, not that the app could not find a `functions/` folder. Check the Firebase Functions logs for the operation and error code shown in the app.
+
 ## Prepare admin authorization
 
 The password reset callable requires Firebase Authentication custom claims. This is deliberate: a role field read by the browser is not sufficient authorization for changing another user's password. The in-app admin promotion action updates both the musician record and the Authentication claim; only the account registered to phone number `0547771121` can use that action, including on its own staff record. Removing that account's `admin` role does not remove its separate super-owner access. The server verifies the owner account from its Firebase Authentication email identity, so admin promotion does not depend on a separately configured `superOwner` claim. Other administrator claims are still required for the password reset and other protected callables.
@@ -14,7 +16,7 @@ The password reset callable requires Firebase Authentication custom claims. This
 ## Deploy Firebase functions
 
 1. Install Node.js 20 and the Firebase CLI, then sign in with `firebase login`.
-2. From the project root, run `firebase deploy --only functions`. The root `index.js` and `package.json` are the configured Functions source.
+2. From the project root, run `firebase deploy --only functions --project salon-yevani-a`. The root `index.js` and `package.json` are the configured Functions source.
 3. If prompted, enable Cloud Functions and the Cloud Messaging API for the Firebase project. Cloud Functions deployment may require the Blaze billing plan.
 4. The function runtime service account must be allowed to manage Firebase Authentication users and write Firestore documents. If changing an admin role reports a permission error, check the deployed function logs and grant its runtime service account the Firebase Authentication Admin role and the required Firestore write role in Google Cloud IAM.
 
