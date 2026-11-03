@@ -28,6 +28,11 @@ exports.setStaffAdminRole = onCall(async request => {
         if (typeof musicianId !== "string" || !musicianId || typeof makeAdmin !== "boolean") {
             throw new HttpsError("invalid-argument", "פרטי שינוי ההרשאה אינם תקינים.");
         }
+        logger.info("Updating staff admin role", {
+            musicianId,
+            makeAdmin,
+            callerUid: request.auth.uid
+        });
 
         const musicianRef = db.collection("musicians").doc(musicianId);
         operation = "איתור איש הצוות";
@@ -71,7 +76,7 @@ exports.setStaffAdminRole = onCall(async request => {
         const previousAdminStatus = musicianSnapshot.data().isAdmin === true;
         try {
             operation = "עדכון רשומת איש הצוות";
-            await musicianRef.update({ isAdmin: makeAdmin });
+            await musicianRef.set({ isAdmin: makeAdmin }, { merge: true });
         } catch (error) {
             logger.error("Could not update staff admin status", {
                 musicianId,

@@ -2024,18 +2024,50 @@
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
                 return;
             }
+            if (typeof musicianId !== 'string' || !musicianId || typeof makeAdmin !== 'boolean') {
+                console.error("Invalid staff admin role request:", { musicianId, makeAdmin });
+                alert("שגיאה בעדכון הרשאות: פרטי איש הצוות אינם תקינים. יש לרענן את הרשימה ולנסות שוב.");
+                return;
+            }
+            const targetMusician = allMusicians.find(musician => musician.id === musicianId);
+            if (!targetMusician) {
+                console.error("Staff admin role request references an unknown musician document:", {
+                    musicianId,
+                    makeAdmin,
+                    knownMusicianIds: allMusicians.map(musician => musician.id)
+                });
+                alert("שגיאה בעדכון הרשאות: איש הצוות לא נמצא ברשימה. יש לרענן את הרשימה ולנסות שוב.");
+                return;
+            }
 
             try {
                 const updateAdminRole = httpsCallable(functions, "setStaffAdminRole");
-                await updateAdminRole({ musicianId, makeAdmin });
+                const payload = { musicianId, makeAdmin };
+                console.info("Sending staff admin role update:", payload);
+                const result = await updateAdminRole(payload);
+                if (result.data?.isAdmin !== makeAdmin) {
+                    console.error("Unexpected staff admin role response:", {
+                        payload,
+                        response: result.data
+                    });
+                    alert("שגיאה בעדכון הרשאות: השרת החזיר תוצאה לא צפויה.");
+                    return;
+                }
             } catch (err) {
                 const errorCode = err?.code ? ` (${err.code})` : "";
                 const errorDetails = err?.details ? `\n${err.details}` : "";
+                console.error("Staff admin role update failed:", {
+                    musicianId,
+                    makeAdmin,
+                    errorCode: err?.code || "unknown",
+                    message: err?.message || String(err),
+                    details: err?.details || null,
+                    stack: err?.stack || null
+                });
                 alert(`שגיאה בעדכון הרשאות${errorCode}: ${err?.message || err}${errorDetails}`);
                 return;
             }
 
-            const targetMusician = allMusicians.find(m => m.id === musicianId);
             const actionDesc = makeAdmin ? "הוגדר כמנהל מערכת" : "הוסרה הרשאת מנהל מערכת";
             await logAction("שינוי הרשאות מנהל", `למשתמש ${targetMusician ? targetMusician.name : musicianId} ${actionDesc}`, "ניהול סניפים וצוות");
             alert(makeAdmin ? "✅ איש הצוות הוגדר כמנהל מערכת בהצלחה!" : "ℹ️ הרשאת המנהל הוסרה בהצלחה.");
