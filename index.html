@@ -113,8 +113,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, setPersistence, inMemoryPersistence, RecaptchaVerifier, signInWithPhoneNumber, deleteUser } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, setPersistence, inMemoryPersistence, RecaptchaVerifier, signInWithPhoneNumber, signInWithCredential, PhoneAuthProvider, deleteUser, getIdTokenResult } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, where, deleteDoc, onSnapshot, orderBy, limit, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 
@@ -163,6 +163,10 @@
                 selectBranchLabel: "בחר את הסניף שברשותך:",
                 logout: "התנתק",
                 themeBtn: "🌓 תצוגה",
+                branchManagerAllBranches: "כל הסניפים שלי",
+                branchManagerCalendarOnly: "הגישה שלך מוגבלת ליומני הסניפים המשויכים אליך. אפשר להפעיל התראות פוש על שינויי שיבוץ זמר.",
+                branchManagerFilterLabel: "הצגת יומני הסניפים המשויכים אליך:",
+                branchManagerNoBranches: "לא משויך לחשבונך סניף. יש לפנות לבעל המערכת.",
                 tabCalendar: "📅 יומן הופעות",
                 tabUnavail: "🚫 זמינות",
                 tabNotifs: "🔔 התראות",
@@ -365,6 +369,10 @@
                 branchManager: "Branch Manager",
                 prevMonth: "◀ Prev Month",
                 nextMonth: "Next Month ▶",
+                branchManagerAllBranches: "All my branches",
+                branchManagerCalendarOnly: "Your access is limited to calendars for your assigned branches. Enable push notifications to receive singer assignment changes.",
+                branchManagerFilterLabel: "Show calendars for your assigned branches:",
+                branchManagerNoBranches: "No branch is assigned to your account. Contact the system owner.",
                 daysShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
                 months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
                 
@@ -710,6 +718,7 @@
             });
 
             applyTranslations();
+            configureBranchManagerProfile();
             if (document.getElementById('edit-branch-id').value) {
                 document.getElementById('branch-submit-btn').textContent = i18n[currentLang].updateBranchBtn;
             }
@@ -727,7 +736,7 @@
             }
             if (monthEvents.length > 0 || currentBranchId !== undefined) {
                 loadCalendarView();
-                loadUnavailabilityCalendar();
+                if (!isBranchManager || isAdmin) loadUnavailabilityCalendar();
             }
         };
 
@@ -763,11 +772,15 @@
         let pendingPasswordResetCount = 0;
         let unsubscribeCancellationRequests = null;
         let unsubscribePasswordResetRequests = null;
+        let unsubscribeBroadcast = null;
         let userUnavailabilities = [];
         let selectedAvailabilityStaffId = '';
         let registrationConfirmationResult = null;
         let registrationRecaptchaVerifier = null;
         let pendingRegistrationDetails = null;
+        let registrationInProgress = false;
+        let resumeAuthAfterRegistration = null;
+        let activeAuthUid = null;
         let pendingStaffReplacement = null;
         let isAdmin = false;
         let isBranchManager = false;
@@ -777,12 +790,27 @@
         let currentUserPhone = '';
         let currentUserName = '';
         let userManagedBranchId = '';
+        let userManagedBranchIds = [];
 
         const defaultColors = ['#d4af37', '#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
 
         function cleanPhone(phone) {
             const digits = phone ? String(phone).replace(/\D/g, '') : '';
             return /^9725\d{8}$/.test(digits) ? `0${digits.slice(3)}` : digits;
+        }
+
+        function formatLocalDate(date = new Date()) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, character => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            })[character]);
         }
 
         function isAuthenticatedSuperOwner() {
@@ -847,9 +875,7 @@
         }
 
         function validatePasswordRules(password) {
-            if (password === "Salon1234") return null;
-
-            const commonPasswords = ["12345678", "123456789", "password", "1234567890", "qwertyuiop"];
+            const commonPasswords = ["12345678", "123456789", "password", "1234567890", "qwertyuiop", "salon1234"];
             if (commonPasswords.includes(password.toLowerCase())) {
                 return "הסיסמה שבחרת נפוצה וגנרית מדי. נא לבחור סיסמה מורכבת יותר.";
             }
@@ -986,7 +1012,7 @@
         }
         async function checkSystemLockdownStatus() {
             try {
-                if (isSuperOwner || currentUserPhone === "0547771121") {
+                if (isAuthenticatedSuperOwner()) {
                     document.getElementById('system-locked-screen').classList.add('hidden');
                     return false;
                 }
@@ -1002,8 +1028,10 @@
                 }
                 return false;
             } catch (e) {
-                console.log("Lockdown check info:", e);
-                return false;
+                console.error("Could not verify system lockdown status:", e);
+                alert("לא ניתן לאמת אם המערכת נעולה. יש לבדוק את החיבור ולנסות שוב.");
+                await signOut(auth);
+                return true;
             }
         }
 
@@ -1058,6 +1086,10 @@
         }
 
         window.switchTab = (tabName) => {
+            if (isBranchManager && !isAdmin && tabName !== 'calendar') {
+                switchTab('calendar');
+                return;
+            }
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             
@@ -1113,30 +1145,9 @@
                 const input = document.getElementById(id);
                 if (input) input.readOnly = false;
             });
-            ['reg-role', 'reg-branch-select'].forEach(id => {
-                const input = document.getElementById(id);
-                if (input) input.disabled = false;
-            });
+            const roleSelect = document.getElementById('reg-role');
+            if (roleSelect) roleSelect.disabled = false;
             await signOut(verificationAuth);
-        }
-
-        window.onRoleChange = () => {
-            const role = document.getElementById('reg-role').value;
-            const branchContainer = document.getElementById('reg-branch-container');
-            if (role === "מנהל סניף") {
-                branchContainer.classList.remove('hidden');
-                populateRegisterBranchSelect();
-            } else {
-                branchContainer.classList.add('hidden');
-            }
-        };
-
-        function populateRegisterBranchSelect() {
-            const select = document.getElementById('reg-branch-select');
-            select.innerHTML = '<option value="">בחר סניף שברשותך...</option>';
-            allBranches.forEach(b => {
-                select.innerHTML += `<option value="${b.name}">${b.name}</option>`;
-            });
         }
 
         function checkInvoiceReminder() {
@@ -1165,34 +1176,118 @@
         });
 
         function saveAppDataLocally() {
+            const userId = auth.currentUser?.uid;
+            if (!userId) return;
+
             try {
-                localStorage.setItem('salon_cached_events', JSON.stringify(monthEvents));
-                localStorage.setItem('salon_cached_branches', JSON.stringify(allBranches));
+                localStorage.setItem(`salon_cached_events_${userId}`, JSON.stringify(monthEvents));
+                localStorage.setItem(`salon_cached_branches_${userId}`, JSON.stringify(allBranches));
             } catch (e) {
                 console.log("Offline cache save error:", e);
             }
         }
 
         function loadAppDataFromOfflineCache() {
+            const userId = auth.currentUser?.uid;
+            monthEvents = [];
+            allBranches = [];
+            if (!userId) return;
+
             try {
-                const cachedEvents = localStorage.getItem('salon_cached_events');
-                const cachedBranches = localStorage.getItem('salon_cached_branches');
-                if (cachedEvents) monthEvents = JSON.parse(cachedEvents);
-                if (cachedBranches) allBranches = JSON.parse(cachedBranches);
+                const cachedEvents = localStorage.getItem(`salon_cached_events_${userId}`);
+                const cachedBranches = localStorage.getItem(`salon_cached_branches_${userId}`);
+                const parsedEvents = cachedEvents ? JSON.parse(cachedEvents) : [];
+                const parsedBranches = cachedBranches ? JSON.parse(cachedBranches) : [];
+                monthEvents = Array.isArray(parsedEvents) ? parsedEvents : [];
+                allBranches = Array.isArray(parsedBranches) ? parsedBranches : [];
             } catch (e) {
                 console.log("Offline cache load error:", e);
             }
         }
 
+        async function verifyPhoneForSignedInAccount(user) {
+            const userEmail = String(user.email || "").toLowerCase();
+            const emailMatch = userEmail.match(/^user_(\d{10,12})@salonyevani\.local$/);
+            const phone = emailMatch ? cleanPhone(emailMatch[1]) : "";
+            const normalizedPhone = normalizeIsraeliMobile(phone);
+            if (!normalizedPhone) {
+                alert("לא ניתן לאמת את מספר הטלפון של החשבון. יש לפנות לבעל המערכת.");
+                await signOut(auth);
+                return false;
+            }
+
+            let verifier;
+            try {
+                verifier = new RecaptchaVerifier(verificationAuth, "recaptcha-container", { size: "invisible" });
+                const confirmation = await signInWithPhoneNumber(verificationAuth, normalizedPhone, verifier);
+                const code = prompt("נשלח קוד SMS למספר הטלפון שלך. יש להזין אותו כדי לאמת את החשבון:");
+                if (!code || !code.trim()) {
+                    await signOut(auth);
+                    return false;
+                }
+
+                const credential = PhoneAuthProvider.credential(confirmation.verificationId, code.trim());
+                const verificationCredential = await signInWithCredential(verificationAuth, credential);
+                const phoneVerificationIdToken = await verificationCredential.user.getIdToken();
+                const verifyPhone = httpsCallable(functions, "verifyPhoneForAccount");
+                await verifyPhone({ phoneVerificationIdToken });
+                await user.getIdToken(true);
+                return true;
+            } catch (error) {
+                console.error("Could not verify the signed-in account phone:", error);
+                alert("לא ניתן לאמת את מספר הטלפון. יש לבדוק את הקוד והחיבור ולנסות שוב.");
+                await signOut(auth);
+                return false;
+            } finally {
+                if (verifier) verifier.clear();
+                if (verificationAuth.currentUser) await signOut(verificationAuth);
+            }
+        }
+
         onAuthStateChanged(auth, async (user) => {
+            stopRealtimeListeners();
             if (user) {
+                if (registrationInProgress) {
+                    await new Promise(resolve => {
+                        resumeAuthAfterRegistration = resolve;
+                    });
+                    if (registrationInProgress || auth.currentUser?.uid !== user.uid) return;
+                }
+                if (activeAuthUid === user.uid) return;
+                activeAuthUid = user.uid;
+
+                try {
+                    let tokenResult = await getIdTokenResult(user, true);
+                    if (tokenResult.claims.phoneVerified !== true &&
+                        !await verifyPhoneForSignedInAccount(user)) {
+                        activeAuthUid = null;
+                        return;
+                    }
+                    tokenResult = await getIdTokenResult(user, true);
+                    if (tokenResult.claims.phoneVerified !== true) {
+                        throw new Error("מספר הטלפון של החשבון לא אומת בשרת.");
+                    }
+                } catch (error) {
+                    console.error("Could not validate verified-phone claim:", error);
+                    alert("לא ניתן לאמת את מספר הטלפון של החשבון. יש להתחבר מחדש או לפנות לבעל המערכת.");
+                    activeAuthUid = null;
+                    await signOut(auth);
+                    return;
+                }
+
                 await loadMusiciansData();
                 await loadBranchesSelect();
                 const isActiveUser = await checkUserAdminStatus(user);
-                if (!isActiveUser) return;
+                if (!isActiveUser) {
+                    activeAuthUid = null;
+                    return;
+                }
 
                 const isLocked = await checkSystemLockdownStatus();
-                if (isLocked) return;
+                if (isLocked) {
+                    activeAuthUid = null;
+                    return;
+                }
 
                 const userDocSnap = await getDoc(doc(db, "users", user.uid));
                 if (userDocSnap.exists() && userDocSnap.data().mustChangePassword) {
@@ -1221,23 +1316,70 @@
                 document.getElementById('system-locked-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
 
-                await loadUnavailabilityData();
+                if (!isBranchManager || isAdmin) await loadUnavailabilityData();
                 initPushToken(user.uid).catch(error => {
                     console.error("Could not refresh push notification token:", error);
                 });
-                listenToNotifications();
-                listenToBroadcastMessages();
+                if (!isBranchManager || isAdmin) {
+                    listenToNotifications();
+                    listenToBroadcastMessages();
+                }
                 loadCalendarView();
                 checkInvoiceReminder();
             } else {
+                activeAuthUid = null;
                 document.getElementById('auth-section').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('system-locked-screen').classList.add('hidden');
             }
         });
 
+        function stopRealtimeListeners() {
+            if (unsubscribeCancellationRequests) unsubscribeCancellationRequests();
+            if (unsubscribePasswordResetRequests) unsubscribePasswordResetRequests();
+            if (unsubscribeBroadcast) unsubscribeBroadcast();
+            unsubscribeCancellationRequests = null;
+            unsubscribePasswordResetRequests = null;
+            unsubscribeBroadcast = null;
+        }
+
+        function configureBranchManagerProfile() {
+            const managerOnly = isBranchManager && !isAdmin;
+            const calendarSelect = document.getElementById('branch-select');
+            const managedBranches = allBranches.filter(branch => userManagedBranchIds.includes(branch.id));
+            const selectedBranchId = currentBranchId;
+            const broadcastBanner = document.getElementById('broadcast-banner-container');
+            if (managerOnly && broadcastBanner) broadcastBanner.classList.add('hidden');
+
+            if (calendarSelect && managerOnly) {
+                calendarSelect.replaceChildren(new Option(i18n[currentLang].branchManagerAllBranches, ''));
+                managedBranches.forEach(branch => {
+                    calendarSelect.add(new Option(branch.name || '', branch.id));
+                });
+                currentBranchId = managedBranches.some(branch => branch.id === selectedBranchId)
+                    ? selectedBranchId
+                    : '';
+                calendarSelect.value = currentBranchId;
+            } else if (calendarSelect) {
+                calendarSelect.innerHTML = `<option value="">${i18n[currentLang].allBranches}</option>`;
+                allBranches.forEach(branch => calendarSelect.add(new Option(branch.name || '', branch.id)));
+                calendarSelect.value = allBranches.some(branch => branch.id === selectedBranchId) ? selectedBranchId : '';
+            }
+            const branchFilterLabel = document.querySelector('[data-i18n="filterBranchLabel"]');
+            if (branchFilterLabel) {
+                branchFilterLabel.textContent = managerOnly
+                    ? i18n[currentLang].branchManagerFilterLabel
+                    : i18n[currentLang].filterBranchLabel;
+            }
+
+            ['unavail', 'notifs', 'reports', 'my-logs'].forEach(tabName => {
+                const button = document.getElementById(`btn-tab-${tabName}`);
+                if (button) button.classList.toggle('hidden', managerOnly);
+            });
+        }
+
         function listenToBroadcastMessages() {
-            onSnapshot(doc(db, "broadcasts", "latest_broadcast"), (docSnap) => {
+            unsubscribeBroadcast = onSnapshot(doc(db, "broadcasts", "latest_broadcast"), (docSnap) => {
                 const bannerContainer = document.getElementById('broadcast-banner-container');
                 if (docSnap.exists()) {
                     const latest = docSnap.data();
@@ -1247,9 +1389,9 @@
                         bannerContainer.innerHTML = `
                             <div class="broadcast-banner" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                                 <div>
-                                    <strong style="color:var(--accent-gold);">📢 הודעה לכל הצוות (${latest.senderName || 'הנהלה'}):</strong><br>
-                                    <span>${latest.message}</span><br>
-                                    <small style="color:var(--text-muted); font-size:0.75rem;">פורסם: ${latest.dateStr || ''}</small>
+                                    <strong style="color:var(--accent-gold);">📢 הודעה לכל הצוות (${escapeHtml(latest.senderName || 'הנהלה')}):</strong><br>
+                                    <span>${escapeHtml(latest.message)}</span><br>
+                                    <small style="color:var(--text-muted); font-size:0.75rem;">פורסם: ${escapeHtml(latest.dateStr || '')}</small>
                                 </div>
                                 ${canClear ? `
                                     <button type="button" class="btn-danger" onclick="clearBroadcastMessage()" style="width: auto; padding: 4px 8px; font-size: 0.75rem; white-space: nowrap;">
@@ -1347,23 +1489,25 @@
 
             isSuperOwner = isAuthenticatedSuperOwner();
 
-            const isDatabaseAdmin = matched && matched.isAdmin === true;
-            if (isSuperOwner || currentUserPhone === "0500000000" || isDatabaseAdmin || (userDoc.exists() && userDoc.data().role === "admin")) {
-                isAdmin = true;
-            } else {
-                isAdmin = false;
+            let tokenResult;
+            try {
+                tokenResult = await getIdTokenResult(user, true);
+            } catch (error) {
+                console.error("Could not verify user admin claims:", error);
+                alert("לא ניתן לאמת את הרשאות החשבון. יש לבדוק את החיבור ולהתחבר מחדש.");
+                await signOut(auth);
+                return false;
             }
+            isAdmin = isSuperOwner || tokenResult.claims.admin === true || tokenResult.claims.superOwner === true;
 
-            userManagedBranchId = '';
-            const managedBranch = allBranches.find(b => cleanPhone(b.managerPhone) === currentUserPhone || (matched && matched.role === "מנהל סניף" && matched.branchName === b.name));
-            if (managedBranch) {
-                isBranchManager = true;
-                userManagedBranchId = managedBranch.id;
-            } else if (matched && matched.role === "מנהל סניף") {
-                isBranchManager = true;
-            } else {
-                isBranchManager = false;
-            }
+            userManagedBranchIds = allBranches.filter(branch =>
+                (matched && branch.managerId === matched.id) ||
+                (currentUserPhone && cleanPhone(branch.managerPhone) === currentUserPhone) ||
+                (matched?.role === "מנהל סניף" && matched.branchName === branch.name)
+            ).map(branch => branch.id);
+            userManagedBranchId = userManagedBranchIds[0] || '';
+            isBranchManager = userManagedBranchIds.length > 0 || matched?.role === "מנהל סניף";
+            configureBranchManagerProfile();
 
             const adminTabBtn = document.getElementById('btn-tab-admin');
             const reportsTabBtn = document.getElementById('btn-tab-reports');
@@ -1373,7 +1517,7 @@
             const lockdownContainer = document.getElementById('lockdown-btn-container');
             const resetSection = document.getElementById('system-reset-section');
 
-            reportsTabBtn.classList.remove('hidden');
+            reportsTabBtn.classList.toggle('hidden', isBranchManager && !isAdmin);
 
             if (isAdmin) {
                 adminTabBtn.classList.remove('hidden');
@@ -1443,27 +1587,52 @@
             const matched = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
             const userName = matched ? matched.name : phone;
 
+            let resetRequest;
             try {
-                await addDoc(collection(db, "password_reset_requests"), {
+                resetRequest = await addDoc(collection(db, "password_reset_requests"), {
                     userPhone: cleaned,
                     userName: userName,
                     status: "pending",
                     createdAt: new Date()
                 });
+            } catch (err) {
+                console.error("Could not save password reset request:", {
+                    userPhone: cleaned,
+                    errorCode: err?.code || "unknown",
+                    message: err?.message || String(err)
+                });
+                alert("שגיאה בשליחת הבקשה: " + (err.message || err));
+                return;
+            }
 
+            logAction("בקשת איפוס סיסמה", `נשלחה בקשת איפוס סיסמה עבור ${userName} (${cleaned})`, "אבטחה והתחברות", cleaned, userName);
+            let notificationFailed = false;
+            try {
                 const adminsSnap = await getDocs(collection(db, "users"));
                 await Promise.all(adminsSnap.docs.map(async docUser => {
                     const uData = docUser.data();
                     if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
-                        await sendPushNotificationToUser(uData.phone, "🔑 בקשת איפוס סיסמה", `${userName} ביקש/ה איפוס סיסמה במערכת`, 'notifs');
+                        const sent = await sendPushNotificationToUser(
+                            uData.phone,
+                            "🔑 בקשת איפוס סיסמה",
+                            `${userName} ביקש/ה איפוס סיסמה במערכת`,
+                            'notifs'
+                        );
+                        if (!sent) notificationFailed = true;
                     }
                 }));
-
-                logAction("בקשת איפוס סיסמה", `נשלחה בקשת איפוס סיסמה עבור ${userName} (${cleaned})`, "אבטחה והתחברות", cleaned, userName);
-                alert("פנייתך עברה למנהלי המערכת. ברגע שהסיסמה תאופס, תקבל התראה.");
             } catch (err) {
-                alert("שגיאה בשליחת הבקשה: " + err.message);
+                notificationFailed = true;
+                console.error("Password reset request was saved, but administrator notifications failed:", {
+                    requestId: resetRequest.id,
+                    errorCode: err?.code || "unknown",
+                    message: err?.message || String(err)
+                });
             }
+
+            alert(notificationFailed
+                ? "הבקשה נשמרה למנהלי המערכת. שליחת ההתראות נכשלה; אם לא תקבל מענה, פנה ישירות למנהל."
+                : "פנייתך עברה למנהלי המערכת. ברגע שהסיסמה תאופס, תקבל התראה.");
         };
 
         window.confirmResetPassword = async (requestId, userPhone, userName) => {
@@ -1505,10 +1674,13 @@
                 const password = document.getElementById('login-password').value;
                 const name = document.getElementById('reg-name').value.trim();
                 const role = document.getElementById('reg-role').value;
-                const branchName = document.getElementById('reg-branch-select').value;
 
                 if (!normalizedPhone) {
                     alert(t.invalidIsraeliMobile);
+                    return;
+                }
+                if (!["זמר/ת", "קלידים", "בוזוקי"].includes(role)) {
+                    alert("תפקיד מנהל סניף מוקצה על ידי בעל המערכת בלבד.");
                     return;
                 }
                 if (!password || !name) {
@@ -1521,11 +1693,6 @@
                     alert("⚠️ הנחיות לבחירת סיסמה:\n\n" + passwordErr);
                     return;
                 }
-                if (role === "מנהל סניף" && !branchName) {
-                    alert("חובה לבחור את שם הסניף שעבורו הוגדרת מנהל.");
-                    return;
-                }
-
                 try {
                     registrationRecaptchaVerifier = new RecaptchaVerifier(verificationAuth, "recaptcha-container", {
                         size: "invisible"
@@ -1535,7 +1702,7 @@
                         normalizedPhone,
                         registrationRecaptchaVerifier
                     );
-                    pendingRegistrationDetails = { phone, normalizedPhone, password, name, role, branchName };
+                    pendingRegistrationDetails = { phone, normalizedPhone, password, name, role };
                     document.getElementById('registration-verification-code').classList.remove('hidden');
                     document.getElementById('register-submit-btn').dataset.i18n = 'verifyAndRegisterBtn';
                     document.getElementById('register-submit-btn').textContent = t.verifyAndRegisterBtn;
@@ -1543,9 +1710,7 @@
                     ['login-password', 'reg-name'].forEach(id => {
                         document.getElementById(id).readOnly = true;
                     });
-                    ['reg-role', 'reg-branch-select'].forEach(id => {
-                        document.getElementById(id).disabled = true;
-                    });
+                    document.getElementById('reg-role').disabled = true;
                     alert(t.verificationCodeSent);
                 } catch (err) {
                     await clearRegistrationVerification();
@@ -1562,56 +1727,75 @@
 
             let verifiedUser = null;
             let registrationCompleted = false;
+            let createdUserCredential = null;
+            let phoneVerificationIdToken = '';
             try {
-                const verifiedCredential = await registrationConfirmationResult.confirm(verificationCode);
+                const phoneCredential = PhoneAuthProvider.credential(
+                    registrationConfirmationResult.verificationId,
+                    verificationCode
+                );
+                const verifiedCredential = await signInWithCredential(verificationAuth, phoneCredential);
                 verifiedUser = verifiedCredential.user;
                 if (verifiedUser.phoneNumber !== pendingRegistrationDetails.normalizedPhone) {
                     throw new Error("מספר הטלפון שאומת אינו תואם למספר שנרשם.");
                 }
+                phoneVerificationIdToken = await verifiedUser.getIdToken();
 
-                const { phone, password, name, role, branchName } = pendingRegistrationDetails;
-                const userCred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), password);
-                await setDoc(doc(db, "users", userCred.user.uid), {
-                    phone,
-                    phoneVerified: true,
-                    role: "user",
-                    name,
-                    branchName: branchName || ''
-                });
-
-                await loadMusiciansData();
-                const cleaned = cleanPhone(phone);
-                const existingM = allMusicians.find(m =>
-                    canonicalIsraeliMobile(m.phone) === phone || cleanPhone(m.phone) === cleaned
-                );
-                if (!existingM) {
-                    await addDoc(collection(db, "musicians"), {
-                        name,
-                        role,
-                        phone,
-                        branchName: branchName || '',
-                        status: "active",
-                        isAdmin: false
-                    });
-                }
-
+                const { phone, password, name, role } = pendingRegistrationDetails;
+                registrationInProgress = true;
+                createdUserCredential = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), password);
+                const completeRegistration = httpsCallable(functions, "completeStaffRegistration");
+                await completeRegistration({ name, role, phoneVerificationIdToken });
                 registrationCompleted = true;
+                await createdUserCredential.user.getIdToken(true);
+
+                registrationInProgress = false;
+                if (resumeAuthAfterRegistration) {
+                    resumeAuthAfterRegistration();
+                    resumeAuthAfterRegistration = null;
+                }
+                const cleaned = cleanPhone(phone);
                 alert("הרשמתך בוצעה בהצלחה והתחברת למערכת!");
                 logAction("הרשמה", `משתמש חדש נרשם: ${name} (${phone}) בתפקיד ${role}`, "אבטחה והתחברות", cleaned, name);
             } catch (err) {
-                if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
+                if (registrationCompleted) {
+                    alert("ההרשמה נשמרה, אך לא ניתן לרענן את ההתחברות. נסה להתחבר מחדש.");
+                } else if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
                     alert("שגיאה בהרשמה: מספר טלפון כבר קיים במערכת.");
                 } else {
                     alert("שגיאה בהרשמה: " + (err.message || err));
                 }
-            } finally {
-                if (verifiedUser) {
-                    try {
-                        await deleteUser(verifiedUser);
-                    } catch (err) {
-                        console.error("Could not remove temporary phone-verification account:", err);
-                        if (registrationCompleted) alert("ההרשמה הצליחה, אך נדרש ניקוי חשבון האימות הזמני על ידי מנהל.");
+                if (createdUserCredential && !registrationCompleted) {
+                    const cleanup = await Promise.allSettled([
+                        deleteUser(createdUserCredential.user)
+                    ]);
+                    const failedCleanup = cleanup.filter(result => result.status === "rejected");
+                    if (failedCleanup.length) {
+                        console.error("Registration failed and account cleanup was incomplete:", {
+                            uid: createdUserCredential.user.uid,
+                            cleanupErrors: failedCleanup.map(result => ({
+                                code: result.reason?.code || "unknown",
+                                message: result.reason?.message || String(result.reason)
+                            }))
+                        });
+                        alert("ניסיון ההרשמה נכשל ולא ניתן היה לנקות את כל הנתונים שנוצרו. יש לפנות למנהל לפני ניסיון נוסף.");
                     }
+                }
+                if (registrationCompleted) {
+                    registrationInProgress = false;
+                    if (resumeAuthAfterRegistration) {
+                        resumeAuthAfterRegistration();
+                        resumeAuthAfterRegistration = null;
+                    }
+                }
+            } finally {
+                registrationInProgress = false;
+                if (resumeAuthAfterRegistration) {
+                    resumeAuthAfterRegistration();
+                    resumeAuthAfterRegistration = null;
+                }
+                if (verifiedUser) {
+                    await signOut(verificationAuth);
                 }
                 await clearRegistrationVerification();
             }
@@ -1689,11 +1873,9 @@
                 allBranches.push({ id: d.id, ...bData });
 
                 const colorDot = getColorDotEmoji(bData.color);
-                const optionHTML = `<option value="${d.id}">${colorDot} ${bData.name}</option>`;
-
-                calendarSelect.innerHTML += optionHTML;
+                calendarSelect.add(new Option(`${colorDot} ${bData.name || ''}`, d.id));
                 if (reportSelect) {
-                    reportSelect.innerHTML += optionHTML;
+                    reportSelect.add(new Option(`${colorDot} ${bData.name || ''}`, d.id));
                 }
             });
 
@@ -1710,7 +1892,7 @@
             
             branchManagers.forEach(m => {
                 const isSelected = m.id === selectedManagerId ? 'selected' : '';
-                managerSelect.innerHTML += `<option value="${m.id}" data-name="${m.name}" data-phone="${m.phone}" ${isSelected}>${m.name} (${m.phone})</option>`;
+                managerSelect.innerHTML += `<option value="${escapeHtml(m.id)}" data-name="${escapeHtml(m.name)}" data-phone="${escapeHtml(m.phone)}" ${isSelected}>${escapeHtml(m.name)} (${escapeHtml(m.phone)})</option>`;
             });
         }
 
@@ -1801,7 +1983,7 @@
                     getDocs(collection(db, "unavailabilities"))
                 ]);
                 const events = eventsSnapshot.docs.map(eventDoc => ({ id: eventDoc.id, ...eventDoc.data() }));
-                const today = new Date().toISOString().slice(0, 10);
+                const today = formatLocalDate();
                 const upcomingEvents = events.filter(event =>
                     event.date >= today && isMusicianAssignedToEvent(event, musician)
                 );
@@ -1845,11 +2027,11 @@
                         const candidates = replacementsByEvent.get(event.id);
                         return `
                             <div style="margin-bottom:12px;">
-                                <strong>${event.date} | ${branch ? branch.name : t.notificationBranchLabel} | ${event.time}</strong>
+                                <strong>${escapeHtml(event.date)} | ${escapeHtml(branch ? branch.name : t.notificationBranchLabel)} | ${escapeHtml(event.time)}</strong>
                                 ${candidates.length ? `
-                                    <select class="staff-replacement-select" data-event-id="${event.id}" required>
+                                    <select class="staff-replacement-select" data-event-id="${escapeHtml(event.id)}" required>
                                         <option value="">${t.selectReplacement}</option>
-                                        ${candidates.map(candidate => `<option value="${candidate.id}">${candidate.name} (${candidate.role})</option>`).join('')}
+                                        ${candidates.map(candidate => `<option value="${escapeHtml(candidate.id)}">${escapeHtml(candidate.name)} (${escapeHtml(candidate.role)})</option>`).join('')}
                                     </select>
                                 ` : `<p style="color:var(--danger);">${t.staffReplacementNoCandidate}</p>`}
                             </div>
@@ -1973,48 +2155,123 @@
             const t = i18n[currentLang];
             const bSnap = await getDocs(collection(db, "branches"));
             const bList = document.getElementById('branches-list');
-            bList.innerHTML = `<h4>${t.existingBranchesTitle}</h4>`;
+            bList.replaceChildren();
+            const branchHeading = document.createElement('h4');
+            branchHeading.textContent = t.existingBranchesTitle;
+            bList.append(branchHeading);
             bSnap.forEach(d => {
                 const data = d.data();
-                bList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; border-right:4px solid ${data.color || '#d4af37'};">
-                    <span>📍 <strong>${data.name}</strong><br><small style="color:var(--text-muted);">👤 ${t.branchManagerLabel} ${data.managerName || t.branchNotAssigned} | 📱 ${data.managerPhone || ''}</small></span>
-                    <div style="display:flex; gap:5px;">
-                        <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editBranch('${d.id}', '${data.name}', '${data.managerId || ''}', '${data.color || '#d4af37'}')">${t.editBtn}</button>
-                        <button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteBranch('${d.id}', '${data.name}')">${t.deleteBtn}</button>
-                    </div>
-                </div>`;
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px;';
+                row.style.borderRight = `4px solid ${/^#[\da-f]{6}$/i.test(data.color || '') ? data.color : '#d4af37'}`;
+
+                const info = document.createElement('span');
+                const name = document.createElement('strong');
+                name.textContent = `📍 ${data.name || ''}`;
+                const manager = document.createElement('small');
+                manager.style.color = 'var(--text-muted)';
+                manager.textContent = `👤 ${t.branchManagerLabel} ${data.managerName || t.branchNotAssigned} | 📱 ${data.managerPhone || ''}`;
+                info.append(name, document.createElement('br'), manager);
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex; gap:5px;';
+                const editButton = document.createElement('button');
+                editButton.type = 'button';
+                editButton.className = 'btn-edit';
+                editButton.style.cssText = 'width:auto; padding:2px 8px;';
+                editButton.textContent = t.editBtn;
+                editButton.addEventListener('click', () =>
+                    window.editBranch(d.id, data.name, data.managerId || '', data.color || '#d4af37')
+                );
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.className = 'btn-danger';
+                deleteButton.style.cssText = 'width:auto; padding:2px 8px;';
+                deleteButton.textContent = t.deleteBtn;
+                deleteButton.addEventListener('click', () => window.deleteBranch(d.id, data.name));
+                actions.append(editButton, deleteButton);
+                row.append(info, actions);
+                bList.append(row);
             });
 
             const mList = document.getElementById('musicians-list');
-            mList.innerHTML = `<h4 style="margin-top:10px;">${t.existingTeamTitle}</h4>`;
+            mList.replaceChildren();
+            const musicianHeading = document.createElement('h4');
+            musicianHeading.style.marginTop = '10px';
+            musicianHeading.textContent = t.existingTeamTitle;
+            mList.append(musicianHeading);
             allMusicians.forEach(m => {
                 const isInactive = m.status === 'inactive';
                 const isItemAdmin = m.isAdmin === true;
                 const isOwnerMusician = isSuperOwnerMusician(m);
-                
-                let adminToggleBtn = '';
+
+                const row = document.createElement('div');
+                row.style.cssText = `display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};`;
+                const info = document.createElement('span');
+                info.append(document.createTextNode(`🎵 ${m.name || ''} (${m.role || ''}) `));
+
+                if (isItemAdmin) {
+                    const adminBadge = document.createElement('span');
+                    adminBadge.className = 'badge';
+                    adminBadge.style.cssText = 'background:var(--accent-gold); color:#000;';
+                    adminBadge.textContent = t.systemAdminBadge;
+                    info.append(adminBadge, document.createTextNode(' '));
+                }
+                if (m.branchName) {
+                    const branch = document.createElement('small');
+                    branch.textContent = `| ${t.branchLabel} ${m.branchName} `;
+                    info.append(branch);
+                }
+                const status = document.createElement('span');
+                status.className = `badge ${isInactive ? 'badge-inactive' : ''}`;
+                status.textContent = isInactive ? t.inactiveStatus : t.activeStatus;
+                const phone = document.createElement('small');
+                phone.style.color = 'var(--text-muted)';
+                phone.textContent = `📱 ${m.phone || t.noPhoneLabel}`;
+                info.append(status, document.createElement('br'), phone);
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex; gap:5px; align-items:center;';
                 if (isAuthenticatedSuperOwner() && !isOwnerMusician) {
-                    if (isItemAdmin) {
-                        adminToggleBtn = `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', false)">${t.removeAdminBtn}</button>`;
-                    } else {
-                        adminToggleBtn = `<button type="button" class="btn-success" style="width:auto; padding:2px 8px;" onclick="toggleMusicianAdmin('${m.id}', true)">${t.makeAdminBtn}</button>`;
-                    }
+                    const adminButton = document.createElement('button');
+                    adminButton.type = 'button';
+                    adminButton.className = isItemAdmin ? 'btn-danger' : 'btn-success';
+                    adminButton.style.cssText = 'width:auto; padding:2px 8px;';
+                    adminButton.textContent = isItemAdmin ? t.removeAdminBtn : t.makeAdminBtn;
+                    adminButton.addEventListener('click', () => window.toggleMusicianAdmin(m.id, !isItemAdmin));
+                    actions.append(adminButton);
                 }
 
                 const canManageOwnerRecord = isOwnerMusician && isAuthenticatedSuperOwner();
-                const staffActions = isOwnerMusician && !canManageOwnerRecord ? '' : `
-                    <button type="button" class="btn-edit" style="width:auto; padding:2px 8px;" onclick="editMusician('${m.id}', '${m.name}', '${m.role}', '${m.phone || ''}', '${m.status || 'active'}')">${t.editBtn}</button>
-                    ${isOwnerMusician
-                        ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; opacity:0.55; cursor:not-allowed;" disabled title="חשבון בעל המערכת מוגן">${t.deleteBtn}</button>`
-                        : `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px;" onclick="deleteMusician('${m.id}')">${t.deleteBtn}</button>`}
-                `;
-                mList.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; background:#252525; padding:8px; border-radius:6px; opacity:${isInactive ? 0.5 : 1};">
-                    <span>🎵 ${m.name} (${m.role}) ${isItemAdmin ? `<span class="badge" style="background:var(--accent-gold); color:#000;">${t.systemAdminBadge}</span>` : ''} ${m.branchName ? `<small>| ${t.branchLabel} ${m.branchName}</small>` : ''} <span class="badge ${isInactive ? 'badge-inactive' : ''}">${isInactive ? t.inactiveStatus : t.activeStatus}</span><br><small style="color:var(--text-muted);">📱 ${m.phone || t.noPhoneLabel}</small></span>
-                    <div style="display:flex; gap:5px; align-items:center;">
-                        ${adminToggleBtn}
-                        ${staffActions}
-                    </div>
-                </div>`;
+                if (!isOwnerMusician || canManageOwnerRecord) {
+                    const editButton = document.createElement('button');
+                    editButton.type = 'button';
+                    editButton.className = 'btn-edit';
+                    editButton.style.cssText = 'width:auto; padding:2px 8px;';
+                    editButton.textContent = t.editBtn;
+                    editButton.addEventListener('click', () =>
+                        window.editMusician(m.id, m.name, m.role, m.phone || '', m.status || 'active')
+                    );
+                    actions.append(editButton);
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.type = 'button';
+                    deleteButton.className = 'btn-danger';
+                    deleteButton.style.cssText = 'width:auto; padding:2px 8px;';
+                    deleteButton.textContent = t.deleteBtn;
+                    if (isOwnerMusician) {
+                        deleteButton.disabled = true;
+                        deleteButton.style.opacity = '0.55';
+                        deleteButton.style.cursor = 'not-allowed';
+                        deleteButton.title = 'חשבון בעל המערכת מוגן';
+                    } else {
+                        deleteButton.addEventListener('click', () => window.deleteMusician(m.id));
+                    }
+                    actions.append(deleteButton);
+                }
+
+                row.append(info, actions);
+                mList.append(row);
             });
         }
 
@@ -2182,7 +2439,7 @@
         window.exportFullSystemBackup = async () => {
             if (!isSuperOwner) return;
             try {
-                const fileName = `salon_yevani_backup_${new Date().toISOString().slice(0,10)}.json`;
+                const fileName = `salon_yevani_backup_${formatLocalDate()}.json`;
                 let fileHandle = null;
                 if (typeof window.showSaveFilePicker === "function") {
                     try {
@@ -2261,7 +2518,12 @@
         };
 
         window.onBranchSelectChange = (e) => {
-            currentBranchId = e.target.value;
+            const selectedBranchId = e.target.value;
+            currentBranchId = !isBranchManager || isAdmin ||
+                userManagedBranchIds.includes(selectedBranchId)
+                ? selectedBranchId
+                : '';
+            e.target.value = currentBranchId;
             loadCalendarView();
         };
 
@@ -2276,24 +2538,34 @@
         async function loadCalendarView() {
             const container = document.getElementById('calendar-container');
             const t = i18n[currentLang];
-            
-            let q;
-            if (currentBranchId) {
-                q = query(collection(db, "events"), where("branchId", "==", currentBranchId));
-            } else {
-                q = collection(db, "events");
-            }
+            const managerOnly = isBranchManager && !isAdmin;
             
             try {
-                const snap = await getDocs(q);
+                let eventDocuments = [];
+                if (managerOnly) {
+                    const branchIds = currentBranchId
+                        ? userManagedBranchIds.filter(branchId => branchId === currentBranchId)
+                        : userManagedBranchIds;
+                    const snapshots = await Promise.all(branchIds.map(branchId =>
+                        getDocs(query(collection(db, "events"), where("branchId", "==", branchId)))
+                    ));
+                    eventDocuments = snapshots.flatMap(snapshot => snapshot.docs);
+                } else {
+                    const eventsQuery = currentBranchId
+                        ? query(collection(db, "events"), where("branchId", "==", currentBranchId))
+                        : collection(db, "events");
+                    const snapshot = await getDocs(eventsQuery);
+                    eventDocuments = snapshot.docs;
+                }
                 monthEvents = [];
-                snap.forEach(d => {
+                eventDocuments.forEach(d => {
                     const eventData = d.data();
-                    const isBranchManagerForEvent = isBranchManager && userManagedBranchId === eventData.branchId;
+                    const isBranchManagerForEvent = isBranchManager &&
+                        userManagedBranchIds.includes(eventData.branchId);
                     const currentMusician = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
                     const isUserAssigned = isMusicianAssignedToEvent(eventData, currentMusician);
 
-                    if (isAdmin || isBranchManagerForEvent || isUserAssigned) {
+                    if (managerOnly ? isBranchManagerForEvent : isAdmin || isBranchManagerForEvent || isUserAssigned) {
                         monthEvents.push({ id: d.id, ...eventData });
                     }
                 });
@@ -2301,6 +2573,12 @@
             } catch (err) {
                 console.log("Network error, loading offline cache...");
                 loadAppDataFromOfflineCache();
+                if (managerOnly) {
+                    monthEvents = monthEvents.filter(event =>
+                        userManagedBranchIds.includes(event.branchId) &&
+                        (!currentBranchId || event.branchId === currentBranchId)
+                    );
+                }
             }
 
             container.innerHTML = `
@@ -2309,6 +2587,10 @@
                     <h3 id="cal-month-title" style="color:var(--accent-gold);">${t.months[currentMonth]} ${currentYear}</h3>
                     <button onclick="changeMonth(1)" class="btn-secondary" style="width:auto; padding:5px 12px;">${t.nextMonth}</button>
                 </div>
+                ${managerOnly ? `
+                    <p style="color:var(--text-muted); margin:10px 0;">${userManagedBranchIds.length ? t.branchManagerCalendarOnly : t.branchManagerNoBranches}</p>
+                    ${userManagedBranchIds.length ? `<button type="button" class="btn-secondary" style="width:auto; margin-bottom:10px;" onclick="enablePushNotifications()">${t.enablePushNotifications}</button>` : ''}
+                ` : ''}
                 <div id="calendar-grid" class="calendar-grid"></div>
                 <div id="branch-legend" class="branch-legend"></div>
             `;
@@ -2328,8 +2610,8 @@
 
                 let eventDots = dayEvents.map(e => {
                     const branch = allBranches.find(b => b.id === e.branchId);
-                    const bColor = branch ? (branch.color || '#1e88e5') : '#1e88e5';
-                    return `<span class="event-dot" style="background-color:${bColor};" title="${e.time} - ${branch ? branch.name : ''}"></span>`;
+                    const bColor = branch && /^#[\da-f]{6}$/i.test(branch.color || '') ? branch.color : '#1e88e5';
+                    return `<span class="event-dot" style="background-color:${bColor};" title="${escapeHtml(e.time)} - ${escapeHtml(branch ? branch.name : '')}"></span>`;
                 }).join('');
 
                 const canClick = isAdmin || isBranchManager || dayEvents.length > 0;
@@ -2344,14 +2626,18 @@
             }
 
             document.getElementById('calendar-grid').innerHTML = gridHTML;
-            const legendBranches = allBranches.filter(branch => !currentBranchId || branch.id === currentBranchId);
+            const legendBranches = allBranches.filter(branch =>
+                managerOnly
+                    ? userManagedBranchIds.includes(branch.id) && (!currentBranchId || branch.id === currentBranchId)
+                    : !currentBranchId || branch.id === currentBranchId
+            );
             document.getElementById('branch-legend').innerHTML = `
                 <h4>${t.branchLegendTitle}</h4>
                 <div class="branch-legend-items" role="list">
                     ${legendBranches.map(branch => `
                         <span class="branch-legend-item" role="listitem">
-                            <span class="branch-legend-swatch" aria-hidden="true" style="background-color:${branch.color || '#1e88e5'}"></span>
-                            <span>${branch.name}</span>
+                            <span class="branch-legend-swatch" aria-hidden="true" style="background-color:${/^#[\da-f]{6}$/i.test(branch.color || '') ? branch.color : '#1e88e5'}"></span>
+                            <span>${escapeHtml(branch.name)}</span>
                         </span>
                     `).join('')}
                 </div>
@@ -2409,7 +2695,7 @@
                 ${isSuperOwner ? `
                     <label for="unavailability-staff-filter" style="font-size:0.85rem;">${t.availabilityFilterLabel}</label>
                     <select id="unavailability-staff-filter" onchange="onAvailabilityStaffSelect(event)">
-                        ${availabilityStaff.map(musician => `<option value="${musician.id}" ${musician.id === selectedAvailabilityStaffId ? 'selected' : ''}>${musician.name} (${musician.role})</option>`).join('')}
+                        ${availabilityStaff.map(musician => `<option value="${escapeHtml(musician.id)}" ${musician.id === selectedAvailabilityStaffId ? 'selected' : ''}>${escapeHtml(musician.name)} (${escapeHtml(musician.role)})</option>`).join('')}
                     </select>
                     <div class="calendar-header">
                         <button type="button" class="btn-secondary" style="width:auto; padding:5px 12px;" onclick="changeAvailabilityMonth(-1)">${t.prevMonth}</button>
@@ -2477,7 +2763,7 @@
                 return;
             }
 
-            const todayStr = today.toISOString().slice(0, 10);
+            const todayStr = formatLocalDate(today);
             if (dateStr < todayStr) {
                 alert("לא ניתן לעדכן אי-זמינות לתאריכי עבר.");
                 return;
@@ -2512,7 +2798,7 @@
 
         window.openDayModal = async (dateStr) => {
             const today = new Date();
-            const todayStr = today.toISOString().slice(0, 10);
+            const todayStr = formatLocalDate(today);
             document.getElementById('event-date-input').value = dateStr;
             document.getElementById('event-time-input').value = "20:00";
             document.getElementById('modal-date-title').textContent = `הופעות/שיבוצים לתאריך: ${dateStr}`;
@@ -2550,15 +2836,38 @@
                     }
                     if (isUserMarkedUnavail) return;
 
-                    rosterContainer.innerHTML += `
-                        <div class="roster-item" id="item-m-${m.id}">
-                            <input type="checkbox" class="musician-checkbox" id="m-${m.id}" data-musician-id="${m.id}" data-role="${m.role}" data-name="${m.name}" data-phone="${m.phone}" value="${m.name} (${m.role})" ${isAlreadyAssigned ? 'checked' : ''} onchange="updateRoleDisabling()">
-                            <label for="m-${m.id}">
-                                ${m.name} <span class="badge">${m.role}</span>
-                                <small id="conflict-m-${m.id}" class="assignment-conflict-note hidden">${i18n[currentLang].staffAssignedElsewhereAtTime}</small>
-                            </label>
-                        </div>
-                    `;
+                    const item = document.createElement('div');
+                    item.className = 'roster-item';
+                    item.id = `item-m-${m.id}`;
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'musician-checkbox';
+                    checkbox.id = `m-${m.id}`;
+                    checkbox.dataset.musicianId = m.id;
+                    checkbox.dataset.role = m.role || '';
+                    checkbox.dataset.name = m.name || '';
+                    checkbox.dataset.phone = m.phone || '';
+                    checkbox.value = `${m.name || ''} (${m.role || ''})`;
+                    checkbox.checked = isAlreadyAssigned;
+                    checkbox.addEventListener('change', window.updateRoleDisabling);
+
+                    const label = document.createElement('label');
+                    label.htmlFor = checkbox.id;
+                    label.append(document.createTextNode(`${m.name || ''} `));
+                    const roleBadge = document.createElement('span');
+                    roleBadge.className = 'badge';
+                    roleBadge.textContent = m.role || '';
+                    label.append(roleBadge);
+
+                    const conflictNote = document.createElement('small');
+                    conflictNote.id = `conflict-${checkbox.id}`;
+                    conflictNote.className = 'assignment-conflict-note hidden';
+                    conflictNote.textContent = i18n[currentLang].staffAssignedElsewhereAtTime;
+                    label.append(conflictNote);
+
+                    item.append(checkbox, label);
+                    rosterContainer.append(item);
                 });
             }
 
@@ -2606,14 +2915,14 @@
                 return;
             }
 
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayStr = formatLocalDate();
             const isPastEvent = dateStr < todayStr;
             const isOnline = navigator.onLine;
 
             existingList.innerHTML = dayEvents.map(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
                 const bName = branch ? branch.name : 'סניף';
-                const bColor = branch ? (branch.color || '#d4af37') : '#d4af37';
+                const bColor = branch && /^#[\da-f]{6}$/i.test(branch.color || '') ? branch.color : '#d4af37';
 
                 const currentMusician = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
                 const isUserInEvent = !isAdmin && isMusicianAssignedToEvent(e, currentMusician);
@@ -2629,19 +2938,35 @@
                     if (pendingRequest) {
                         cancelBtnHTML = `<button type="button" disabled style="width:100%; margin-top:10px; background-color:#ffa726; color:#000; cursor:not-allowed;">⏳ בקשה לביטול נשלחה</button>`;
                     } else {
-                        cancelBtnHTML = `<button type="button" class="btn-danger" style="width:100%; margin-top:10px;" onclick="requestCancellation('${e.id}', '${e.date}', '${e.time}', '${e.branchId}')">🚨 בקש ביטול הופעה</button>`;
+                        cancelBtnHTML = `<button type="button" class="btn-danger request-cancellation-action" style="width:100%; margin-top:10px;" data-event-id="${escapeHtml(e.id)}" data-event-date="${escapeHtml(e.date)}" data-event-time="${escapeHtml(e.time)}" data-branch-id="${escapeHtml(e.branchId)}">🚨 בקש ביטול הופעה</button>`;
                     }
                 }
 
                 return `
                 <div style="background:#2a2a2a; padding:10px; margin-top:8px; border-radius:6px; font-size:0.85rem; border-right:4px solid ${bColor};">
-                    <strong>📍 ${bName} | 🕒 שעת הופעה: ${e.time}</strong><br>
+                    <strong>📍 ${escapeHtml(bName)} | 🕒 שעת הופעה: ${escapeHtml(e.time)}</strong><br>
                     <div style="margin-top:5px;"><strong>👥 ההרכב המלא להופעה זו:</strong></div>
-                    <div style="color:var(--accent-gold); margin-top:3px;">${e.assignedStaff ? e.assignedStaff.join('<br>') : 'לא שובצו'}</div>
-                    ${(isAdmin && (!isPastEvent || isSuperOwner) && isOnline) ? `<button type="button" class="btn-danger" style="width:auto; padding:2px 8px; margin-top:8px;" onclick="deleteShow('${e.id}', '${dateStr}', '${bName}')">מחק הופעה</button>` : ''}
+                    <div style="color:var(--accent-gold); margin-top:3px;">${Array.isArray(e.assignedStaff) ? e.assignedStaff.map(escapeHtml).join('<br>') : 'לא שובצו'}</div>
+                    ${(isAdmin && (!isPastEvent || isSuperOwner) && isOnline) ? `<button type="button" class="btn-danger delete-show-action" style="width:auto; padding:2px 8px; margin-top:8px;" data-event-id="${escapeHtml(e.id)}" data-event-date="${escapeHtml(dateStr)}" data-branch-name="${escapeHtml(bName)}">מחק הופעה</button>` : ''}
                     ${cancelBtnHTML}
                 </div>
             `;}).join('');
+
+            existingList.querySelectorAll('.request-cancellation-action').forEach(button => {
+                button.addEventListener('click', () => window.requestCancellation(
+                    button.dataset.eventId,
+                    button.dataset.eventDate,
+                    button.dataset.eventTime,
+                    button.dataset.branchId
+                ));
+            });
+            existingList.querySelectorAll('.delete-show-action').forEach(button => {
+                button.addEventListener('click', () => window.deleteShow(
+                    button.dataset.eventId,
+                    button.dataset.eventDate,
+                    button.dataset.branchName
+                ));
+            });
         }
 
         window.deleteShow = async (eventId, dateStr, branchName) => {
@@ -2672,44 +2997,72 @@
 
             if (!confirm("האם אתה בטוח שברצונך לשלוח בקשת ביטול להופעה זו?")) return;
 
-            const branchObj = allBranches.find(b => b.id === branchId);
-            const branchName = branchObj ? branchObj.name : 'סניף';
-
-            await addDoc(collection(db, "cancellation_requests"), {
-                eventId,
-                eventDate,
-                eventTime,
-                branchId,
-                branchName,
-                musicianName: currentUserName,
-                musicianPhone: currentUserPhone,
-                status: "pending",
-                createdAt: new Date()
-            });
-
-            const adminPhones = new Set(
-                allMusicians.filter(musician => musician.isAdmin).map(musician => cleanPhone(musician.phone)).filter(Boolean)
-            );
-            adminPhones.add("0547771121");
-            adminPhones.add("0500000000");
-
-            const adminsSnap = await getDocs(collection(db, "users"));
-            adminsSnap.forEach(docUser => {
-                const uData = docUser.data();
-                if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
-                    adminPhones.add(cleanPhone(uData.phone));
+            try {
+                const eventRequests = await getDocs(query(
+                    collection(db, "cancellation_requests"),
+                    where("eventId", "==", eventId)
+                ));
+                const hasPendingRequest = eventRequests.docs.some(requestDoc => {
+                    const request = requestDoc.data();
+                    return request.status === "pending" &&
+                        cleanPhone(request.musicianPhone) === currentUserPhone;
+                });
+                if (hasPendingRequest) {
+                    alert("כבר קיימת בקשת ביטול ממתינה להופעה זו.");
+                    closeModal();
+                    return;
                 }
-            });
-            const pushResults = await Promise.all([...adminPhones].map(phone =>
-                sendPushNotificationToUser(phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs')
-            ));
-            if (!pushResults.some(Boolean)) {
-                console.warn("Cancellation request saved, but no administrator push token is registered.");
-            }
 
-            logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
-            alert("בקשת הביטול נשלחה בהצלחה!");
-            closeModal();
+                const branchObj = allBranches.find(b => b.id === branchId);
+                const branchName = branchObj ? branchObj.name : 'סניף';
+                await addDoc(collection(db, "cancellation_requests"), {
+                    eventId,
+                    eventDate,
+                    eventTime,
+                    branchId,
+                    branchName,
+                    musicianName: currentUserName,
+                    musicianPhone: currentUserPhone,
+                    status: "pending",
+                    createdAt: new Date()
+                });
+
+                let notificationFailed = false;
+                try {
+                    const adminPhones = new Set(
+                        allMusicians.filter(musician => musician.isAdmin).map(musician => cleanPhone(musician.phone)).filter(Boolean)
+                    );
+                    adminPhones.add("0547771121");
+                    adminPhones.add("0500000000");
+
+                    const adminsSnap = await getDocs(collection(db, "users"));
+                    adminsSnap.forEach(docUser => {
+                        const uData = docUser.data();
+                        if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
+                            adminPhones.add(cleanPhone(uData.phone));
+                        }
+                    });
+                    const pushResults = await Promise.all([...adminPhones].map(phone =>
+                        sendPushNotificationToUser(phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs')
+                    ));
+                    notificationFailed = !pushResults.some(Boolean);
+                    if (notificationFailed) {
+                        console.warn("Cancellation request saved, but no administrator push token is registered.");
+                    }
+                } catch (error) {
+                    notificationFailed = true;
+                    console.error("Cancellation request saved, but administrator notifications failed:", error);
+                }
+
+                logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
+                alert(notificationFailed
+                    ? "בקשת הביטול נשמרה, אך ההתראות למנהלים לא נשלחו. פנה ישירות למנהל כדי לוודא שהבקשה טופלה."
+                    : "בקשת הביטול נשלחה בהצלחה!");
+                closeModal();
+            } catch (error) {
+                console.error("Could not save cancellation request:", error);
+                alert("שגיאה בשמירת בקשת הביטול: " + (error.message || error));
+            }
         };
 
         function isDateInCurrentMonth(dateStr) {
@@ -2780,7 +3133,7 @@
                 musicianContainer.classList.remove('hidden');
                 musicianSelect.innerHTML = `<option value="">${t.allMusicians}</option>`;
                 allMusicians.filter(m => m.role !== "מנהל סניף").forEach(m => {
-                    musicianSelect.innerHTML += `<option value="${m.id}">${m.name} (${m.role})</option>`;
+                    musicianSelect.innerHTML += `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} (${escapeHtml(m.role)})</option>`;
                 });
             } else {
                 musicianContainer.classList.add('hidden');
@@ -2841,7 +3194,7 @@
                 } else if (!isAdmin && !currentMusician) {
                     matchMusician = false;
                 } else if (!isAdmin && currentMusician) {
-                    matchMusician = (e.assignedStaff || []).includes(`${currentMusician.name} (${currentMusician.role})`);
+                    matchMusician = getAssignedStaffIds(e).includes(currentMusician.id);
                 }
                 if (selectedBranchId) {
                     matchBranch = e.branchId === selectedBranchId;
@@ -2887,10 +3240,10 @@
 
                 reportHTML += `
                     <tr>
-                        <td>${e.date}</td>
-                        <td>${bName}</td>
-                        <td>${e.time}</td>
-                        <td>${staffDisplay}</td>
+                        <td>${escapeHtml(e.date)}</td>
+                        <td>${escapeHtml(bName)}</td>
+                        <td>${escapeHtml(e.time)}</td>
+                        <td>${escapeHtml(staffDisplay)}</td>
                     </tr>
                 `;
             });
@@ -2914,7 +3267,12 @@
                 return;
             }
 
-            let csvContent = "\uFEFFתאריך,סניף,שעה,שם המבצע / נגן\n";
+            const escapeCsvCell = value => {
+                const text = String(value ?? '');
+                const safeText = /^[\s]*[=+\-@]/.test(text) ? `'${text}` : text;
+                return `"${safeText.replace(/"/g, '""')}"`;
+            };
+            const csvRows = [["תאריך", "סניף", "שעה", "שם המבצע / נגן"]];
 
             const musicianSelectEl = document.getElementById('report-musician-select');
             const selectedMusician = window.currentReportStaffId || (musicianSelectEl ? musicianSelectEl.value : '');
@@ -2927,16 +3285,15 @@
                 const staffDisplay = selectedMusician && selectedStaffMember
                     ? selectedStaffMember.name
                     : (e.assignedStaff || []).join(' / ') || 'לא שובצו';
-                const staffStr = `"${staffDisplay.replace(/"/g, '""')}"`;
-
-                csvContent += `${e.date},${bName},${e.time},${staffStr}\n`;
+                csvRows.push([e.date, bName, e.time, staffDisplay]);
             });
 
+            const csvContent = `\uFEFF${csvRows.map(row => row.map(escapeCsvCell).join(',')).join('\r\n')}\r\n`;
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const downloadAnchor = document.createElement('a');
             downloadAnchor.setAttribute("href", url);
-            downloadAnchor.setAttribute("download", `salon_yevani_report_${new Date().toISOString().slice(0,10)}.csv`);
+            downloadAnchor.setAttribute("download", `salon_yevani_report_${formatLocalDate()}.csv`);
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             downloadAnchor.remove();
@@ -3016,9 +3373,9 @@
                 const translated = translateAuditLog(log, t);
                 return `
                     <div class="log-item">
-                        <strong style="color:var(--accent-gold);">${translated.action}</strong> | <small>${log.dateStr || ''}</small><br>
-                        <span>👤 ${t.actionByLabel} <strong>${log.userName || log.userPhone || ''}</strong></span><br>
-                        <span>📝 ${t.detailsLabel} ${translated.details}</span>
+                        <strong style="color:var(--accent-gold);">${escapeHtml(translated.action)}</strong> | <small>${escapeHtml(log.dateStr || '')}</small><br>
+                        <span>👤 ${t.actionByLabel} <strong>${escapeHtml(log.userName || log.userPhone || '')}</strong></span><br>
+                        <span>📝 ${t.detailsLabel} ${escapeHtml(translated.details)}</span>
                     </div>
                 `;
             }).join('');
@@ -3111,8 +3468,8 @@
 
                         html += `
                             <div class="log-item">
-                                <strong style="color:var(--accent-gold);">${translated.action || 'Action'}</strong> | <small style="color:var(--text-muted);">${log.dateStr || ''}</small><br>
-                                <span style="color:#fff;">📝 ${translated.details}</span>
+                                <strong style="color:var(--accent-gold);">${escapeHtml(translated.action || 'Action')}</strong> | <small style="color:var(--text-muted);">${escapeHtml(log.dateStr || '')}</small><br>
+                                <span style="color:#fff;">📝 ${escapeHtml(translated.details)}</span>
                             </div>
                         `;
                     });
@@ -3121,7 +3478,7 @@
 
                 container.innerHTML = html;
             } catch (err) {
-                container.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת היסטוריה: ${err.message}</p>`;
+                container.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת היסטוריה: ${escapeHtml(err.message)}</p>`;
             }
         }
 
@@ -3162,8 +3519,15 @@
                 if (cleanPhone(musician.phone) === cleanPhone(request.musicianPhone)) return false;
                 if (schedulingSnapshot.unavailablePhones.has(cleanPhone(musician.phone))) return false;
 
-                const isAssignedThatDay = schedulingSnapshot.dayEvents.some(event => isMusicianAssignedToEvent(event, musician));
-                return !isAssignedThatDay;
+                const isAssignedToTargetEvent = isMusicianAssignedToEvent(targetEvent, musician);
+                const hasScheduleConflict = schedulingSnapshot.dayEvents.some(event =>
+                    event.id !== targetEvent.id &&
+                    event.date === targetEvent.date &&
+                    event.time === targetEvent.time &&
+                    event.branchId !== targetEvent.branchId &&
+                    isMusicianAssignedToEvent(event, musician)
+                );
+                return !isAssignedToTargetEvent && !hasScheduleConflict;
             });
 
             return { targetEvent, cancelledStaffEntry, candidates };
@@ -3188,9 +3552,9 @@
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid #fb8c00;">
                             <strong>${t.notificationPasswordResetTitle}</strong><br>
-                            <span>👤 ${t.notificationStaffLabel} <strong>${requestName}</strong> (📱 ${req.userPhone})</span>
+                            <span>👤 ${t.notificationStaffLabel} <strong>${escapeHtml(requestName)}</strong> (📱 ${escapeHtml(req.userPhone)})</span>
                             <div style="margin-top:10px;">
-                                <button class="btn-success" style="padding:6px 12px; width:auto;" onclick="confirmResetPassword('${req.id}', '${req.userPhone}', '${requestName}')">
+                                <button class="btn-success reset-password-action" style="padding:6px 12px; width:auto;" data-request-id="${escapeHtml(req.id)}" data-user-phone="${escapeHtml(req.userPhone)}" data-user-name="${escapeHtml(requestName)}">
                                     🔄 ${t.resetPasswordAction}
                                 </button>
                             </div>
@@ -3223,17 +3587,17 @@
                     const hasCandidates = replacementInfo.candidates.length > 0;
                     html += `
                         <div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px; border-right:4px solid #fb8c00;">
-                            <strong>📍 ${t.notificationBranchLabel} ${req.branchName}</strong> | 📅 ${req.eventDate}<br>
-                            <strong>👤 ${t.notificationRequestedBy}</strong> ${req.musicianName}
+                            <strong>📍 ${t.notificationBranchLabel} ${escapeHtml(req.branchName)}</strong> | 📅 ${escapeHtml(req.eventDate)}<br>
+                            <strong>👤 ${t.notificationRequestedBy}</strong> ${escapeHtml(req.musicianName)}
                             <div style="margin-top:10px;">
                                 ${hasCandidates ? `
-                                    <label for="${selectId}" style="font-size:0.85rem;">${t.replacementStaffLabel}</label>
-                                    <select id="${selectId}" onchange="document.getElementById('${approveId}').disabled = !this.value">
+                                    <label for="${escapeHtml(selectId)}" style="font-size:0.85rem;">${t.replacementStaffLabel}</label>
+                                    <select id="${escapeHtml(selectId)}" class="cancellation-replacement-select" data-approve-id="${escapeHtml(approveId)}">
                                         <option value="">${t.selectReplacement}</option>
                                     </select>
                                 ` : `<p style="color:var(--danger); font-size:0.85rem;">${t.noReplacementAvailable}</p>`}
-                                <button id="${approveId}" class="btn-success" style="padding:6px;" disabled onclick="approveRequest('${req.id}', document.getElementById('${selectId}').value)">${t.approveCancellation}</button>
-                                <button class="btn-danger" style="padding:6px;" onclick="rejectRequest('${req.id}', '${req.musicianPhone}', '${req.branchName}')">${t.rejectCancellation}</button>
+                                <button id="${escapeHtml(approveId)}" class="btn-success approve-cancellation-action" style="padding:6px;" data-request-id="${escapeHtml(req.id)}" data-select-id="${escapeHtml(selectId)}" disabled>${t.approveCancellation}</button>
+                                <button class="btn-danger reject-cancellation-action" style="padding:6px;" data-request-id="${escapeHtml(req.id)}" data-musician-phone="${escapeHtml(req.musicianPhone)}" data-branch-name="${escapeHtml(req.branchName)}">${t.rejectCancellation}</button>
                             </div>
                         </div>
                     `;
@@ -3241,6 +3605,32 @@
 
                 if (count === 0) html += `<p style="color:var(--text-muted);">${t.noNotifications}</p>`;
                 container.innerHTML = html;
+                container.querySelectorAll('.reset-password-action').forEach(button => {
+                    button.addEventListener('click', () => window.confirmResetPassword(
+                        button.dataset.requestId,
+                        button.dataset.userPhone,
+                        button.dataset.userName
+                    ));
+                });
+                container.querySelectorAll('.cancellation-replacement-select').forEach(select => {
+                    select.addEventListener('change', () => {
+                        const approveButton = document.getElementById(select.dataset.approveId);
+                        if (approveButton) approveButton.disabled = !select.value;
+                    });
+                });
+                container.querySelectorAll('.approve-cancellation-action').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const select = document.getElementById(button.dataset.selectId);
+                        if (select) window.approveRequest(button.dataset.requestId, select.value);
+                    });
+                });
+                container.querySelectorAll('.reject-cancellation-action').forEach(button => {
+                    button.addEventListener('click', () => window.rejectRequest(
+                        button.dataset.requestId,
+                        button.dataset.musicianPhone,
+                        button.dataset.branchName
+                    ));
+                });
                 replacementsByRequest.forEach((candidates, requestId) => {
                     const select = document.getElementById(`cancellation-replacement-${requestId}`);
                     if (!select) return;
@@ -3258,7 +3648,7 @@
                             const statusIcon = req.status === 'approved'
                                 ? '<span aria-label="אושר" style="color:#43a047;">✓</span>'
                                 : '<span aria-label="נדחה" style="color:#e53935;">✕</span>';
-                            html += `<div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px;">${t.notificationBranchLabel} ${req.branchName}<br><strong>${statusIcon} ${statusTxt}</strong></div>`;
+                            html += `<div style="background:#252525; padding:12px; margin-bottom:10px; border-radius:8px;">${t.notificationBranchLabel} ${escapeHtml(req.branchName)}<br><strong>${statusIcon} ${escapeHtml(statusTxt)}</strong></div>`;
                         }
                     }
                 });
@@ -3274,75 +3664,71 @@
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
                 return;
             }
-
-            const requestRef = doc(db, "cancellation_requests", requestId);
-            const requestDoc = await getDoc(requestRef);
-            if (!requestDoc.exists() || requestDoc.data().status !== 'pending') {
-                alert("הבקשה כבר טופלה או שאינה זמינה.");
-                loadNotificationsView();
-                return;
-            }
-
-            const request = { id: requestDoc.id, ...requestDoc.data() };
             if (!replacementMusicianId) {
                 alert(i18n[currentLang].replacementRequired);
                 return;
             }
 
-            const schedulingSnapshot = await getDaySchedulingSnapshot(request.eventDate);
-            const replacementInfo = findCancellationReplacementCandidates(request, schedulingSnapshot);
-            const replacement = replacementInfo.candidates.find(candidate => candidate.id === replacementMusicianId);
-            if (!replacement || !replacementInfo.targetEvent || !replacementInfo.cancelledStaffEntry) {
-                alert(i18n[currentLang].replacementNoLongerAvailable);
+            try {
+                const approveCancellation = httpsCallable(functions, "approveCancellationRequest");
+                const result = await approveCancellation({ requestId, replacementMusicianId });
+                const approvedRequest = result.data;
+                await sendPushNotificationToUser(
+                    approvedRequest.musicianPhone,
+                    "✅ בקשת הביטול אושרה",
+                    `בקשתך אושרה. ${approvedRequest.replacementName} יחליף אותך בהופעה.`,
+                    'notifs'
+                );
+                logAction(
+                    "אישור בקשת ביטול עם מחליף",
+                    `${approvedRequest.replacementName} שובץ/ה במקום ${approvedRequest.musicianName} בתאריך ${approvedRequest.eventDate}`,
+                    "בקשות ביטול והחלפות"
+                );
+                alert("הבקשה אושרה בהצלחה!");
                 loadNotificationsView();
-                return;
+            } catch (error) {
+                console.error("Could not approve cancellation request:", error);
+                alert(error.message || "שגיאה באישור בקשת הביטול.");
+                loadNotificationsView();
             }
-
-            const assignedStaff = (replacementInfo.targetEvent.assignedStaff || [])
-                .filter(staffEntry => staffEntry !== replacementInfo.cancelledStaffEntry);
-            assignedStaff.push(`${replacement.name} (${replacement.role})`);
-            const cancelledMusician = allMusicians.find(musician =>
-                cleanPhone(musician.phone) === cleanPhone(request.musicianPhone)
-            );
-            const assignedStaffIds = getAssignedStaffIds(replacementInfo.targetEvent)
-                .filter(musicianId => musicianId !== cancelledMusician?.id);
-            assignedStaffIds.push(replacement.id);
-            const assignedStaffDetails = getAssignedStaffDetails(replacementInfo.targetEvent)
-                .filter(staff => staff.musicianId !== cancelledMusician?.id);
-            assignedStaffDetails.push({
-                musicianId: replacement.id,
-                name: replacement.name,
-                role: replacement.role,
-                phoneId: cleanPhone(replacement.phone)
-            });
-
-            const batch = writeBatch(db);
-            batch.update(doc(db, "events", request.eventId), { assignedStaff, assignedStaffIds, assignedStaffDetails });
-            batch.update(requestRef, {
-                status: "approved",
-                replacementName: replacement.name,
-                replacementPhone: replacement.phone,
-                resolvedAt: new Date(),
-                resolvedBy: currentUserName
-            });
-            await batch.commit();
-
-            await sendPushNotificationToUser(request.musicianPhone, "✅ בקשת הביטול אושרה", `בקשתך אושרה. ${replacement.name} יחליף אותך בהופעה.`, 'notifs');
-            logAction("אישור בקשת ביטול עם מחליף", `${replacement.name} שובץ/ה במקום ${request.musicianName} בתאריך ${request.eventDate}`, "בקשות ביטול והחלפות");
-            alert("הבקשה אושרה בהצלחה!");
-            loadNotificationsView();
         };
 
         window.rejectRequest = async (requestId, cancellingPhone, branchName) => {
+            if (!isAdmin) return;
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
                 return;
             }
 
-            await updateDoc(doc(db, "cancellation_requests", requestId), { status: "rejected" });
-            await sendPushNotificationToUser(cancellingPhone, "❌ בקשת הביטול נדחתה", `בקשתך לביטול הופעה בסניף ${branchName} נדחתה.`, 'notifs');
-            alert("הבקשה נדחתה.");
-            loadNotificationsView();
+            try {
+                const requestRef = doc(db, "cancellation_requests", requestId);
+                let request;
+                await runTransaction(db, async transaction => {
+                    const requestSnapshot = await transaction.get(requestRef);
+                    if (!requestSnapshot.exists() || requestSnapshot.data().status !== "pending") {
+                        throw new Error("הבקשה כבר טופלה או שאינה זמינה.");
+                    }
+                    request = requestSnapshot.data();
+                    transaction.update(requestRef, {
+                        status: "rejected",
+                        resolvedAt: new Date(),
+                        resolvedBy: currentUserName
+                    });
+                });
+                const notificationSent = await sendPushNotificationToUser(
+                    request.musicianPhone || cancellingPhone,
+                    "❌ בקשת הביטול נדחתה",
+                    `בקשתך לביטול הופעה בסניף ${request.branchName || branchName} נדחתה.`,
+                    'notifs'
+                );
+                alert(notificationSent
+                    ? "הבקשה נדחתה."
+                    : "הבקשה נדחתה, אך ההתראה למשתמש לא נשלחה.");
+                loadNotificationsView();
+            } catch (error) {
+                console.error("Could not reject cancellation request:", error);
+                alert("שגיאה בדחיית בקשת הביטול: " + (error.message || error));
+            }
         };
 
         window.closeModal = () => document.getElementById('event-modal').classList.add('hidden');
@@ -3362,47 +3748,50 @@
             const assignedStaffDetails = [];
             const selectedRoles = [];
 
-            const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", date)));
-            const currentDayEvents = dayEventsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
-                selectedRoles.push(cb.getAttribute('data-role'));
-                assignedStaff.push(cb.value);
-                assignedStaffIds.push(cb.dataset.musicianId);
-                assignedStaffDetails.push({
-                    musicianId: cb.dataset.musicianId,
-                    name: cb.dataset.name,
-                    role: cb.dataset.role,
-                    phoneId: cleanPhone(cb.dataset.phone)
+            try {
+                const dayEventsSnap = await getDocs(query(collection(db, "events"), where("date", "==", date)));
+                const currentDayEvents = dayEventsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                document.querySelectorAll('.musician-checkbox:checked').forEach(cb => {
+                    selectedRoles.push(cb.getAttribute('data-role'));
+                    assignedStaff.push(cb.value);
+                    assignedStaffIds.push(cb.dataset.musicianId);
+                    assignedStaffDetails.push({
+                        musicianId: cb.dataset.musicianId,
+                        name: cb.dataset.name,
+                        role: cb.dataset.role,
+                        phoneId: cleanPhone(cb.dataset.phone)
+                    });
                 });
-            });
 
-            const conflictingMusician = [...document.querySelectorAll('.musician-checkbox:checked')].find(cb =>
-                isMusicianAssignedToOtherBranchAtTime(currentDayEvents, currentBranchId, time, cb.dataset.musicianId)
-            );
-            if (conflictingMusician) {
-                alert(`${conflictingMusician.dataset.name} כבר משובץ/ת בסניף אחר באותה שעה. נא לבחור איש צוות אחר.`);
-                return;
+                const conflictingMusician = [...document.querySelectorAll('.musician-checkbox:checked')].find(cb =>
+                    isMusicianAssignedToOtherBranchAtTime(currentDayEvents, currentBranchId, time, cb.dataset.musicianId)
+                );
+                if (conflictingMusician) {
+                    alert(`${conflictingMusician.dataset.name} כבר משובץ/ת בסניף אחר באותה שעה. נא לבחור איש צוות אחר.`);
+                    return;
+                }
+
+                if (!selectedRoles.includes("זמר/ת") || !selectedRoles.includes("קלידים")) {
+                    alert("שגיאה: חובה לשבץ זמר/ת וקלידן להופעה זו!");
+                    return;
+                }
+
+                const existingEvent = currentDayEvents.find(ev => ev.branchId === currentBranchId);
+
+                if (existingEvent) {
+                    await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff, assignedStaffIds, assignedStaffDetails });
+                    alert("הופעה עודכנה בהצלחה!");
+                } else {
+                    await addDoc(collection(db, "events"), { branchId: currentBranchId, date, time, assignedStaff, assignedStaffIds, assignedStaffDetails, createdAt: new Date() });
+                    alert("הופעה חדשה נשמרה בהצלחה!");
+                }
+
+                closeModal();
+                loadCalendarView();
+            } catch (error) {
+                console.error("Could not save event:", error);
+                alert("שגיאה בשמירת ההופעה: " + (error.message || error));
             }
-
-            if (!selectedRoles.includes("זמר/ת") || !selectedRoles.includes("קלידים")) {
-                alert("שגיאה: חובה לשבץ זמר/ת וקלידן להופעה זו!");
-                return;
-            }
-
-            const branchObj = allBranches.find(b => b.id === currentBranchId);
-            const branchName = branchObj ? branchObj.name : 'סניף';
-            const existingEvent = currentDayEvents.find(ev => ev.branchId === currentBranchId);
-
-            if (existingEvent) {
-                await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff, assignedStaffIds, assignedStaffDetails });
-                alert("הופעה עודכנה בהצלחה!");
-            } else {
-                await addDoc(collection(db, "events"), { branchId: currentBranchId, date, time, assignedStaff, assignedStaffIds, assignedStaffDetails, createdAt: new Date() });
-                alert("הופעה חדשה נשמרה בהצלחה!");
-            }
-
-            closeModal();
-            loadCalendarView();
         });
 
     </script>
@@ -3442,18 +3831,12 @@
                 
                 <div id="register-fields" class="hidden">
                     <input type="text" id="reg-name" data-i18n-placeholder="fullNamePlaceholder" placeholder="שם מלא" autocomplete="off">
-                    <label data-i18n="selectRoleLabel" style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד במערכת:</label>
-                    <select id="reg-role" onchange="onRoleChange()">
+                    <label data-i18n="selectRoleLabel" style="font-size:0.85rem; color:var(--text-muted);">בחר תפקיד מקצועי:</label>
+                    <select id="reg-role">
                         <option value="זמר/ת" data-i18n="singer">זמר/ת</option>
                         <option value="קלידים" data-i18n="keys">קלידים</option>
                         <option value="בוזוקי" data-i18n="bouzouki">בוזוקי</option>
-                        <option value="מנהל סניף" data-i18n="branchManager">מנהל סניף</option>
                     </select>
-
-                    <div id="reg-branch-container" class="hidden">
-                        <label data-i18n="selectBranchLabel" style="font-size:0.85rem; color:var(--text-muted);">בחר את הסניף שברשותך:</label>
-                        <select id="reg-branch-select"></select>
-                    </div>
                 </div>
 
                 <input type="password" id="login-password" required data-i18n-placeholder="passPlaceholder" placeholder="סיסמה" autocomplete="new-password">

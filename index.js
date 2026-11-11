@@ -3,7 +3,7 @@ const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { logger } = require("firebase-functions");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { randomInt } = require("node:crypto");
 
@@ -11,6 +11,17 @@ initializeApp();
 
 const db = getFirestore();
 const SUPER_OWNER_PHONE = "0547771121";
+
+function getTodayInJerusalem() {
+    const dateParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Jerusalem",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).formatToParts(new Date());
+    const dateValues = Object.fromEntries(dateParts.map(part => [part.type, part.value]));
+    return `${dateValues.year}-${dateValues.month}-${dateValues.day}`;
+}
 
 exports.setStaffAdminRole = onCall(async request => {
     let operation = "אימות בעל המערכת";
@@ -141,6 +152,150 @@ function normalizePhone(phone) {
     return /^9725\d{8}$/.test(digits) ? `0${digits.slice(3)}` : digits;
 }
 
+function getPhoneFromAuthEmail(email) {
+    const match = String(email || "").toLowerCase().match(/^user_(\d{10,12})@salonyevani\.local$/);
+    const phone = match ? normalizePhone(match[1]) : "";
+    return /^05\d{8}$/.test(phone) ? phone : "";
+}
+
+async function verifyPhoneProof(request, phoneVerificationIdToken) {
+    const accountPhone = getPhoneFromAuthEmail(request.auth.token.email);
+    if (!accountPhone || typeof phoneVerificationIdToken !== "string" || !phoneVerificationIdToken) {
+        throw new HttpsError("invalid-argument", "לא ניתן לאמת את מספר הטלפון של החשבון.");
+    }
+
+    let verificationToken;
+    try {
+        verificationToken = await getAuth().verifyIdToken(phoneVerificationIdToken);
+    } catch (error) {
+        logger.warn("Phone verification proof token was rejected", {
+            uid: request.auth.uid,
+            errorCode: String(error.code || "unknown")
+        });
+        throw new HttpsError("permission-denied", "אימות ה-SMS פג או שאינו תקין. יש לשלוח קוד חדש.");
+    }
+
+    const verifiedPhone = normalizePhone(verificationToken.phone_number);
+    if (!verifiedPhone || verifiedPhone !== accountPhone ||
+        verificationToken.firebase?.sign_in_provider !== "phone") {
+        throw new HttpsError("permission-denied", "מספר הטלפון שאומת אינו תואם לחשבון.");
+    }
+
+    return accountPhone;
+}
+
+exports.completeStaffRegistration = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי להשלים הרשמה.");
+    }
+    const { name, role, phoneVerificationIdToken } = request.data || {};
+    if (typeof name !== "string" || !name.trim() ||
+        !["זמר/ת", "קלידים", "בוזוקי"].includes(role)) {
+        throw new HttpsError("invalid-argument", "פרטי ההרשמה אינם תקינים. תפקיד מנהל סניף מוקצה על ידי בעל המערכת.");
+    }
+
+    const phone = await verifyPhoneProof(request, phoneVerificationIdToken);
+    const userRef = db.collection("users").doc(request.auth.uid);
+    const existingUsers = await db.collection("users").where("phone", "==", phone).get();
+    const existingUserForPhone = existingUsers.docs.find(profile => profile.id !== request.auth.uid);
+    if (existingUserForPhone) {
+        throw new HttpsError("already-exists", "מספר הטלפון כבר משויך לחשבון אחר.");
+    }
+
+    const musiciansSnapshot = await db.collection("musicians").get();
+    const existingMusicians = musiciansSnapshot.docs.filter(musician =>
+        normalizePhone(musician.data().phone) === phone
+    );
+    if (existingMusicians.length > 1) {
+        throw new HttpsError("failed-precondition", "נמצאו כמה אנשי צוות למספר הטלפון. יש לפנות לבעל המערכת.");
+    }
+
+    const musicianRef = existingMusicians[0]?.ref || db.collection("musicians").doc();
+    const musicianData = existingMusicians[0]?.data();
+    if (musicianData && musicianData.role !== role) {
+        throw new HttpsError("failed-precondition", "מספר הטלפון כבר רשום בתפקיד אחר. יש לפנות לבעל המערכת לעדכון.");
+    }
+
+    const auth = getAuth();
+    const userRecord = await auth.getUser(request.auth.uid);
+    await auth.setCustomUserClaims(request.auth.uid, {
+        ...(userRecord.customClaims || {}),
+        phoneVerified: true,
+        verifiedPhone: phone
+    });
+
+    await db.runTransaction(async transaction => {
+        const [userSnapshot, musicianSnapshot] = await Promise.all([
+            transaction.get(userRef),
+            transaction.get(musicianRef)
+        ]);
+        if (userSnapshot.exists &&
+            (normalizePhone(userSnapshot.data().phone) !== phone ||
+                userSnapshot.data().phoneVerified !== true)) {
+            throw new HttpsError("already-exists", "לחשבון כבר קיים פרופיל שאינו תואם להרשמה.");
+        }
+
+        transaction.set(userRef, {
+            phone,
+            phoneVerified: true,
+            role: "user",
+            name: name.trim(),
+            musicianId: musicianRef.id
+        }, { merge: true });
+        if (musicianSnapshot.exists) {
+            transaction.update(musicianRef, {
+                name: name.trim(),
+                phone,
+                status: musicianSnapshot.data().status || "active"
+            });
+        } else {
+            transaction.set(musicianRef, {
+                name: name.trim(),
+                role,
+                phone,
+                status: "active",
+                isAdmin: false
+            });
+        }
+    });
+
+    return { phoneVerified: true };
+});
+
+exports.verifyPhoneForAccount = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לאמת את מספר הטלפון.");
+    }
+    const phone = await verifyPhoneProof(request, request.data?.phoneVerificationIdToken);
+    const profileRef = db.collection("users").doc(request.auth.uid);
+    const profileSnapshot = await profileRef.get();
+    if (!profileSnapshot.exists || normalizePhone(profileSnapshot.data().phone) !== phone) {
+        throw new HttpsError("failed-precondition", "פרופיל החשבון אינו תואם למספר שאומת.");
+    }
+
+    const musicianSnapshot = await db.collection("musicians").get();
+    const matchingMusicians = musicianSnapshot.docs.filter(musician =>
+        normalizePhone(musician.data().phone) === phone
+    );
+    if (matchingMusicians.length > 1) {
+        throw new HttpsError("failed-precondition", "נמצאו כמה אנשי צוות למספר הטלפון. יש לפנות לבעל המערכת.");
+    }
+
+    await profileRef.set({
+        phoneVerified: true,
+        ...(matchingMusicians.length ? { musicianId: matchingMusicians[0].id } : {})
+    }, { merge: true });
+
+    const auth = getAuth();
+    const userRecord = await auth.getUser(request.auth.uid);
+    await auth.setCustomUserClaims(request.auth.uid, {
+        ...(userRecord.customClaims || {}),
+        phoneVerified: true,
+        verifiedPhone: phone
+    });
+    return { phoneVerified: true };
+});
+
 function isStaffAssignedToEvent(event, musician) {
     if (Array.isArray(event.assignedStaffIds) && event.assignedStaffIds.includes(musician.id)) return true;
     if (Array.isArray(event.assignedStaffDetails) &&
@@ -188,6 +343,130 @@ function validateReplacement(event, target, replacement, allEvents, unavailableP
     }
 }
 
+exports.approveCancellationRequest = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לאשר בקשת ביטול.");
+    }
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
+        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
+    }
+
+    const { requestId, replacementMusicianId } = request.data || {};
+    if (typeof requestId !== "string" || !requestId ||
+        typeof replacementMusicianId !== "string" || !replacementMusicianId) {
+        throw new HttpsError("invalid-argument", "פרטי אישור בקשת הביטול אינם תקינים.");
+    }
+
+    const requestRef = db.collection("cancellation_requests").doc(requestId);
+    return db.runTransaction(async transaction => {
+        const requestSnapshot = await transaction.get(requestRef);
+        if (!requestSnapshot.exists || requestSnapshot.data().status !== "pending") {
+            throw new HttpsError("failed-precondition", "הבקשה כבר טופלה או שאינה זמינה.");
+        }
+
+        const cancellation = requestSnapshot.data();
+        if (typeof cancellation.eventId !== "string" || typeof cancellation.eventDate !== "string") {
+            throw new HttpsError("failed-precondition", "לבקשת הביטול חסרים פרטי הופעה תקינים.");
+        }
+
+        const eventRef = db.collection("events").doc(cancellation.eventId);
+        const eventSnapshot = await transaction.get(eventRef);
+        if (!eventSnapshot.exists || eventSnapshot.data().date !== cancellation.eventDate) {
+            throw new HttpsError("failed-precondition", "ההופעה כבר אינה קיימת או שפרטיה השתנו.");
+        }
+        const dayEventsQuery = db.collection("events").where("date", "==", eventSnapshot.data().date);
+        const dayUnavailabilitiesQuery = db.collection("unavailabilities").where("date", "==", eventSnapshot.data().date);
+        const [dayEventsSnapshot, unavailabilitiesSnapshot, musiciansSnapshot] = await Promise.all([
+            transaction.get(dayEventsQuery),
+            transaction.get(dayUnavailabilitiesQuery),
+            transaction.get(db.collection("musicians"))
+        ]);
+
+        const musicians = musiciansSnapshot.docs.map(musicianDocument => ({
+            id: musicianDocument.id,
+            ...musicianDocument.data()
+        }));
+        const musiciansById = new Map(musicians.map(musician => [musician.id, musician]));
+        const event = { id: eventSnapshot.id, ...eventSnapshot.data() };
+        const dayEvents = dayEventsSnapshot.docs.map(eventDocument => ({
+            id: eventDocument.id,
+            ...eventDocument.data()
+        }));
+        const target = musicians.find(musician =>
+            normalizePhone(musician.phone) === normalizePhone(cancellation.musicianPhone)
+        );
+        const replacement = musiciansById.get(replacementMusicianId);
+        if (!target) {
+            throw new HttpsError("failed-precondition", "לא ניתן לזהות את איש הצוות שביקש את הביטול.");
+        }
+
+        const assignedStaff = Array.isArray(event.assignedStaff) ? event.assignedStaff : [];
+        const cancelledEntry = assignedStaff.find(entry =>
+            entry === `${target.name} (${target.role})`
+        ) || assignedStaff.find(entry =>
+            String(entry).startsWith(`${cancellation.musicianName} (`)
+        );
+        const cancelledRole = cancelledEntry && cancelledEntry.match(/\(([^()]*)\)$/)?.[1];
+        if (!cancelledEntry || !cancelledRole) {
+            throw new HttpsError("failed-precondition", "איש הצוות כבר אינו משובץ להופעה.");
+        }
+        const replacementTarget = { ...target, role: cancelledRole };
+        const unavailablePhones = new Set(unavailabilitiesSnapshot.docs.map(unavailableDocument =>
+            normalizePhone(unavailableDocument.data().phone)
+        ));
+        validateReplacement(event, replacementTarget, replacement, dayEvents, unavailablePhones);
+
+        const musicianIds = getEventStaffIds(event, musiciansById)
+            .filter(musicianId => musicianId !== target.id);
+        musicianIds.push(replacement.id);
+        const updatedStaff = assignedStaff.filter(entry => entry !== cancelledEntry);
+        updatedStaff.push(`${replacement.name} (${replacement.role})`);
+        const existingDetails = Array.isArray(event.assignedStaffDetails) && event.assignedStaffDetails.length
+            ? event.assignedStaffDetails
+            : getEventStaffIds(event, musiciansById)
+                .map(musicianId => musiciansById.get(musicianId))
+                .filter(Boolean)
+                .map(musician => ({
+                    musicianId: musician.id,
+                    name: musician.name,
+                    role: musician.role,
+                    phoneId: normalizePhone(musician.phone)
+                }));
+        const staffDetails = existingDetails.filter(staff => staff.musicianId !== target.id);
+        staffDetails.push({
+            musicianId: replacement.id,
+            name: replacement.name,
+            role: replacement.role,
+            phoneId: normalizePhone(replacement.phone)
+        });
+
+        transaction.update(eventRef, {
+            assignedStaff: updatedStaff,
+            assignedStaffIds: musicianIds,
+            assignedStaffDetails: staffDetails
+        });
+        transaction.update(requestRef, {
+            status: "approved",
+            replacementName: replacement.name,
+            replacementPhone: replacement.phone,
+            resolvedAt: FieldValue.serverTimestamp(),
+            resolvedByUid: request.auth.uid
+        });
+
+        return {
+            requestId,
+            musicianPhone: cancellation.musicianPhone,
+            musicianName: cancellation.musicianName,
+            eventDate: cancellation.eventDate,
+            replacementName: replacement.name,
+            replacementRole: replacement.role,
+            replacementPhone: replacement.phone
+        };
+    });
+});
+
 exports.updateStaffProfile = onCall(async request => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "יש להתחבר כדי לעדכן איש צוות.");
@@ -208,19 +487,45 @@ exports.updateStaffProfile = onCall(async request => {
     }
 
     const musicianRef = db.collection("musicians").doc(musicianId);
-    const musicianSnapshot = await musicianRef.get();
-    if (!musicianSnapshot.exists) {
-        throw new HttpsError("not-found", "איש הצוות לא נמצא.");
-    }
-    const previousMusician = musicianSnapshot.data();
-    if (normalizePhone(previousMusician.phone) === SUPER_OWNER_PHONE && !isSuperOwner) {
-        throw new HttpsError("failed-precondition", "לא ניתן לערוך את איש הצוות קובי קלימון.");
-    }
-    if (status === "inactive" && previousMusician.status !== "inactive") {
-        throw new HttpsError("failed-precondition", "יש להשתמש בתהליך ההשבתה כדי לשמור על שיבוצים עתידיים.");
-    }
+    await db.runTransaction(async transaction => {
+        const [musicianSnapshot, branchesSnapshot] = await Promise.all([
+            transaction.get(musicianRef),
+            transaction.get(db.collection("branches"))
+        ]);
+        if (!musicianSnapshot.exists) {
+            throw new HttpsError("not-found", "איש הצוות לא נמצא.");
+        }
+        const previousMusician = musicianSnapshot.data();
+        if (normalizePhone(previousMusician.phone) === SUPER_OWNER_PHONE && !isSuperOwner) {
+            throw new HttpsError("failed-precondition", "לא ניתן לערוך את איש הצוות קובי קלימון.");
+        }
+        if (status === "inactive" && previousMusician.status !== "inactive") {
+            throw new HttpsError("failed-precondition", "יש להשתמש בתהליך ההשבתה כדי לשמור על שיבוצים עתידיים.");
+        }
 
-    await musicianRef.update({ name: name.trim(), role, status });
+        transaction.update(musicianRef, { name: name.trim(), role, status });
+        const managedBranches = branchesSnapshot.docs.filter(branchSnapshot => {
+            const branch = branchSnapshot.data();
+            return branch.managerId === musicianId ||
+                (normalizePhone(previousMusician.phone) &&
+                    normalizePhone(branch.managerPhone) === normalizePhone(previousMusician.phone));
+        });
+        managedBranches.forEach(branchSnapshot => {
+            if (role === "מנהל סניף" && status !== "inactive") {
+                transaction.update(branchSnapshot.ref, {
+                    managerId: musicianId,
+                    managerName: name.trim(),
+                    managerPhone: previousMusician.phone
+                });
+            } else {
+                transaction.update(branchSnapshot.ref, {
+                    managerId: FieldValue.delete(),
+                    managerName: FieldValue.delete(),
+                    managerPhone: FieldValue.delete()
+                });
+            }
+        });
+    });
     return { musicianId, name: name.trim(), role, status };
 });
 
@@ -228,7 +533,9 @@ exports.changeStaffContact = onCall(async request => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "יש להתחבר כדי לשנות איש צוות.");
     }
-    if (request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
         throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
     }
 
@@ -283,7 +590,7 @@ exports.changeStaffContact = onCall(async request => {
         unavailableByDate.get(unavailable.date).add(normalizePhone(unavailable.phone));
     });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayInJerusalem();
     const scheduledEvents = allEvents.filter(event =>
         event.date >= today && isStaffAssignedToEvent(event, target)
     );
@@ -358,6 +665,7 @@ exports.changeStaffContact = onCall(async request => {
         const currentPushTokenSnapshot = pushTokenRef ? await transaction.get(pushTokenRef) : null;
         const currentEventsSnapshot = await transaction.get(db.collection("events"));
         const currentUnavailableSnapshot = await transaction.get(db.collection("unavailabilities"));
+        const currentBranchesSnapshot = await transaction.get(db.collection("branches"));
 
         if (!currentMusicianSnapshot.exists) {
             throw new HttpsError("not-found", "איש הצוות כבר אינו קיים.");
@@ -380,6 +688,12 @@ exports.changeStaffContact = onCall(async request => {
             currentScheduledEvents.some(event => !replacementsByEvent.has(event.id))) {
             throw new HttpsError("failed-precondition", "השיבוצים השתנו. נא לטעון מחדש ולבחור מחליפים.");
         }
+        const currentManagedBranches = currentBranchesSnapshot.docs.filter(branchSnapshot => {
+            const branch = branchSnapshot.data();
+            return branch.managerId === currentTarget.id ||
+                (normalizePhone(currentTarget.phone) &&
+                    normalizePhone(branch.managerPhone) === normalizePhone(currentTarget.phone));
+        });
 
         const replacementsById = new Map(currentReplacementSnapshots.map(snapshot =>
             [snapshot.id, snapshot.exists ? { id: snapshot.id, ...snapshot.data() } : null]
@@ -468,6 +782,13 @@ exports.changeStaffContact = onCall(async request => {
                 status: "inactive"
             });
         }
+        currentManagedBranches.forEach(branchSnapshot => {
+            transaction.update(branchSnapshot.ref, {
+                managerId: FieldValue.delete(),
+                managerName: FieldValue.delete(),
+                managerPhone: FieldValue.delete()
+            });
+        });
     });
 
     let authAccountDeleted = true;
@@ -515,7 +836,9 @@ exports.resetUserPassword = onCall(async request => {
         if (!request.auth) {
             throw new HttpsError("unauthenticated", "יש להתחבר כדי לאפס סיסמה.");
         }
-        if (request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
+        const callerEmail = String(request.auth.token.email || "").toLowerCase();
+        const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+        if (!isSuperOwner && request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
             throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
         }
 
@@ -678,5 +1001,97 @@ exports.deliverPendingPush = onDocumentCreated(
             });
             throw error;
         }
+    }
+);
+
+function getEventSingers(eventData) {
+    const singerDetails = Array.isArray(eventData.assignedStaffDetails)
+        ? eventData.assignedStaffDetails.filter(staff => staff.role === "זמר/ת")
+        : [];
+    if (singerDetails.length) {
+        return new Map(singerDetails.map(staff => [
+            staff.musicianId || normalizePhone(staff.phoneId) || String(staff.name || ""),
+            String(staff.name || "זמר/ת")
+        ]));
+    }
+
+    return new Map((Array.isArray(eventData.assignedStaff) ? eventData.assignedStaff : [])
+        .map(assignment => String(assignment).match(/^(.*?)\s+\(זמר\/ת\)$/))
+        .filter(Boolean)
+        .map(match => [match[1], match[1]]));
+}
+
+exports.notifyBranchManagerOfSingerChange = onDocumentWritten(
+    { document: "events/{eventId}", retry: true },
+    async event => {
+        const beforeSnapshot = event.data.before;
+        const afterSnapshot = event.data.after;
+        if (!afterSnapshot.exists) return;
+
+        const after = afterSnapshot.data();
+        const beforeSingers = beforeSnapshot.exists
+            ? getEventSingers(beforeSnapshot.data())
+            : new Map();
+        const afterSingers = getEventSingers(after);
+        const beforeIds = [...beforeSingers.keys()].sort();
+        const afterIds = [...afterSingers.keys()].sort();
+        if (JSON.stringify(beforeIds) === JSON.stringify(afterIds)) return;
+
+        const branchId = after.branchId;
+        if (typeof branchId !== "string" || !branchId) {
+            logger.warn("Singer assignment changed on an event without a branch", {
+                eventId: event.params.eventId
+            });
+            return;
+        }
+
+        const branchSnapshot = await db.collection("branches").doc(branchId).get();
+        if (!branchSnapshot.exists) {
+            logger.warn("Could not notify branch manager because the event branch was not found", {
+                eventId: event.params.eventId,
+                branchId
+            });
+            return;
+        }
+        const branch = branchSnapshot.data();
+        let managerPhone = normalizePhone(branch.managerPhone);
+        if (!managerPhone && typeof branch.managerId === "string" && branch.managerId) {
+            const managerSnapshot = await db.collection("musicians").doc(branch.managerId).get();
+            if (managerSnapshot.exists) managerPhone = normalizePhone(managerSnapshot.data().phone);
+        }
+        if (!managerPhone) return;
+
+        const pushTokensSnapshot = await db.collection("push_tokens").get();
+        const managerTokens = pushTokensSnapshot.docs.filter(pushSnapshot =>
+            normalizePhone(pushSnapshot.data().userPhone) === managerPhone &&
+            typeof pushSnapshot.data().token === "string" &&
+            pushSnapshot.data().token
+        );
+        if (!managerTokens.length) return;
+
+        const previousNames = [...beforeSingers.values()];
+        const currentNames = [...afterSingers.values()];
+        const eventTime = String(event.time || "לא צוינה");
+        const description = `השתנה שיבוץ הזמר להופעה בסניף ${String(branch.name || "שלך")} בתאריך ${String(after.date || "לא צוין")} בשעה ${eventTime}.`;
+        const singerLine = currentNames.length
+            ? `הזמר/ת כעת: ${currentNames.join(", ")}.`
+            : "כרגע לא משובץ/ת זמר/ת.";
+        const changeLine = previousNames.length
+            ? `לפני השינוי: ${previousNames.join(", ")}. `
+            : "";
+        const notificationId = `${event.params.eventId}_${event.time.replace(/[^0-9A-Za-z_-]/g, "_")}`;
+        const batch = db.batch();
+        managerTokens.forEach(pushSnapshot => {
+            batch.set(db.collection("pending_pushes").doc(
+                `singer_change_${notificationId}_${pushSnapshot.id}`
+            ), {
+                token: pushSnapshot.data().token,
+                title: "עדכון שיבוץ זמר",
+                body: `${description} ${changeLine}${singerLine}`,
+                tabTarget: "calendar",
+                createdAt: FieldValue.serverTimestamp()
+            });
+        });
+        await batch.commit();
     }
 );
