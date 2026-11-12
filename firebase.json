@@ -1,10 +1,17 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "functions": {
     "source": ".",
     "ignore": [
       "node_modules",
       ".git",
       ".firebase",
+      "firestore.rules",
+      "firestore.rules.test.js",
+      "firestore-debug.log",
+      "ui-debug.log",
       "index.html",
       "icon.png",
       "sw.js",
@@ -15,5 +22,10 @@
       "firebase-debug.*.log",
       "*.local"
     ]
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    }
   }
 }

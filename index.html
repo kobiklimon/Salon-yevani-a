@@ -789,6 +789,7 @@
         let superOwnerAuditLogs = [];
         let currentUserPhone = '';
         let currentUserName = '';
+        let currentUserProfile = null;
         let userManagedBranchId = '';
         let userManagedBranchIds = [];
 
@@ -962,54 +963,6 @@
             alert(`📢 הודעה חדשה:\n\n${payload.notification ? payload.notification.body : payload.data.message}`);
         });
 
-        async function sendPushNotificationToUser(targetPhone, title, body, tabTarget = 'notifs') {
-            try {
-                const cleanTarget = cleanPhone(targetPhone);
-                const tokensSnap = await getDocs(collection(db, "push_tokens"));
-                let targetToken = '';
-                tokensSnap.forEach(d => {
-                    const data = d.data();
-                    if (cleanPhone(data.userPhone) === cleanTarget) {
-                        targetToken = data.token;
-                    }
-                });
-
-                if (targetToken) {
-                    await addDoc(collection(db, "pending_pushes"), {
-                        token: targetToken,
-                        title,
-                        body,
-                        tabTarget,
-                        createdAt: new Date()
-                    });
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                console.error("Error queueing push:", e);
-                return false;
-            }
-        }
-
-        async function sendBroadcastPushToAll(title, body) {
-            try {
-                const tokensSnap = await getDocs(collection(db, "push_tokens"));
-                await Promise.all(tokensSnap.docs.map(async d => {
-                    const data = d.data();
-                    if (data.token) {
-                        await addDoc(collection(db, "pending_pushes"), {
-                            token: data.token,
-                            title,
-                            body,
-                            tabTarget: 'notifs',
-                            createdAt: new Date()
-                        });
-                    }
-                }));
-            } catch (e) {
-                console.error("Error broadcast push:", e);
-            }
-        }
         async function checkSystemLockdownStatus() {
             try {
                 if (isAuthenticatedSuperOwner()) {
@@ -1275,13 +1228,32 @@
                     return;
                 }
 
-                await loadMusiciansData();
-                await loadBranchesSelect();
                 const isActiveUser = await checkUserAdminStatus(user);
                 if (!isActiveUser) {
                     activeAuthUid = null;
                     return;
                 }
+                await loadMusiciansData();
+                const matchedMusician = allMusicians.find(musician =>
+                    musician.id === currentUserProfile.musicianId ||
+                    cleanPhone(musician.phone) === currentUserPhone
+                );
+                if (matchedMusician && matchedMusician.status === 'inactive') {
+                    alert("חשבונך הוגדר כלא פעיל במערכת. פנה למנהל.");
+                    activeAuthUid = null;
+                    await signOut(auth);
+                    return;
+                }
+                isBranchManager = matchedMusician?.role === "מנהל סניף";
+                await loadBranchesSelect();
+                userManagedBranchIds = allBranches.filter(branch =>
+                    (matchedMusician && branch.managerId === matchedMusician.id) ||
+                    (currentUserPhone && cleanPhone(branch.managerPhone) === currentUserPhone)
+                ).map(branch => branch.id);
+                userManagedBranchId = userManagedBranchIds[0] || '';
+                isBranchManager ||= userManagedBranchIds.length > 0;
+                configureBranchManagerProfile();
+                configureUserTabs();
 
                 const isLocked = await checkSystemLockdownStatus();
                 if (isLocked) {
@@ -1450,9 +1422,12 @@
                     dateStr: new Date().toLocaleString('he-IL')
                 });
 
-                await sendBroadcastPushToAll("📢 הודעה חדשה לכל הצוות", msg);
+                const sendPush = httpsCallable(functions, "sendBroadcastPush");
+                const pushResult = await sendPush({ message: msg });
                 logAction("שליחת הודעת פוש", `שודרה הודעה חדשה לכל הצוות: ${msg}`, "הודעות פוש ותקשורת");
-                alert("📢 ההודעה נשלחה בהצלחה!");
+                alert(pushResult.data.queued
+                    ? "📢 ההודעה נשלחה בהצלחה!"
+                    : "📢 ההודעה נשמרה, אך אין משתמשים עם התראות פעילות.");
                 input.value = '';
             } catch (err) {
                 alert("שגיאה בשליחת הודעה: " + err.message);
@@ -1460,9 +1435,13 @@
         };
 
         async function loadUnavailabilityData() {
-            const snap = await getDocs(collection(db, "unavailabilities"));
-            userUnavailabilities = [];
-            snap.forEach(d => userUnavailabilities.push({ id: d.id, ...d.data() }));
+            const snap = isAdmin
+                ? await getDocs(collection(db, "unavailabilities"))
+                : await getDocs(query(
+                    collection(db, "unavailabilities"),
+                    where("phone", "==", currentUserPhone)
+                ));
+            userUnavailabilities = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         }
 
         async function checkUserAdminStatus(user) {
@@ -1472,19 +1451,10 @@
                 await signOut(auth);
                 return false;
             }
-            let rawPhone = '';
-            rawPhone = userDoc.data().phone || '';
-
+            currentUserProfile = userDoc.data();
+            const rawPhone = currentUserProfile.phone || '';
             currentUserPhone = cleanPhone(rawPhone);
-            const matched = allMusicians.find(m => cleanPhone(m.phone) === currentUserPhone);
-            
-            if (matched && matched.status === 'inactive') {
-                alert("חשבונך הוגדר כלא פעיל במערכת. פנה למנהל.");
-                await signOut(auth);
-                return false;
-            }
-
-            currentUserName = matched ? matched.name : (rawPhone || 'משתמש');
+            currentUserName = currentUserProfile.name || rawPhone || 'משתמש';
             document.getElementById('user-display-phone').textContent = `${currentUserName} (${rawPhone})`;
 
             isSuperOwner = isAuthenticatedSuperOwner();
@@ -1499,16 +1469,14 @@
                 return false;
             }
             isAdmin = isSuperOwner || tokenResult.claims.admin === true || tokenResult.claims.superOwner === true;
+            isBranchManager = false;
+            userManagedBranchIds = [];
+            userManagedBranchId = '';
+            configureUserTabs();
+            return true;
+        }
 
-            userManagedBranchIds = allBranches.filter(branch =>
-                (matched && branch.managerId === matched.id) ||
-                (currentUserPhone && cleanPhone(branch.managerPhone) === currentUserPhone) ||
-                (matched?.role === "מנהל סניף" && matched.branchName === branch.name)
-            ).map(branch => branch.id);
-            userManagedBranchId = userManagedBranchIds[0] || '';
-            isBranchManager = userManagedBranchIds.length > 0 || matched?.role === "מנהל סניף";
-            configureBranchManagerProfile();
-
+        function configureUserTabs() {
             const adminTabBtn = document.getElementById('btn-tab-admin');
             const reportsTabBtn = document.getElementById('btn-tab-reports');
             const auditTabBtn = document.getElementById('btn-tab-audit');
@@ -1539,7 +1507,6 @@
                 if (lockdownContainer) lockdownContainer.classList.add('hidden');
                 if (resetSection) resetSection.classList.add('hidden');
             }
-            return true;
         }
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1584,55 +1551,16 @@
                 return;
             }
 
-            const matched = allMusicians.find(m => cleanPhone(m.phone) === cleaned);
-            const userName = matched ? matched.name : phone;
-
-            let resetRequest;
             try {
-                resetRequest = await addDoc(collection(db, "password_reset_requests"), {
-                    userPhone: cleaned,
-                    userName: userName,
-                    status: "pending",
-                    createdAt: new Date()
-                });
+                const submitResetRequest = httpsCallable(functions, "submitPasswordResetRequest");
+                await submitResetRequest({ phone: cleaned });
             } catch (err) {
-                console.error("Could not save password reset request:", {
-                    userPhone: cleaned,
-                    errorCode: err?.code || "unknown",
-                    message: err?.message || String(err)
-                });
+                console.error("Could not submit password reset request:", err);
                 alert("שגיאה בשליחת הבקשה: " + (err.message || err));
                 return;
             }
 
-            logAction("בקשת איפוס סיסמה", `נשלחה בקשת איפוס סיסמה עבור ${userName} (${cleaned})`, "אבטחה והתחברות", cleaned, userName);
-            let notificationFailed = false;
-            try {
-                const adminsSnap = await getDocs(collection(db, "users"));
-                await Promise.all(adminsSnap.docs.map(async docUser => {
-                    const uData = docUser.data();
-                    if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
-                        const sent = await sendPushNotificationToUser(
-                            uData.phone,
-                            "🔑 בקשת איפוס סיסמה",
-                            `${userName} ביקש/ה איפוס סיסמה במערכת`,
-                            'notifs'
-                        );
-                        if (!sent) notificationFailed = true;
-                    }
-                }));
-            } catch (err) {
-                notificationFailed = true;
-                console.error("Password reset request was saved, but administrator notifications failed:", {
-                    requestId: resetRequest.id,
-                    errorCode: err?.code || "unknown",
-                    message: err?.message || String(err)
-                });
-            }
-
-            alert(notificationFailed
-                ? "הבקשה נשמרה למנהלי המערכת. שליחת ההתראות נכשלה; אם לא תקבל מענה, פנה ישירות למנהל."
-                : "פנייתך עברה למנהלי המערכת. ברגע שהסיסמה תאופס, תקבל התראה.");
+            alert("הפנייה נשלחה למנהלי המערכת. אם לא תקבל מענה, פנה ישירות למנהל.");
         };
 
         window.confirmResetPassword = async (requestId, userPhone, userName) => {
@@ -1834,8 +1762,33 @@
                 reportSelect.innerHTML = `<option value="">${t.allBranches}</option>`;
             }
 
-            const snap = await getDocs(collection(db, "branches"));
             allBranches = [];
+            let branchDocuments = [];
+            if (isAdmin) {
+                const snap = await getDocs(collection(db, "branches"));
+                branchDocuments = snap.docs;
+            } else {
+                const branchQueries = [];
+                if (currentUserProfile?.musicianId) {
+                    branchQueries.push(getDocs(query(
+                        collection(db, "branches"),
+                        where("managerId", "==", currentUserProfile.musicianId)
+                    )));
+                }
+                if (currentUserProfile?.phone) {
+                    branchQueries.push(getDocs(query(
+                        collection(db, "branches"),
+                        where("managerPhone", "==", currentUserProfile.phone)
+                    )));
+                }
+                const snapshots = await Promise.all(branchQueries);
+                branchDocuments = [...new Map(
+                    snapshots.flatMap(snapshot => snapshot.docs).map(branchDocument => [
+                        branchDocument.id,
+                        branchDocument
+                    ])
+                ).values()];
+            }
 
             function getColorDotEmoji(hexColor) {
                 if (!hexColor) return '🟡';
@@ -1865,7 +1818,7 @@
                 return '🟡';
             }
 
-            snap.forEach((d, idx) => {
+            branchDocuments.forEach((d, idx) => {
                 const bData = d.data();
                 if (!bData.color) {
                     bData.color = defaultColors[idx % defaultColors.length];
@@ -1873,13 +1826,15 @@
                 allBranches.push({ id: d.id, ...bData });
 
                 const colorDot = getColorDotEmoji(bData.color);
-                calendarSelect.add(new Option(`${colorDot} ${bData.name || ''}`, d.id));
-                if (reportSelect) {
+                if (isAdmin || isBranchManager) {
+                    calendarSelect.add(new Option(`${colorDot} ${bData.name || ''}`, d.id));
+                }
+                if (reportSelect && isAdmin) {
                     reportSelect.add(new Option(`${colorDot} ${bData.name || ''}`, d.id));
                 }
             });
 
-            populateBranchManagersDropdown();
+            if (isAdmin) populateBranchManagersDropdown();
         }
 
         function populateBranchManagersDropdown(selectedManagerId = '') {
@@ -2146,9 +2101,25 @@
         });
 
         async function loadMusiciansData() {
-            const snap = await getDocs(collection(db, "musicians"));
-            allMusicians = [];
-            snap.forEach(d => allMusicians.push({ id: d.id, ...d.data() }));
+            if (isAdmin) {
+                const snap = await getDocs(collection(db, "musicians"));
+                allMusicians = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                return;
+            }
+
+            if (currentUserProfile?.musicianId) {
+                const musicianSnapshot = await getDoc(doc(db, "musicians", currentUserProfile.musicianId));
+                allMusicians = musicianSnapshot.exists()
+                    ? [{ id: musicianSnapshot.id, ...musicianSnapshot.data() }]
+                    : [];
+                return;
+            }
+
+            const snap = await getDocs(query(
+                collection(db, "musicians"),
+                where("phone", "==", currentUserProfile?.phone || currentUserPhone)
+            ));
+            allMusicians = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         }
         async function loadAdminData() {
             if(!isAdmin) return;
@@ -2502,12 +2473,8 @@
 
             try {
                 alert("מבצע איפוס מוחלט, אנא המתן...");
-                const cols = ["events", "musicians", "branches", "cancellation_requests", "unavailabilities"];
-                for (const col of cols) {
-                    const snap = await getDocs(collection(db, col));
-                    const deletes = snap.docs.map(d => deleteDoc(doc(db, col, d.id)));
-                    await Promise.all(deletes);
-                }
+                const resetApplicationData = httpsCallable(functions, "resetApplicationData");
+                await resetApplicationData({ confirmation: confirm2 });
 
                 logAction("אתחול מערכת", "בוצע איפוס מוחלט ומחיקת כל הנתונים במערכת", "כללי");
                 alert("✅ המערכת אופסה בהצלחה ונוקתה לחלוטין מנתונים!");
@@ -2535,6 +2502,14 @@
             updateNotificationBadge();
         };
 
+        async function loadBranchDirectory(branchIds) {
+            const uniqueBranchIds = [...new Set(branchIds.filter(Boolean))];
+            if (!uniqueBranchIds.length) return [];
+            const getBranchDirectory = httpsCallable(functions, "getBranchDirectory");
+            const result = await getBranchDirectory({ branchIds: uniqueBranchIds });
+            return result.data.branches;
+        }
+
         async function loadCalendarView() {
             const container = document.getElementById('calendar-container');
             const t = i18n[currentLang];
@@ -2550,12 +2525,34 @@
                         getDocs(query(collection(db, "events"), where("branchId", "==", branchId)))
                     ));
                     eventDocuments = snapshots.flatMap(snapshot => snapshot.docs);
-                } else {
+                } else if (isAdmin) {
                     const eventsQuery = currentBranchId
                         ? query(collection(db, "events"), where("branchId", "==", currentBranchId))
                         : collection(db, "events");
                     const snapshot = await getDocs(eventsQuery);
                     eventDocuments = snapshot.docs;
+                } else {
+                    const currentMusician = allMusicians[0];
+                    if (currentMusician) {
+                        const eventQueries = [
+                            getDocs(query(
+                                collection(db, "events"),
+                                where("assignedStaffIds", "array-contains", currentMusician.id)
+                            ))
+                        ];
+                        eventQueries.push(getDocs(query(
+                            collection(db, "events"),
+                            where("assignedStaff", "array-contains",
+                                `${currentMusician.name} (${currentMusician.role})`)
+                        )));
+                        const snapshots = await Promise.all(eventQueries);
+                        eventDocuments = [...new Map(
+                            snapshots.flatMap(snapshot => snapshot.docs).map(eventDocument => [
+                                eventDocument.id,
+                                eventDocument
+                            ])
+                        ).values()];
+                    }
                 }
                 monthEvents = [];
                 eventDocuments.forEach(d => {
@@ -2569,6 +2566,14 @@
                         monthEvents.push({ id: d.id, ...eventData });
                     }
                 });
+                if (!isAdmin) {
+                    allBranches = [
+                        ...allBranches.filter(branch => userManagedBranchIds.includes(branch.id)),
+                        ...await loadBranchDirectory(monthEvents.map(event => event.branchId))
+                    ].filter((branch, index, branches) =>
+                        branches.findIndex(candidate => candidate.id === branch.id) === index
+                    );
+                }
                 saveAppDataLocally();
             } catch (err) {
                 console.log("Network error, loading offline cache...");
@@ -3000,12 +3005,12 @@
             try {
                 const eventRequests = await getDocs(query(
                     collection(db, "cancellation_requests"),
-                    where("eventId", "==", eventId)
+                    where("eventId", "==", eventId),
+                    where("musicianPhone", "==", currentUserPhone)
                 ));
                 const hasPendingRequest = eventRequests.docs.some(requestDoc => {
                     const request = requestDoc.data();
-                    return request.status === "pending" &&
-                        cleanPhone(request.musicianPhone) === currentUserPhone;
+                    return request.status === "pending";
                 });
                 if (hasPendingRequest) {
                     alert("כבר קיימת בקשת ביטול ממתינה להופעה זו.");
@@ -3015,7 +3020,7 @@
 
                 const branchObj = allBranches.find(b => b.id === branchId);
                 const branchName = branchObj ? branchObj.name : 'סניף';
-                await addDoc(collection(db, "cancellation_requests"), {
+                const cancellationRequest = await addDoc(collection(db, "cancellation_requests"), {
                     eventId,
                     eventDate,
                     eventTime,
@@ -3029,29 +3034,12 @@
 
                 let notificationFailed = false;
                 try {
-                    const adminPhones = new Set(
-                        allMusicians.filter(musician => musician.isAdmin).map(musician => cleanPhone(musician.phone)).filter(Boolean)
-                    );
-                    adminPhones.add("0547771121");
-                    adminPhones.add("0500000000");
-
-                    const adminsSnap = await getDocs(collection(db, "users"));
-                    adminsSnap.forEach(docUser => {
-                        const uData = docUser.data();
-                        if ((uData.role === 'admin' || uData.isAdmin) && uData.phone) {
-                            adminPhones.add(cleanPhone(uData.phone));
-                        }
-                    });
-                    const pushResults = await Promise.all([...adminPhones].map(phone =>
-                        sendPushNotificationToUser(phone, "🚨 בקשת ביטול חדשה", `${currentUserName} ביקש ביטול להופעה ב-${branchName} (${eventDate})`, 'notifs')
-                    ));
-                    notificationFailed = !pushResults.some(Boolean);
-                    if (notificationFailed) {
-                        console.warn("Cancellation request saved, but no administrator push token is registered.");
-                    }
+                    const notifyAdmins = httpsCallable(functions, "notifyAdminsOfCancellationRequest");
+                    const result = await notifyAdmins({ requestId: cancellationRequest.id });
+                    notificationFailed = result.data.queued === 0;
                 } catch (error) {
                     notificationFailed = true;
-                    console.error("Cancellation request saved, but administrator notifications failed:", error);
+                    console.error("Cancellation request saved, but administrator notifications could not be queued:", error);
                 }
 
                 logAction("בקשת ביטול", `בקשת ביטול נשלחה ע"י ${currentUserName} להופעה ב-${eventDate} בסניף ${branchName}`, "בקשות ביטול והחלפות");
@@ -3094,7 +3082,13 @@
             if (unsubscribeCancellationRequests) unsubscribeCancellationRequests();
             if (unsubscribePasswordResetRequests) unsubscribePasswordResetRequests();
 
-            unsubscribeCancellationRequests = onSnapshot(collection(db, "cancellation_requests"), (snapshot) => {
+            const cancellationRequestsQuery = isAdmin
+                ? collection(db, "cancellation_requests")
+                : query(
+                    collection(db, "cancellation_requests"),
+                    where("musicianPhone", "==", currentUserPhone)
+                );
+            unsubscribeCancellationRequests = onSnapshot(cancellationRequestsQuery, (snapshot) => {
                 allCancellationRequests = [];
                 snapshot.forEach(docSnap => {
                     allCancellationRequests.push({ id: docSnap.id, ...docSnap.data() });
@@ -3165,18 +3159,37 @@
 
             let reportEvents;
             try {
-                const snapshot = await getDocs(query(
-                    collection(db, "events"),
+                const currentMusician = allMusicians.find(musician => cleanPhone(musician.phone) === currentUserPhone);
+                const dateConstraints = [
                     where("date", ">=", startDate),
                     where("date", "<", endDate)
-                ));
-                const currentMusician = allMusicians.find(musician => cleanPhone(musician.phone) === currentUserPhone);
-                reportEvents = snapshot.docs
-                    .map(eventDocument => ({ id: eventDocument.id, ...eventDocument.data() }))
+                ];
+                const eventSnapshots = isAdmin
+                    ? [await getDocs(query(collection(db, "events"), ...dateConstraints))]
+                    : currentMusician
+                        ? await Promise.all([
+                            getDocs(query(
+                                collection(db, "events"),
+                                where("assignedStaffIds", "array-contains", currentMusician.id),
+                                ...dateConstraints
+                            )),
+                            getDocs(query(
+                                collection(db, "events"),
+                                where("assignedStaff", "array-contains",
+                                    `${currentMusician.name} (${currentMusician.role})`),
+                                ...dateConstraints
+                            ))
+                        ])
+                        : [];
+                reportEvents = [...new Map(
+                    eventSnapshots.flatMap(snapshot => snapshot.docs).map(eventDocument => [
+                        eventDocument.id,
+                        { id: eventDocument.id, ...eventDocument.data() }
+                    ])
+                ).values()]
                     .filter(event => {
-                        const isBranchManagerForEvent = isBranchManager && userManagedBranchId === event.branchId;
                         const isUserAssigned = isMusicianAssignedToEvent(event, currentMusician);
-                        return isAdmin || isBranchManagerForEvent || isUserAssigned;
+                        return isAdmin || isUserAssigned;
                     });
             } catch (error) {
                 console.error("Could not load events for accounting report:", error);
@@ -3226,7 +3239,7 @@
 
             filteredEvents.forEach(e => {
                 const branch = allBranches.find(b => b.id === e.branchId);
-                const bName = branch ? branch.name : 'סניף';
+                const bName = branch?.name || e.branchName || 'סניף';
                 
                 const selectedStaffMember = allMusicians.find(musician => musician.id === reportMusicianId);
                 let staffDisplay;
@@ -3625,11 +3638,7 @@
                     });
                 });
                 container.querySelectorAll('.reject-cancellation-action').forEach(button => {
-                    button.addEventListener('click', () => window.rejectRequest(
-                        button.dataset.requestId,
-                        button.dataset.musicianPhone,
-                        button.dataset.branchName
-                    ));
+                    button.addEventListener('click', () => window.rejectRequest(button.dataset.requestId));
                 });
                 replacementsByRequest.forEach((candidates, requestId) => {
                     const select = document.getElementById(`cancellation-replacement-${requestId}`);
@@ -3673,18 +3682,16 @@
                 const approveCancellation = httpsCallable(functions, "approveCancellationRequest");
                 const result = await approveCancellation({ requestId, replacementMusicianId });
                 const approvedRequest = result.data;
-                await sendPushNotificationToUser(
-                    approvedRequest.musicianPhone,
-                    "✅ בקשת הביטול אושרה",
-                    `בקשתך אושרה. ${approvedRequest.replacementName} יחליף אותך בהופעה.`,
-                    'notifs'
-                );
+                const notifyStaff = httpsCallable(functions, "notifyStaffOfCancellationResolution");
+                const notification = await notifyStaff({ requestId });
                 logAction(
                     "אישור בקשת ביטול עם מחליף",
                     `${approvedRequest.replacementName} שובץ/ה במקום ${approvedRequest.musicianName} בתאריך ${approvedRequest.eventDate}`,
                     "בקשות ביטול והחלפות"
                 );
-                alert("הבקשה אושרה בהצלחה!");
+                alert(notification.data.notificationQueued
+                    ? "הבקשה אושרה בהצלחה!"
+                    : "הבקשה אושרה, אך לא ניתן היה לשלוח את ההתראה.");
                 loadNotificationsView();
             } catch (error) {
                 console.error("Could not approve cancellation request:", error);
@@ -3693,7 +3700,7 @@
             }
         };
 
-        window.rejectRequest = async (requestId, cancellingPhone, branchName) => {
+        window.rejectRequest = async (requestId) => {
             if (!isAdmin) return;
             if (!navigator.onLine) {
                 alert("⚠️ אין חיבור לאינטרנט. פעולה זו זמינה במצב מקוון בלבד.");
@@ -3701,27 +3708,9 @@
             }
 
             try {
-                const requestRef = doc(db, "cancellation_requests", requestId);
-                let request;
-                await runTransaction(db, async transaction => {
-                    const requestSnapshot = await transaction.get(requestRef);
-                    if (!requestSnapshot.exists() || requestSnapshot.data().status !== "pending") {
-                        throw new Error("הבקשה כבר טופלה או שאינה זמינה.");
-                    }
-                    request = requestSnapshot.data();
-                    transaction.update(requestRef, {
-                        status: "rejected",
-                        resolvedAt: new Date(),
-                        resolvedBy: currentUserName
-                    });
-                });
-                const notificationSent = await sendPushNotificationToUser(
-                    request.musicianPhone || cancellingPhone,
-                    "❌ בקשת הביטול נדחתה",
-                    `בקשתך לביטול הופעה בסניף ${request.branchName || branchName} נדחתה.`,
-                    'notifs'
-                );
-                alert(notificationSent
+                const rejectCancellation = httpsCallable(functions, "rejectCancellationRequest");
+                const result = await rejectCancellation({ requestId });
+                alert(result.data.notificationQueued
                     ? "הבקשה נדחתה."
                     : "הבקשה נדחתה, אך ההתראה למשתמש לא נשלחה.");
                 loadNotificationsView();
@@ -3777,12 +3766,32 @@
                 }
 
                 const existingEvent = currentDayEvents.find(ev => ev.branchId === currentBranchId);
+                const selectedBranch = allBranches.find(branch => branch.id === currentBranchId);
+                const branchDisplay = {
+                    branchName: selectedBranch?.name || '',
+                    branchColor: selectedBranch?.color || '#1e88e5'
+                };
 
                 if (existingEvent) {
-                    await updateDoc(doc(db, "events", existingEvent.id), { time, assignedStaff, assignedStaffIds, assignedStaffDetails });
+                    await updateDoc(doc(db, "events", existingEvent.id), {
+                        time,
+                        assignedStaff,
+                        assignedStaffIds,
+                        assignedStaffDetails,
+                        ...branchDisplay
+                    });
                     alert("הופעה עודכנה בהצלחה!");
                 } else {
-                    await addDoc(collection(db, "events"), { branchId: currentBranchId, date, time, assignedStaff, assignedStaffIds, assignedStaffDetails, createdAt: new Date() });
+                    await addDoc(collection(db, "events"), {
+                        branchId: currentBranchId,
+                        date,
+                        time,
+                        assignedStaff,
+                        assignedStaffIds,
+                        assignedStaffDetails,
+                        ...branchDisplay,
+                        createdAt: new Date()
+                    });
                     alert("הופעה חדשה נשמרה בהצלחה!");
                 }
 

@@ -5,7 +5,7 @@ const { getMessaging } = require("firebase-admin/messaging");
 const { logger } = require("firebase-functions");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const { randomInt } = require("node:crypto");
+const { createHash, randomInt } = require("node:crypto");
 
 initializeApp();
 
@@ -152,6 +152,54 @@ function normalizePhone(phone) {
     return /^9725\d{8}$/.test(digits) ? `0${digits.slice(3)}` : digits;
 }
 
+function getVerifiedAccountPhone(request) {
+    if (!request.auth || request.auth.token.phoneVerified !== true) return "";
+    const phone = normalizePhone(request.auth.token.verifiedPhone);
+    return /^05\d{8}$/.test(phone) ? phone : "";
+}
+
+async function enqueuePushNotifications(phones, title, body, tabTarget = "notifs") {
+    const normalizedPhones = new Set(phones.map(normalizePhone).filter(Boolean));
+    if (!normalizedPhones.size) return 0;
+
+    const tokensSnapshot = await db.collection("push_tokens").get();
+    const tokens = new Map();
+    tokensSnapshot.docs.forEach(tokenSnapshot => {
+        const tokenData = tokenSnapshot.data();
+        if (normalizedPhones.has(normalizePhone(tokenData.userPhone)) &&
+            typeof tokenData.token === "string" && tokenData.token) {
+            tokens.set(tokenData.token, tokenData.token);
+        }
+    });
+
+    const tokenValues = [...tokens.values()];
+    for (let offset = 0; offset < tokenValues.length; offset += 400) {
+        const batch = db.batch();
+        tokenValues.slice(offset, offset + 400).forEach(token => {
+            batch.set(db.collection("pending_pushes").doc(), {
+                token,
+                title,
+                body,
+                tabTarget,
+                createdAt: FieldValue.serverTimestamp()
+            });
+        });
+        await batch.commit();
+    }
+    return tokenValues.length;
+}
+
+async function getAdministratorPhones() {
+    const musiciansSnapshot = await db.collection("musicians").get();
+    return [...new Set([
+        SUPER_OWNER_PHONE,
+        ...musiciansSnapshot.docs
+            .filter(musicianSnapshot => musicianSnapshot.data().isAdmin === true)
+            .map(musicianSnapshot => normalizePhone(musicianSnapshot.data().phone))
+            .filter(Boolean)
+    ])];
+}
+
 function getPhoneFromAuthEmail(email) {
     const match = String(email || "").toLowerCase().match(/^user_(\d{10,12})@salonyevani\.local$/);
     const phone = match ? normalizePhone(match[1]) : "";
@@ -285,6 +333,9 @@ exports.verifyPhoneForAccount = onCall(async request => {
         phoneVerified: true,
         ...(matchingMusicians.length ? { musicianId: matchingMusicians[0].id } : {})
     }, { merge: true });
+    if (matchingMusicians.length) {
+        await matchingMusicians[0].ref.update({ phone });
+    }
 
     const auth = getAuth();
     const userRecord = await auth.getUser(request.auth.uid);
@@ -294,6 +345,196 @@ exports.verifyPhoneForAccount = onCall(async request => {
         verifiedPhone: phone
     });
     return { phoneVerified: true };
+});
+
+exports.getBranchDirectory = onCall(async request => {
+    if (!request.auth || request.auth.token.phoneVerified !== true) {
+        throw new HttpsError("unauthenticated", "יש להתחבר ולאמת את מספר הטלפון.");
+    }
+    const profileSnapshot = await db.collection("users").doc(request.auth.uid).get();
+    const verifiedPhone = normalizePhone(request.auth.token.verifiedPhone);
+    if (!profileSnapshot.exists || !verifiedPhone ||
+        normalizePhone(profileSnapshot.data().phone) !== verifiedPhone ||
+        profileSnapshot.data().phoneVerified !== true) {
+        throw new HttpsError("permission-denied", "אימות הטלפון של החשבון אינו תקף.");
+    }
+
+    const branchIds = request.data?.branchIds;
+    if (!Array.isArray(branchIds) || branchIds.length > 100 ||
+        branchIds.some(branchId => typeof branchId !== "string" || !branchId)) {
+        throw new HttpsError("invalid-argument", "רשימת הסניפים אינה תקינה.");
+    }
+
+    const branchSnapshots = await Promise.all([...new Set(branchIds)].map(branchId =>
+        db.collection("branches").doc(branchId).get()
+    ));
+    return {
+        branches: branchSnapshots
+            .filter(branchSnapshot => branchSnapshot.exists)
+            .map(branchSnapshot => {
+                const branch = branchSnapshot.data();
+                return {
+                    id: branchSnapshot.id,
+                    name: String(branch.name || ""),
+                    color: String(branch.color || "#1e88e5")
+                };
+            })
+    };
+});
+
+exports.submitPasswordResetRequest = onCall(async request => {
+    const phone = normalizePhone(request.data?.phone);
+    if (!/^05\d{8}$/.test(phone)) {
+        throw new HttpsError("invalid-argument", "יש להזין מספר טלפון נייד תקין.");
+    }
+
+    const requestIp = String(request.rawRequest?.ip || "unknown");
+    const ipKey = createHash("sha256").update(requestIp).digest("hex");
+    const rateLimitRef = db.collection("password_reset_rate_limits").doc(ipKey);
+    await db.runTransaction(async transaction => {
+        const now = Date.now();
+        const rateLimitSnapshot = await transaction.get(rateLimitRef);
+        const rateLimit = rateLimitSnapshot.exists ? rateLimitSnapshot.data() : {};
+        const windowStartedAt = Number(rateLimit.windowStartedAt || 0);
+        const requestCount = now - windowStartedAt < 15 * 60 * 1000
+            ? Number(rateLimit.requestCount || 0)
+            : 0;
+        if (requestCount >= 5) {
+            throw new HttpsError("resource-exhausted", "נשלחו יותר מדי בקשות. יש לנסות שוב מאוחר יותר.");
+        }
+        transaction.set(rateLimitRef, {
+            windowStartedAt: requestCount ? windowStartedAt : now,
+            requestCount: requestCount + 1
+        });
+    });
+
+    const musiciansSnapshot = await db.collection("musicians").get();
+    const matchedMusician = musiciansSnapshot.docs.find(musician =>
+        normalizePhone(musician.data().phone) === phone
+    );
+    const requestRef = db.collection("password_reset_requests").doc();
+    await requestRef.set({
+        userPhone: phone,
+        userName: matchedMusician ? String(matchedMusician.data().name || "") : "",
+        status: "pending",
+        createdAt: FieldValue.serverTimestamp()
+    });
+
+    try {
+        const adminPhones = await getAdministratorPhones();
+        await enqueuePushNotifications(
+            adminPhones,
+            "🔑 בקשת איפוס סיסמה",
+            "התקבלה בקשת איפוס סיסמה במערכת."
+        );
+    } catch (error) {
+        logger.error("Password reset request was saved, but administrator pushes could not be queued", {
+            requestId: requestRef.id,
+            error: String(error.message || error)
+        });
+    }
+
+    return { requestId: requestRef.id };
+});
+
+exports.notifyAdminsOfCancellationRequest = onCall(async request => {
+    const phone = getVerifiedAccountPhone(request);
+    if (!phone) {
+        throw new HttpsError("unauthenticated", "יש להתחבר ולאמת את מספר הטלפון.");
+    }
+    const requestId = request.data?.requestId;
+    if (typeof requestId !== "string" || !requestId) {
+        throw new HttpsError("invalid-argument", "מזהה בקשת הביטול אינו תקין.");
+    }
+
+    const cancellationRef = db.collection("cancellation_requests").doc(requestId);
+    const cancellationSnapshot = await cancellationRef.get();
+    if (!cancellationSnapshot.exists ||
+        normalizePhone(cancellationSnapshot.data().musicianPhone) !== phone ||
+        cancellationSnapshot.data().status !== "pending") {
+        throw new HttpsError("permission-denied", "לא ניתן לשלוח התראה עבור בקשה זו.");
+    }
+
+    const eventDate = String(cancellationSnapshot.data().eventDate || "");
+    const branchName = String(cancellationSnapshot.data().branchName || "סניף");
+    const musicianName = String(cancellationSnapshot.data().musicianName || "איש צוות");
+    const adminPhones = await getAdministratorPhones();
+    const queued = await enqueuePushNotifications(
+        adminPhones,
+        "🚨 בקשת ביטול חדשה",
+        `${musicianName} ביקש/ה ביטול הופעה בסניף ${branchName} בתאריך ${eventDate}.`
+    );
+    return { queued };
+});
+
+exports.sendBroadcastPush = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לשלוח הודעה.");
+    }
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.admin !== true &&
+        request.auth.token.superOwner !== true) {
+        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
+    }
+
+    const message = request.data?.message;
+    if (typeof message !== "string" || !message.trim() || message.length > 1000) {
+        throw new HttpsError("invalid-argument", "תוכן ההודעה אינו תקין.");
+    }
+    const tokensSnapshot = await db.collection("push_tokens").get();
+    const tokens = [...new Set(tokensSnapshot.docs
+        .map(tokenSnapshot => tokenSnapshot.data().token)
+        .filter(token => typeof token === "string" && token))];
+    for (let offset = 0; offset < tokens.length; offset += 400) {
+        const batch = db.batch();
+        tokens.slice(offset, offset + 400).forEach(token => {
+            batch.set(db.collection("pending_pushes").doc(), {
+                token,
+                title: "📢 הודעה חדשה לכל הצוות",
+                body: message.trim(),
+                tabTarget: "notifs",
+                createdAt: FieldValue.serverTimestamp()
+            });
+        });
+        await batch.commit();
+    }
+    return { queued: tokens.length };
+});
+
+exports.resetApplicationData = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לאפס את המערכת.");
+    }
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.superOwner !== true) {
+        throw new HttpsError("permission-denied", "איפוס המערכת זמין לבעל המערכת בלבד.");
+    }
+    if (request.data?.confirmation !== "מאפס") {
+        throw new HttpsError("failed-precondition", "אישור איפוס המערכת אינו תקין.");
+    }
+
+    const deletedCounts = {};
+    for (const collectionName of [
+        "events",
+        "musicians",
+        "branches",
+        "cancellation_requests",
+        "unavailabilities"
+    ]) {
+        let deletedCount = 0;
+        while (true) {
+            const snapshot = await db.collection(collectionName).limit(400).get();
+            if (snapshot.empty) break;
+            const batch = db.batch();
+            snapshot.docs.forEach(document => batch.delete(document.ref));
+            await batch.commit();
+            deletedCount += snapshot.size;
+        }
+        deletedCounts[collectionName] = deletedCount;
+    }
+    return { deletedCounts };
 });
 
 function isStaffAssignedToEvent(event, musician) {
@@ -360,7 +601,7 @@ exports.approveCancellationRequest = onCall(async request => {
     }
 
     const requestRef = db.collection("cancellation_requests").doc(requestId);
-    return db.runTransaction(async transaction => {
+    const approvedRequest = await db.runTransaction(async transaction => {
         const requestSnapshot = await transaction.get(requestRef);
         if (!requestSnapshot.exists || requestSnapshot.data().status !== "pending") {
             throw new HttpsError("failed-precondition", "הבקשה כבר טופלה או שאינה זמינה.");
@@ -465,6 +706,100 @@ exports.approveCancellationRequest = onCall(async request => {
             replacementPhone: replacement.phone
         };
     });
+
+    return approvedRequest;
+});
+
+exports.notifyStaffOfCancellationResolution = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לשלוח התראה.");
+    }
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.admin !== true &&
+        request.auth.token.superOwner !== true) {
+        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
+    }
+
+    const requestId = request.data?.requestId;
+    if (typeof requestId !== "string" || !requestId) {
+        throw new HttpsError("invalid-argument", "מזהה בקשת הביטול אינו תקין.");
+    }
+    const cancellationSnapshot = await db.collection("cancellation_requests").doc(requestId).get();
+    if (!cancellationSnapshot.exists ||
+        !["approved", "rejected"].includes(cancellationSnapshot.data().status)) {
+        throw new HttpsError("failed-precondition", "בקשת הביטול עדיין לא הוכרעה.");
+    }
+
+    const cancellation = cancellationSnapshot.data();
+    const isApproved = cancellation.status === "approved";
+    const title = isApproved ? "✅ בקשת הביטול אושרה" : "❌ בקשת הביטול נדחתה";
+    const body = isApproved
+        ? `בקשתך אושרה. ${cancellation.replacementName || "איש צוות אחר"} יחליף אותך בהופעה.`
+        : `בקשתך לביטול הופעה בסניף ${cancellation.branchName || "ההופעה"} נדחתה.`;
+    let notificationQueued = false;
+    try {
+        notificationQueued = (await enqueuePushNotifications(
+            [cancellation.musicianPhone],
+            title,
+            body
+        )) > 0;
+    } catch (error) {
+        logger.error("Cancellation was resolved, but the staff push could not be queued", {
+            requestId,
+            error: String(error.message || error)
+        });
+    }
+    return { notificationQueued };
+});
+
+exports.rejectCancellationRequest = onCall(async request => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "יש להתחבר כדי לדחות בקשת ביטול.");
+    }
+    const callerEmail = String(request.auth.token.email || "").toLowerCase();
+    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
+    if (!isSuperOwner && request.auth.token.admin !== true && request.auth.token.superOwner !== true) {
+        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
+    }
+
+    const { requestId } = request.data || {};
+    if (typeof requestId !== "string" || !requestId) {
+        throw new HttpsError("invalid-argument", "מזהה בקשת הביטול אינו תקין.");
+    }
+    const requestRef = db.collection("cancellation_requests").doc(requestId);
+    const rejectedRequest = await db.runTransaction(async transaction => {
+        const requestSnapshot = await transaction.get(requestRef);
+        if (!requestSnapshot.exists || requestSnapshot.data().status !== "pending") {
+            throw new HttpsError("failed-precondition", "הבקשה כבר טופלה או שאינה זמינה.");
+        }
+        const cancellation = requestSnapshot.data();
+        transaction.update(requestRef, {
+            status: "rejected",
+            resolvedAt: FieldValue.serverTimestamp(),
+            resolvedByUid: request.auth.uid
+        });
+        return {
+            musicianPhone: cancellation.musicianPhone,
+            branchName: cancellation.branchName || "ההופעה"
+        };
+    });
+
+    let notificationQueued = true;
+    try {
+        notificationQueued = (await enqueuePushNotifications(
+            [rejectedRequest.musicianPhone],
+            "❌ בקשת הביטול נדחתה",
+            `בקשתך לביטול הופעה בסניף ${rejectedRequest.branchName} נדחתה.`
+        )) > 0;
+    } catch (error) {
+        notificationQueued = false;
+        logger.error("Cancellation was rejected, but the staff push could not be queued", {
+            requestId,
+            error: String(error.message || error)
+        });
+    }
+    return { notificationQueued };
 });
 
 exports.updateStaffProfile = onCall(async request => {

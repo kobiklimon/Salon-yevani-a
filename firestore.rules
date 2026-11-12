@@ -1,0 +1,215 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profileExists() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function phoneVerified() {
+      return profileExists() &&
+        request.auth.token.get('phoneVerified', false) == true &&
+        request.auth.token.get('verifiedPhone', '') == profile().get('phone', '') &&
+        profile().get('phoneVerified', false) == true;
+    }
+
+    function systemAdmin() {
+      return signedIn() &&
+        (request.auth.token.get('admin', false) == true ||
+          request.auth.token.get('superOwner', false) == true ||
+          request.auth.token.get('email', '') == 'user_0547771121@salonyevani.local');
+    }
+
+    function owner() {
+      return signedIn() &&
+        (request.auth.token.get('superOwner', false) == true ||
+          request.auth.token.get('email', '') == 'user_0547771121@salonyevani.local');
+    }
+
+    function staffId() {
+      return profile().get('musicianId', '');
+    }
+
+    function validStaffId() {
+      return phoneVerified() &&
+        staffId() != '' &&
+        exists(/databases/$(database)/documents/musicians/$(staffId())) &&
+        get(/databases/$(database)/documents/musicians/$(staffId()))
+          .data.get('phone', '') == profile().get('phone', '');
+    }
+
+    function staffLabel() {
+      let musician = get(
+        /databases/$(database)/documents/musicians/$(staffId())
+      ).data;
+      return musician.get('name', '') + ' (' + musician.get('role', '') + ')';
+    }
+
+    function managesBranch(branchId) {
+      let branchPath = /databases/$(database)/documents/branches/$(branchId);
+      let branch = get(
+        branchPath
+      ).data;
+      return phoneVerified() && exists(branchPath) &&
+        ((validStaffId() && branch.get('managerId', '') == staffId()) ||
+          branch.get('managerPhone', '') == profile().get('phone', ''));
+    }
+
+    function managesCurrentBranch() {
+      return phoneVerified() &&
+        ((validStaffId() && resource.data.get('managerId', '') == staffId()) ||
+          resource.data.get('managerPhone', '') == profile().get('phone', ''));
+    }
+
+    function assignedToEventData(eventData) {
+      return validStaffId() &&
+        (eventData.get('assignedStaffIds', []).hasAny([staffId()]) ||
+          (exists(/databases/$(database)/documents/musicians/$(staffId())) &&
+            eventData.get('assignedStaff', []).hasAny([staffLabel()])));
+    }
+
+    function assignedToEvent() {
+      return assignedToEventData(resource.data);
+    }
+
+    function ownsPhone(phone) {
+      return phoneVerified() && phone == profile().get('phone', '');
+    }
+
+    function validCancellationRequest(requestData) {
+      let eventPath = /databases/$(database)/documents/events/$(requestData.get('eventId', ''));
+      let eventData = get(eventPath).data;
+      return phoneVerified() &&
+        requestData.get('musicianPhone', '') == profile().get('phone', '') &&
+        requestData.get('status', '') == 'pending' &&
+        requestData.get('eventId', '') is string &&
+        exists(eventPath) &&
+        eventData.get('date', '') == requestData.get('eventDate', '') &&
+        eventData.get('branchId', '') == requestData.get('branchId', '') &&
+        assignedToEventData(eventData);
+    }
+
+    match /users/{userId} {
+      allow get: if phoneVerified() &&
+        (request.auth.uid == userId || systemAdmin());
+      allow list: if phoneVerified() && systemAdmin();
+      allow update: if phoneVerified() &&
+        request.auth.uid == userId &&
+        resource.data.get('mustChangePassword', false) == true &&
+        request.resource.data.get('mustChangePassword', true) == false &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['mustChangePassword', 'tempPassword']);
+      allow create, delete: if false;
+    }
+
+    match /musicians/{musicianId} {
+      allow get: if phoneVerified() &&
+        (systemAdmin() ||
+          (profile().get('musicianId', '') == musicianId) ||
+          (resource.data.get('phone', '') == profile().get('phone', '')));
+      allow list: if phoneVerified() &&
+        (systemAdmin() ||
+          resource.data.get('phone', '') == profile().get('phone', ''));
+      allow create, update, delete: if false;
+    }
+
+    match /branches/{branchId} {
+      allow get, list: if phoneVerified() &&
+        (systemAdmin() || managesCurrentBranch());
+      allow create, update, delete: if phoneVerified() && systemAdmin();
+    }
+
+    match /events/{eventId} {
+      allow get, list: if phoneVerified() &&
+        (systemAdmin() ||
+          managesBranch(resource.data.get('branchId', '')) ||
+          assignedToEvent());
+      allow create, update, delete: if phoneVerified() && systemAdmin();
+    }
+
+    match /unavailabilities/{unavailabilityId} {
+      allow get, list: if phoneVerified() &&
+        (systemAdmin() || ownsPhone(resource.data.get('phone', '')));
+      allow create: if phoneVerified() &&
+        request.resource.data.get('phone', '') == profile().get('phone', '') &&
+        validStaffId() &&
+        get(/databases/$(database)/documents/musicians/$(staffId()))
+          .data.get('role', '') != 'מנהל סניף' &&
+        request.resource.data.keys().hasOnly(['phone', 'name', 'date', 'createdAt']);
+      allow update: if false;
+      allow delete: if phoneVerified() &&
+        (systemAdmin() || ownsPhone(resource.data.get('phone', '')));
+    }
+
+    match /cancellation_requests/{requestId} {
+      allow get, list: if phoneVerified() &&
+        (systemAdmin() || ownsPhone(resource.data.get('musicianPhone', '')));
+      allow create: if validCancellationRequest(request.resource.data) &&
+        request.resource.data.keys().hasOnly([
+          'eventId', 'eventDate', 'eventTime', 'branchId', 'branchName',
+          'musicianName', 'musicianPhone', 'status', 'createdAt'
+        ]);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /password_reset_requests/{requestId} {
+      allow get, list: if phoneVerified() && systemAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /audit_logs/{logId} {
+      allow get, list: if phoneVerified() &&
+        (systemAdmin() || ownsPhone(resource.data.get('userPhone', '')));
+      allow create: if phoneVerified() &&
+        request.resource.data.get('userPhone', '') == profile().get('phone', '') &&
+        request.resource.data.keys().hasOnly([
+          'timestamp', 'dateStr', 'userPhone', 'userName',
+          'actionType', 'category', 'details'
+        ]);
+      allow update, delete: if phoneVerified() && owner();
+    }
+
+    match /push_tokens/{userId} {
+      allow get: if phoneVerified() &&
+        (request.auth.uid == userId || systemAdmin());
+      allow list: if phoneVerified() && systemAdmin();
+      allow create, update: if phoneVerified() &&
+        request.auth.uid == userId &&
+        request.resource.data.get('userPhone', '') == profile().get('phone', '') &&
+        request.resource.data.get('token', '') is string &&
+        request.resource.data.keys().hasOnly([
+          'token', 'userPhone', 'userName', 'updatedAt'
+        ]);
+      allow delete: if phoneVerified() &&
+        (request.auth.uid == userId || systemAdmin());
+    }
+
+    match /pending_pushes/{pushId} {
+      allow read, write: if false;
+    }
+
+    match /broadcasts/{broadcastId} {
+      allow read: if phoneVerified();
+      allow write: if phoneVerified() && systemAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if phoneVerified();
+      allow write: if phoneVerified() && owner();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

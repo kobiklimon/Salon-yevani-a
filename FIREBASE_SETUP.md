@@ -42,4 +42,20 @@ The site must be served over HTTPS (or localhost during development), and `sw.js
 
 ## Firestore rules
 
-This project did not include its existing Firestore rules. The function uses Admin SDK credentials, but the client still writes `push_tokens` and `pending_pushes` directly. Before deploying to production, verify that the deployed Firestore rules restrict those writes to trusted users; do not replace the project's existing rules with an unreviewed rules file.
+`firestore.rules` is a restrictive ruleset attached to `firebase.json`. Its emulator test suite passed locally for unauthenticated clients, staff, branch managers, system admins, and the owner. Run `npm run test:rules` to repeat these tests; the command uses the demo project ID `demo-salon-yevani-rules` and does not connect to the live Firebase project. The emulator is configured on port `8080`.
+
+The browser may save its own push token, but password-reset requests, push queue writes, cancellation approval/rejection, and full system reset now go through callable functions. The Admin SDK in those functions bypasses Firestore Rules; callable authorization is therefore enforced in the function code.
+
+Deploy in stages so the existing site is not locked out while it still uses the old direct Firestore writes:
+
+```sh
+npx --yes firebase-tools deploy --only functions --project salon-yevani-a
+```
+
+After the functions deploy successfully, publish the updated site code. Then deploy the rules:
+
+```sh
+npx --yes firebase-tools deploy --only firestore:rules --project salon-yevani-a
+```
+
+Do not publish `firestore.rules` from the Firebase Console before the updated site and functions are ready. Existing Firestore rules in the live project are not changed by editing this local file.
