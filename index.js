@@ -330,6 +330,7 @@ exports.verifyPhoneForAccount = onCall(async request => {
     }
 
     await profileRef.set({
+        phone,
         phoneVerified: true,
         ...(matchingMusicians.length ? { musicianId: matchingMusicians[0].id } : {})
     }, { merge: true });
