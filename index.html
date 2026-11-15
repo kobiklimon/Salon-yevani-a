@@ -1523,13 +1523,11 @@
                     if (legacyFakeEmail === fakeEmail) throw error;
                     await signInWithEmailAndPassword(auth, legacyFakeEmail, password);
                 }
-                
-                await loadMusiciansData();
-                const matchedMusician = allMusicians.find(m => cleanPhone(m.phone) === cleanedInputPhone);
-                const userDisplayName = matchedMusician ? matchedMusician.name : phone;
-
-                logAction("התחברות", "משתמש התחבר בהצלחה למערכת", "אבטחה והתחברות", cleanedInputPhone, userDisplayName);
             } catch (err) {
+                console.error("Could not sign in with phone credentials:", {
+                    code: err.code || "unknown",
+                    message: err.message || String(err)
+                });
                 logAction("כשל בהתחברות", `ניסיון התחברות שנכשל עבור טלפון: ${phone}`, "אבטחה והתחברות", cleanedInputPhone, phone);
                 alert("שגיאה בהתחברות: מספר טלפון או סיסמה שגויים."); 
             }

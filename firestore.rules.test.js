@@ -9,6 +9,7 @@ const {
 } = require("@firebase/rules-unit-testing");
 const {
     collection,
+    deleteDoc,
     doc,
     getDoc,
     getDocs,
@@ -218,7 +219,7 @@ test("branch managers are limited to their own branches and schedules", async ()
     }));
 });
 
-test("system admins have administrative reads but cannot write server-owned records", async () => {
+test("system admins can manage branches and events but cannot write server-owned records", async () => {
     const db = accountContext(fixture.admin, { admin: true });
 
     await assertSucceeds(getDocs(collection(db, "users")));
@@ -228,6 +229,17 @@ test("system admins have administrative reads but cannot write server-owned reco
         collection(db, "password_reset_requests"),
         where("status", "==", "pending")
     )));
+    await assertSucceeds(setDoc(doc(db, "branches", "admin-created"), {
+        name: "Admin Branch",
+        managerId: fixture.manager.musicianId,
+        managerName: "Maya",
+        managerPhone: fixture.manager.phone,
+        color: "#123456"
+    }));
+    await assertSucceeds(updateDoc(doc(db, "events", "event-staff"), {
+        time: "21:00"
+    }));
+    await assertSucceeds(deleteDoc(doc(db, "events", "event-other")));
     await assertFails(setDoc(doc(db, "musicians", "forged-staff"), {
         name: "Forged",
         phone: "0500000000"
@@ -237,6 +249,18 @@ test("system admins have administrative reads but cannot write server-owned reco
         status: "pending"
     }));
     await assertFails(setDoc(doc(db, "settings", "system_status"), { isLocked: true }));
+});
+
+test("non-admin staff cannot change branches or schedules", async () => {
+    const db = accountContext(fixture.staff);
+
+    await assertFails(setDoc(doc(db, "branches", "forged-branch"), {
+        name: "Forged Branch"
+    }));
+    await assertFails(updateDoc(doc(db, "events", "event-staff"), {
+        time: "21:00"
+    }));
+    await assertFails(deleteDoc(doc(db, "events", "event-staff")));
 });
 
 test("only the owner can change system settings", async () => {
