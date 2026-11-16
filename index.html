@@ -1158,45 +1158,6 @@
             }
         }
 
-        async function verifyPhoneForSignedInAccount(user) {
-            const userEmail = String(user.email || "").toLowerCase();
-            const emailMatch = userEmail.match(/^user_(\d{10,12})@salonyevani\.local$/);
-            const phone = emailMatch ? cleanPhone(emailMatch[1]) : "";
-            const normalizedPhone = normalizeIsraeliMobile(phone);
-            if (!normalizedPhone) {
-                alert("לא ניתן לאמת את מספר הטלפון של החשבון. יש לפנות לבעל המערכת.");
-                await signOut(auth);
-                return false;
-            }
-
-            let verifier;
-            try {
-                verifier = new RecaptchaVerifier(verificationAuth, "recaptcha-container", { size: "invisible" });
-                const confirmation = await signInWithPhoneNumber(verificationAuth, normalizedPhone, verifier);
-                const code = prompt("נשלח קוד SMS למספר הטלפון שלך. יש להזין אותו כדי לאמת את החשבון:");
-                if (!code || !code.trim()) {
-                    await signOut(auth);
-                    return false;
-                }
-
-                const credential = PhoneAuthProvider.credential(confirmation.verificationId, code.trim());
-                const verificationCredential = await signInWithCredential(verificationAuth, credential);
-                const phoneVerificationIdToken = await verificationCredential.user.getIdToken();
-                const verifyPhone = httpsCallable(functions, "verifyPhoneForAccount");
-                await verifyPhone({ phoneVerificationIdToken });
-                await user.getIdToken(true);
-                return true;
-            } catch (error) {
-                console.error("Could not verify the signed-in account phone:", error);
-                alert("לא ניתן לאמת את מספר הטלפון. יש לבדוק את הקוד והחיבור ולנסות שוב.");
-                await signOut(auth);
-                return false;
-            } finally {
-                if (verifier) verifier.clear();
-                if (verificationAuth.currentUser) await signOut(verificationAuth);
-            }
-        }
-
         onAuthStateChanged(auth, async (user) => {
             stopRealtimeListeners();
             if (user) {
@@ -1210,15 +1171,9 @@
                 activeAuthUid = user.uid;
 
                 try {
-                    let tokenResult = await getIdTokenResult(user, true);
-                    if (tokenResult.claims.phoneVerified !== true &&
-                        !await verifyPhoneForSignedInAccount(user)) {
-                        activeAuthUid = null;
-                        return;
-                    }
-                    tokenResult = await getIdTokenResult(user, true);
+                    const tokenResult = await getIdTokenResult(user, true);
                     if (tokenResult.claims.phoneVerified !== true) {
-                        throw new Error("מספר הטלפון של החשבון לא אומת בשרת.");
+                        throw new Error("מספר הטלפון של החשבון לא אומת בהרשמה.");
                     }
                 } catch (error) {
                     console.error("Could not validate verified-phone claim:", error);
