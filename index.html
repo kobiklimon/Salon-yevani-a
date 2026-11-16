@@ -101,51 +101,8 @@
         .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
         .report-table th, .report-table td { border: 1px solid #444; padding: 8px; text-align: right; }
         .report-table th { background-color: #2a2a2a; color: var(--accent-gold); }
-        .report-month-picker { position: relative; display: block; width: 100%; min-width: 0; margin: 6px 0 12px; }
-        .report-filter-control { display: block; width: 100%; max-width: 100%; min-width: 0; margin: 6px 0 12px; padding: 10px; box-sizing: border-box; }
-        .report-month-display {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            height: 41.5px;
-            padding: 10px;
-            border: 1px solid #444;
-            border-radius: 8px;
-            background-color: #2a2a2a;
-            color: #fff;
-            font-size: 0.95rem;
-            box-sizing: border-box;
-        }
-        body.light-mode .report-month-display {
-            background-color: #f9f9f9;
-            color: #222;
-            border-color: #ccc;
-        }
-        .report-month-chevron {
-            width: 8px;
-            height: 8px;
-            margin: 0 3px 4px;
-            border-right: 2px solid currentColor;
-            border-bottom: 2px solid currentColor;
-            transform: rotate(45deg);
-            flex: 0 0 8px;
-        }
-        .report-month-picker:focus-within .report-month-display {
-            outline: 2px solid var(--accent-gold);
-            outline-offset: 2px;
-        }
-        .report-month-native {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            border: 0;
-            opacity: 0;
-            cursor: pointer;
-        }
+        .report-month-field { display: block; width: 100%; min-width: 0; overflow: hidden; }
+        #report-month-select { display: block; width: 100%; max-width: 100%; min-width: 0; margin: 6px 0 12px; padding: 10px; box-sizing: border-box; }
         
         .log-item { background: #252525; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-right: 3px solid var(--accent-gold); font-size: 0.85rem; }
         
@@ -761,7 +718,6 @@
             });
 
             applyTranslations();
-            updateReportMonthDisplay();
             configureBranchManagerProfile();
             if (document.getElementById('edit-branch-id').value) {
                 document.getElementById('branch-submit-btn').textContent = i18n[currentLang].updateBranchBtn;
@@ -3107,21 +3063,6 @@
             }
         }
 
-        function updateReportMonthDisplay() {
-            const monthSelect = document.getElementById('report-month-select');
-            const monthDisplay = document.getElementById('report-month-display');
-            if (!monthSelect || !monthDisplay) return;
-            if (!monthSelect.value) {
-                monthDisplay.textContent = '';
-                return;
-            }
-
-            const [year, month] = monthSelect.value.split('-');
-            monthDisplay.textContent = `${i18n[currentLang].months[Number(month) - 1]} ${year}`;
-        }
-
-        document.getElementById('report-month-select').addEventListener('change', updateReportMonthDisplay);
-
         async function loadReportsView() {
             const resultsDiv = document.getElementById('report-results');
             if (resultsDiv) resultsDiv.innerHTML = '';
@@ -3134,8 +3075,7 @@
                 const now = new Date();
                 reportMonthSelect.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             }
-            updateReportMonthDisplay();
-            
+
             if (isAdmin) {
                 musicianContainer.classList.remove('hidden');
                 musicianSelect.innerHTML = `<option value="">${t.allMusicians}</option>`;
@@ -3929,19 +3869,15 @@
                 <div class="card">
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="reportsTitle">📊 הפקת דוחות להנהלת חשבונות</h3>
                     <label style="font-size:0.85rem;" for="report-month-select" data-i18n="reportMonthLabel">חודש לדוח:</label>
-                    <div class="report-month-picker">
-                        <div class="report-month-display" aria-hidden="true">
-                            <span id="report-month-display"></span>
-                            <span class="report-month-chevron"></span>
-                        </div>
-                        <input type="month" id="report-month-select" class="report-month-native" required>
+                    <div class="report-month-field">
+                        <input type="month" id="report-month-select" required>
                     </div>
                     <div id="report-musician-container" class="hidden">
                         <label style="font-size:0.85rem;" data-i18n="filterMusicianLabel">סינון לפי איש צוות / נגן:</label>
                         <select id="report-musician-select"></select>
                     </div>
                     <label style="font-size:0.85rem;" data-i18n="filterBranchReportLabel">סינון לפי סניף:</label>
-                    <select id="report-branch-select" class="report-filter-control"></select>
+                    <select id="report-branch-select"></select>
                     <button type="button" onclick="generateAccountingReport()" data-i18n="generateReportBtn">הפק דוח</button>
                     <div id="report-results"></div>
                 </div>
