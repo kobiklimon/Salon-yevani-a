@@ -101,8 +101,8 @@
         .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
         .report-table th, .report-table td { border: 1px solid #444; padding: 8px; text-align: right; }
         .report-table th { background-color: #2a2a2a; color: var(--accent-gold); }
-        .report-month-field { display: block; width: 100%; min-width: 0; overflow: hidden; }
-        #report-month-select { display: block; width: 100%; max-width: 100%; min-width: 0; margin: 6px 0 12px; padding: 10px; box-sizing: border-box; }
+        .report-month-field { display: block; width: 100%; min-width: 0; }
+        .report-filter-control { display: block; width: 100%; max-width: 100%; min-width: 0; margin: 6px 0 12px; padding: 10px; box-sizing: border-box; }
         
         .log-item { background: #252525; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-right: 3px solid var(--accent-gold); font-size: 0.85rem; }
         
@@ -3870,14 +3870,14 @@
                     <h3 style="color:var(--accent-gold); margin-bottom:10px;" data-i18n="reportsTitle">📊 הפקת דוחות להנהלת חשבונות</h3>
                     <label style="font-size:0.85rem;" for="report-month-select" data-i18n="reportMonthLabel">חודש לדוח:</label>
                     <div class="report-month-field">
-                        <input type="month" id="report-month-select" required>
+                        <input type="month" id="report-month-select" class="report-filter-control" required>
                     </div>
                     <div id="report-musician-container" class="hidden">
                         <label style="font-size:0.85rem;" data-i18n="filterMusicianLabel">סינון לפי איש צוות / נגן:</label>
                         <select id="report-musician-select"></select>
                     </div>
                     <label style="font-size:0.85rem;" data-i18n="filterBranchReportLabel">סינון לפי סניף:</label>
-                    <select id="report-branch-select"></select>
+                    <select id="report-branch-select" class="report-filter-control"></select>
                     <button type="button" onclick="generateAccountingReport()" data-i18n="generateReportBtn">הפק דוח</button>
                     <div id="report-results"></div>
                 </div>
