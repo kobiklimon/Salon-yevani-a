@@ -34,6 +34,10 @@ When an administrator approves a password reset, the server changes the Firebase
 
 New registrations verify ownership of an Israeli mobile number by SMS before creating the app account. In Firebase Console, enable **Authentication > Sign-in method > Phone**, allow SMS for Israel in the SMS region policy, and add the deployed site domain under **Authentication > Settings > Authorized domains**. Firebase's reCAPTCHA check is used when sending the code. Registration cannot complete until the code is confirmed. SMS delivery is subject to Firebase quotas and may incur billing.
 
+Registration includes the **branch manager** role. System administrators still control which branch each manager is assigned to. When a branch's singer assignment changes, the assigned manager receives a browser push notification; a pending replacement request alone does not change the event or notify the manager. This uses Firebase Cloud Messaging, not SMS. Firebase Authentication SMS is only used to verify phone numbers during registration.
+
+When an administrator approves a cancellation with a replacement, the requesting musician and the replacement musician receive push notifications. The branch manager is notified by the event singer-assignment change trigger. Each recipient must have push notifications enabled on their device.
+
 ## Configure browser push tokens
 
 In Firebase Console, open **Project settings > Cloud Messaging > Web configuration** and create or copy the Web Push certificate key pair. The app's `vapidKey` in `index.html` must match the public key shown there. The public VAPID key belongs in the client; never put a private key or service-account key in the HTML file.

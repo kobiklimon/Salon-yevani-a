@@ -238,8 +238,8 @@ exports.completeStaffRegistration = onCall(async request => {
     }
     const { name, role, phoneVerificationIdToken } = request.data || {};
     if (typeof name !== "string" || !name.trim() ||
-        !["זמר/ת", "קלידים", "בוזוקי"].includes(role)) {
-        throw new HttpsError("invalid-argument", "פרטי ההרשמה אינם תקינים. תפקיד מנהל סניף מוקצה על ידי בעל המערכת.");
+        !["זמר/ת", "קלידים", "בוזוקי", "מנהל סניף"].includes(role)) {
+        throw new HttpsError("invalid-argument", "פרטי ההרשמה או התפקיד אינם תקינים.");
     }
 
     const phone = await verifyPhoneProof(request, phoneVerificationIdToken);
@@ -702,57 +702,51 @@ exports.approveCancellationRequest = onCall(async request => {
             musicianPhone: cancellation.musicianPhone,
             musicianName: cancellation.musicianName,
             eventDate: cancellation.eventDate,
+            eventTime: cancellation.eventTime,
+            branchName: cancellation.branchName || "ההופעה",
             replacementName: replacement.name,
             replacementRole: replacement.role,
             replacementPhone: replacement.phone
         };
     });
 
-    return approvedRequest;
+    const requestorPhone = normalizePhone(approvedRequest.musicianPhone);
+    const replacementPhone = normalizePhone(approvedRequest.replacementPhone);
+    const requestorQueued = await enqueueResolutionPush(
+        requestId,
+        "requesting musician",
+        requestorPhone,
+        "✅ בקשת הביטול אושרה",
+        `בקשתך אושרה. ${approvedRequest.replacementName} יחליף אותך בהופעה בסניף ${approvedRequest.branchName} בתאריך ${approvedRequest.eventDate}${approvedRequest.eventTime ? ` בשעה ${approvedRequest.eventTime}` : ""}.`
+    );
+    const replacementQueued = replacementPhone && replacementPhone !== requestorPhone
+        ? await enqueueResolutionPush(
+            requestId,
+            "replacement musician",
+            replacementPhone,
+            "🔄 שובצת כמחליף/ה",
+            `שובצת להופעה בסניף ${approvedRequest.branchName} בתאריך ${approvedRequest.eventDate}${approvedRequest.eventTime ? ` בשעה ${approvedRequest.eventTime}` : ""}, במקום ${approvedRequest.musicianName}.`
+        )
+        : false;
+    return {
+        ...approvedRequest,
+        requestorQueued,
+        replacementQueued
+    };
 });
 
-exports.notifyStaffOfCancellationResolution = onCall(async request => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "יש להתחבר כדי לשלוח התראה.");
-    }
-    const callerEmail = String(request.auth.token.email || "").toLowerCase();
-    const isSuperOwner = callerEmail === `user_${SUPER_OWNER_PHONE}@salonyevani.local`;
-    if (!isSuperOwner && request.auth.token.admin !== true &&
-        request.auth.token.superOwner !== true) {
-        throw new HttpsError("permission-denied", "פעולה זו זמינה למנהלי מערכת בלבד.");
-    }
-
-    const requestId = request.data?.requestId;
-    if (typeof requestId !== "string" || !requestId) {
-        throw new HttpsError("invalid-argument", "מזהה בקשת הביטול אינו תקין.");
-    }
-    const cancellationSnapshot = await db.collection("cancellation_requests").doc(requestId).get();
-    if (!cancellationSnapshot.exists ||
-        !["approved", "rejected"].includes(cancellationSnapshot.data().status)) {
-        throw new HttpsError("failed-precondition", "בקשת הביטול עדיין לא הוכרעה.");
-    }
-
-    const cancellation = cancellationSnapshot.data();
-    const isApproved = cancellation.status === "approved";
-    const title = isApproved ? "✅ בקשת הביטול אושרה" : "❌ בקשת הביטול נדחתה";
-    const body = isApproved
-        ? `בקשתך אושרה. ${cancellation.replacementName || "איש צוות אחר"} יחליף אותך בהופעה.`
-        : `בקשתך לביטול הופעה בסניף ${cancellation.branchName || "ההופעה"} נדחתה.`;
-    let notificationQueued = false;
+async function enqueueResolutionPush(requestId, recipient, phone, title, body) {
     try {
-        notificationQueued = (await enqueuePushNotifications(
-            [cancellation.musicianPhone],
-            title,
-            body
-        )) > 0;
+        return (await enqueuePushNotifications([phone], title, body)) > 0;
     } catch (error) {
-        logger.error("Cancellation was resolved, but the staff push could not be queued", {
+        logger.error("Cancellation was resolved, but a staff push could not be queued", {
             requestId,
+            recipient,
             error: String(error.message || error)
         });
+        return false;
     }
-    return { notificationQueued };
-});
+}
 
 exports.rejectCancellationRequest = onCall(async request => {
     if (!request.auth) {
@@ -1405,16 +1399,19 @@ exports.notifyBranchManagerOfSingerChange = onDocumentWritten(
         );
         if (!managerTokens.length) return;
 
-        const previousNames = [...beforeSingers.values()];
-        const currentNames = [...afterSingers.values()];
+        const removedNames = [...beforeSingers.entries()]
+            .filter(([musicianId]) => !afterSingers.has(musicianId))
+            .map(([, name]) => name);
+        const addedNames = [...afterSingers.entries()]
+            .filter(([musicianId]) => !beforeSingers.has(musicianId))
+            .map(([, name]) => name);
         const eventTime = String(event.time || "לא צוינה");
-        const description = `השתנה שיבוץ הזמר להופעה בסניף ${String(branch.name || "שלך")} בתאריך ${String(after.date || "לא צוין")} בשעה ${eventTime}.`;
-        const singerLine = currentNames.length
-            ? `הזמר/ת כעת: ${currentNames.join(", ")}.`
-            : "כרגע לא משובץ/ת זמר/ת.";
-        const changeLine = previousNames.length
-            ? `לפני השינוי: ${previousNames.join(", ")}. `
-            : "";
+        const description = `עדכון שיבוץ בסניף ${String(branch.name || "שלך")} בתאריך ${String(after.date || "לא צוין")} בשעה ${eventTime}.`;
+        const changeLine = removedNames.length && addedNames.length
+            ? `לא יופיעו: ${removedNames.join(", ")}. במקומם יופיעו: ${addedNames.join(", ")}.`
+            : removedNames.length
+                ? `בוטל השיבוץ של: ${removedNames.join(", ")}.`
+                : `נוסף שיבוץ של: ${addedNames.join(", ")}.`;
         const notificationId = `${event.params.eventId}_${event.time.replace(/[^0-9A-Za-z_-]/g, "_")}`;
         const batch = db.batch();
         managerTokens.forEach(pushSnapshot => {
@@ -1423,7 +1420,7 @@ exports.notifyBranchManagerOfSingerChange = onDocumentWritten(
             ), {
                 token: pushSnapshot.data().token,
                 title: "עדכון שיבוץ זמר",
-                body: `${description} ${changeLine}${singerLine}`,
+                body: `${description} ${changeLine}`,
                 tabTarget: "calendar",
                 createdAt: FieldValue.serverTimestamp()
             });

@@ -1560,8 +1560,8 @@
                     alert(t.invalidIsraeliMobile);
                     return;
                 }
-                if (!["זמר/ת", "קלידים", "בוזוקי"].includes(role)) {
-                    alert("תפקיד מנהל סניף מוקצה על ידי בעל המערכת בלבד.");
+                if (!["זמר/ת", "קלידים", "בוזוקי", "מנהל סניף"].includes(role)) {
+                    alert("יש לבחור תפקיד תקין.");
                     return;
                 }
                 if (!password || !name) {
@@ -3635,16 +3635,16 @@
                 const approveCancellation = httpsCallable(functions, "approveCancellationRequest");
                 const result = await approveCancellation({ requestId, replacementMusicianId });
                 const approvedRequest = result.data;
-                const notifyStaff = httpsCallable(functions, "notifyStaffOfCancellationResolution");
-                const notification = await notifyStaff({ requestId });
+                const bothSingersNotified = approvedRequest.requestorQueued &&
+                    approvedRequest.replacementQueued;
                 logAction(
                     "אישור בקשת ביטול עם מחליף",
                     `${approvedRequest.replacementName} שובץ/ה במקום ${approvedRequest.musicianName} בתאריך ${approvedRequest.eventDate}`,
                     "בקשות ביטול והחלפות"
                 );
-                alert(notification.data.notificationQueued
-                    ? "הבקשה אושרה בהצלחה!"
-                    : "הבקשה אושרה, אך לא ניתן היה לשלוח את ההתראה.");
+                alert(bothSingersNotified
+                    ? "הבקשה אושרה ונשלחו פושים לשני הזמרים."
+                    : "הבקשה אושרה, אך לא לשני הזמרים יש פוש פעיל. יש לוודא ששניהם הפעילו התראות במכשיר.");
                 loadNotificationsView();
             } catch (error) {
                 console.error("Could not approve cancellation request:", error);
@@ -3798,6 +3798,7 @@
                         <option value="זמר/ת" data-i18n="singer">זמר/ת</option>
                         <option value="קלידים" data-i18n="keys">קלידים</option>
                         <option value="בוזוקי" data-i18n="bouzouki">בוזוקי</option>
+                        <option value="מנהל סניף" data-i18n="branchManager">מנהל סניף</option>
                     </select>
                 </div>
 
