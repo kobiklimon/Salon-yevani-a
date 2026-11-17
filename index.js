@@ -242,72 +242,92 @@ exports.completeStaffRegistration = onCall(async request => {
         throw new HttpsError("invalid-argument", "פרטי ההרשמה או התפקיד אינם תקינים.");
     }
 
-    const phone = await verifyPhoneProof(request, phoneVerificationIdToken);
-    const userRef = db.collection("users").doc(request.auth.uid);
-    const existingUsers = await db.collection("users").where("phone", "==", phone).get();
-    const existingUserForPhone = existingUsers.docs.find(profile => profile.id !== request.auth.uid);
-    if (existingUserForPhone) {
-        throw new HttpsError("already-exists", "מספר הטלפון כבר משויך לחשבון אחר.");
-    }
-
-    const musiciansSnapshot = await db.collection("musicians").get();
-    const existingMusicians = musiciansSnapshot.docs.filter(musician =>
-        normalizePhone(musician.data().phone) === phone
-    );
-    if (existingMusicians.length > 1) {
-        throw new HttpsError("failed-precondition", "נמצאו כמה אנשי צוות למספר הטלפון. יש לפנות לבעל המערכת.");
-    }
-
-    const musicianRef = existingMusicians[0]?.ref || db.collection("musicians").doc();
-    const musicianData = existingMusicians[0]?.data();
-    if (musicianData && musicianData.role !== role) {
-        throw new HttpsError("failed-precondition", "מספר הטלפון כבר רשום בתפקיד אחר. יש לפנות לבעל המערכת לעדכון.");
-    }
-
-    const auth = getAuth();
-    const userRecord = await auth.getUser(request.auth.uid);
-    await auth.setCustomUserClaims(request.auth.uid, {
-        ...(userRecord.customClaims || {}),
-        phoneVerified: true,
-        verifiedPhone: phone
-    });
-
-    await db.runTransaction(async transaction => {
-        const [userSnapshot, musicianSnapshot] = await Promise.all([
-            transaction.get(userRef),
-            transaction.get(musicianRef)
-        ]);
-        if (userSnapshot.exists &&
-            (normalizePhone(userSnapshot.data().phone) !== phone ||
-                userSnapshot.data().phoneVerified !== true)) {
-            throw new HttpsError("already-exists", "לחשבון כבר קיים פרופיל שאינו תואם להרשמה.");
+    let operation = "אימות מספר הטלפון";
+    try {
+        const phone = await verifyPhoneProof(request, phoneVerificationIdToken);
+        const userRef = db.collection("users").doc(request.auth.uid);
+        operation = "בדיקת חשבון קיים";
+        const existingUsers = await db.collection("users").where("phone", "==", phone).get();
+        const existingUserForPhone = existingUsers.docs.find(profile => profile.id !== request.auth.uid);
+        if (existingUserForPhone) {
+            throw new HttpsError("already-exists", "מספר הטלפון כבר משויך לחשבון אחר.");
         }
 
-        transaction.set(userRef, {
-            phone,
+        operation = "בדיקת רשומת איש צוות";
+        const musiciansSnapshot = await db.collection("musicians").get();
+        const existingMusicians = musiciansSnapshot.docs.filter(musician =>
+            normalizePhone(musician.data().phone) === phone
+        );
+        if (existingMusicians.length > 1) {
+            throw new HttpsError("failed-precondition", "נמצאו כמה אנשי צוות למספר הטלפון. יש לפנות לבעל המערכת.");
+        }
+
+        const musicianRef = existingMusicians[0]?.ref || db.collection("musicians").doc();
+        const musicianData = existingMusicians[0]?.data();
+        if (musicianData && musicianData.role !== role) {
+            throw new HttpsError("failed-precondition", "מספר הטלפון כבר רשום בתפקיד אחר. יש לפנות לבעל המערכת לעדכון.");
+        }
+
+        operation = "הגדרת אימות החשבון";
+        const auth = getAuth();
+        const userRecord = await auth.getUser(request.auth.uid);
+        await auth.setCustomUserClaims(request.auth.uid, {
+            ...(userRecord.customClaims || {}),
             phoneVerified: true,
-            role: "user",
-            name: name.trim(),
-            musicianId: musicianRef.id
-        }, { merge: true });
-        if (musicianSnapshot.exists) {
-            transaction.update(musicianRef, {
-                name: name.trim(),
-                phone,
-                status: musicianSnapshot.data().status || "active"
-            });
-        } else {
-            transaction.set(musicianRef, {
-                name: name.trim(),
-                role,
-                phone,
-                status: "active",
-                isAdmin: false
-            });
-        }
-    });
+            verifiedPhone: phone
+        });
 
-    return { phoneVerified: true };
+        operation = "שמירת פרופיל המשתמש ואיש הצוות";
+        await db.runTransaction(async transaction => {
+            const [userSnapshot, musicianSnapshot] = await Promise.all([
+                transaction.get(userRef),
+                transaction.get(musicianRef)
+            ]);
+            if (userSnapshot.exists &&
+                (normalizePhone(userSnapshot.data().phone) !== phone ||
+                    userSnapshot.data().phoneVerified !== true)) {
+                throw new HttpsError("already-exists", "לחשבון כבר קיים פרופיל שאינו תואם להרשמה.");
+            }
+
+            transaction.set(userRef, {
+                phone,
+                phoneVerified: true,
+                role: "user",
+                name: name.trim(),
+                musicianId: musicianRef.id
+            }, { merge: true });
+            if (musicianSnapshot.exists) {
+                transaction.update(musicianRef, {
+                    name: name.trim(),
+                    phone,
+                    status: musicianSnapshot.data().status || "active"
+                });
+            } else {
+                transaction.set(musicianRef, {
+                    name: name.trim(),
+                    role,
+                    phone,
+                    status: "active",
+                    isAdmin: false
+                });
+            }
+        });
+
+        return { phoneVerified: true };
+    } catch (error) {
+        if (error instanceof HttpsError) throw error;
+        const errorCode = String(error.code || "unknown");
+        logger.error("Staff registration failed", {
+            uid: request.auth.uid,
+            operation,
+            errorCode,
+            error: String(error.message || error)
+        });
+        throw new HttpsError(
+            "internal",
+            `ההרשמה נכשלה בשלב "${operation}" (${errorCode}). יש לבדוק את יומני הפונקציה.`
+        );
+    }
 });
 
 exports.verifyPhoneForAccount = onCall(async request => {

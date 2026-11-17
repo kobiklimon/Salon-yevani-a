@@ -60,6 +60,26 @@
         
         input, select, button, textarea { width: 100%; padding: 10px; margin-top: 6px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #444; background-color: #2a2a2a; color: #fff; font-size: 0.95rem; }
         input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; background-color: #1a1a1a; }
+        .password-field-wrap { position: relative; }
+        .password-field-wrap input { padding-inline-end: 46px; }
+        button.password-visibility-toggle {
+            position: absolute;
+            inset-inline-end: 8px;
+            top: calc(50% - 3px);
+            transform: translateY(-50%);
+            display: grid;
+            place-items: center;
+            width: 34px;
+            height: 34px;
+            margin: 0;
+            padding: 6px;
+            background: transparent;
+            color: var(--text-muted);
+        }
+        .password-visibility-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .password-visibility-toggle .eye-slash { display: none; }
+        .password-visibility-toggle:not([aria-pressed="true"]) .eye-slash { display: block; }
+        .password-rules { margin: -4px 0 12px; color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; }
         button { background-color: var(--accent-gold); color: #000; font-weight: bold; border: none; cursor: pointer; }
         .btn-danger { background-color: var(--danger); color: white; }
         .btn-success { background-color: var(--success); color: white; }
@@ -158,6 +178,17 @@
                 hasAccount: "רשום כבר? התחבר כאן",
                 phonePlaceholder: "מספר טלפון",
                 passPlaceholder: "סיסמה",
+                confirmPasswordPlaceholder: "הקלד/י שוב את הסיסמה",
+                passwordRules: "הסיסמה חייבת להכיל לפחות 8 תווים, אות גדולה ואות קטנה באנגלית, מספר וסימן (לא רווח).",
+                passwordMismatch: "הסיסמאות אינן תואמות. יש להקליד את אותה סיסמה בשני השדות.",
+                passwordMinLength: "לפחות 8 תווים",
+                passwordUppercase: "אות גדולה באנגלית",
+                passwordLowercase: "אות קטנה באנגלית",
+                passwordNumber: "מספר",
+                passwordSymbol: "סימן (לא רווח)",
+                passwordCommon: "הסיסמה נפוצה מדי. יש לבחור סיסמה ייחודית יותר.",
+                showPassword: "הצג סיסמה",
+                hidePassword: "הסתר סיסמה",
                 fullNamePlaceholder: "שם מלא",
                 selectRoleLabel: "בחר תפקיד במערכת:",
                 selectBranchLabel: "בחר את הסניף שברשותך:",
@@ -344,6 +375,17 @@
                 hasAccount: "Already registered? Log in here",
                 phonePlaceholder: "Phone Number",
                 passPlaceholder: "Password",
+                confirmPasswordPlaceholder: "Re-enter password",
+                passwordRules: "Use at least 8 characters, including an uppercase English letter, a lowercase English letter, a number, and a symbol (not a space).",
+                passwordMismatch: "The passwords do not match. Enter the same password in both fields.",
+                passwordMinLength: "At least 8 characters",
+                passwordUppercase: "An uppercase English letter",
+                passwordLowercase: "A lowercase English letter",
+                passwordNumber: "A number",
+                passwordSymbol: "A symbol (not a space)",
+                passwordCommon: "This password is too common. Choose a more unique password.",
+                showPassword: "Show password",
+                hidePassword: "Hide password",
                 fullNamePlaceholder: "Full Name",
                 selectRoleLabel: "Select Role:",
                 selectBranchLabel: "Select Your Branch:",
@@ -530,6 +572,17 @@
                 hasAccount: "Έχετε ήδη λογαριασμό; Σύνδεση εδώ",
                 phonePlaceholder: "Αριθμός Τηλεφώνου",
                 passPlaceholder: "Κωδικός πρόσβασης",
+                confirmPasswordPlaceholder: "Πληκτρολογήστε ξανά τον κωδικό",
+                passwordRules: "Χρησιμοποιήστε τουλάχιστον 8 χαρακτήρες, με ένα κεφαλαίο και ένα πεζό αγγλικό γράμμα, έναν αριθμό και ένα σύμβολο (όχι κενό).",
+                passwordMismatch: "Οι κωδικοί δεν ταιριάζουν. Πληκτρολογήστε τον ίδιο κωδικό και στα δύο πεδία.",
+                passwordMinLength: "Τουλάχιστον 8 χαρακτήρες",
+                passwordUppercase: "Ένα κεφαλαίο αγγλικό γράμμα",
+                passwordLowercase: "Ένα πεζό αγγλικό γράμμα",
+                passwordNumber: "Ένας αριθμός",
+                passwordSymbol: "Ένα σύμβολο (όχι κενό)",
+                passwordCommon: "Αυτός ο κωδικός είναι πολύ συνηθισμένος. Επιλέξτε έναν πιο μοναδικό.",
+                showPassword: "Εμφάνιση κωδικού",
+                hidePassword: "Απόκρυψη κωδικού",
                 fullNamePlaceholder: "Ονοματεπώνυμο",
                 selectRoleLabel: "Επιλέξτε ρόλο:",
                 selectBranchLabel: "Επιλέξτε κατάστημα:",
@@ -718,6 +771,7 @@
             });
 
             applyTranslations();
+            updatePasswordVisibilityLabels();
             configureBranchManagerProfile();
             if (document.getElementById('edit-branch-id').value) {
                 document.getElementById('branch-submit-btn').textContent = i18n[currentLang].updateBranchBtn;
@@ -875,25 +929,41 @@
             return `user_${cleanPhone(canonicalPhone)}@salonyevani.local`;
         }
 
-        function validatePasswordRules(password) {
+        function validatePasswordRules(password, t = i18n[currentLang]) {
             const commonPasswords = ["12345678", "123456789", "password", "1234567890", "qwertyuiop", "salon1234"];
+            const errors = [];
             if (commonPasswords.includes(password.toLowerCase())) {
-                return "הסיסמה שבחרת נפוצה וגנרית מדי. נא לבחור סיסמה מורכבת יותר.";
+                errors.push(t.passwordCommon);
             }
+            if (password.length < 8) errors.push(t.passwordMinLength);
+            if (!/[A-Z]/.test(password)) errors.push(t.passwordUppercase);
+            if (!/[a-z]/.test(password)) errors.push(t.passwordLowercase);
+            if (!/[0-9]/.test(password)) errors.push(t.passwordNumber);
+            if (!/[^\p{L}\p{N}\s]/u.test(password)) errors.push(t.passwordSymbol);
+            return errors.length ? errors.join("\n• ") : null;
+        }
 
-            if (password.length < 8) {
-                return "הסיסמה חייבת להכיל לפחות 8 תווים.";
-            }
+        window.togglePasswordVisibility = (inputId, button) => {
+            const input = document.getElementById(inputId);
+            if (!input || !button) return;
+            const isVisible = input.type === "password";
+            input.type = isVisible ? "text" : "password";
+            button.setAttribute("aria-pressed", String(isVisible));
+            const label = isVisible ? i18n[currentLang].hidePassword : i18n[currentLang].showPassword;
+            button.setAttribute("aria-label", label);
+            button.title = label;
+        };
 
-            const hasUpperCase = /[A-Z]/.test(password);
-            const hasLowerCase = /[a-z]/.test(password);
-            const hasNumbers = /[0-9]/.test(password);
-
-            if (!hasUpperCase || !hasLowerCase || !hasNumbers) {
-                return "הסיסמה חייבת לשלב אות גדולה באנגלית (A-Z), אות קטנה (a-z) ומספר (0-9).";
-            }
-
-            return null;
+        function updatePasswordVisibilityLabels() {
+            document.querySelectorAll(".password-visibility-toggle").forEach(button => {
+                const input = document.getElementById(button.dataset.target);
+                if (!input) return;
+                const label = input.type === "password"
+                    ? i18n[currentLang].showPassword
+                    : i18n[currentLang].hidePassword;
+                button.setAttribute("aria-label", label);
+                button.title = label;
+            });
         }
 
         function updateOnlineStatusBanner() {
@@ -1060,14 +1130,23 @@
 
         window.toggleAuthMode = (isRegister) => {
             clearRegistrationVerification();
+            const confirmPasswordWrap = document.getElementById('register-confirm-password-wrap');
+            const confirmPassword = document.getElementById('register-confirm-password');
+            const passwordRules = document.getElementById('password-rules');
             if(isRegister) {
                 document.getElementById('register-fields').classList.remove('hidden');
+                confirmPasswordWrap.classList.remove('hidden');
+                confirmPassword.required = true;
+                passwordRules.classList.remove('hidden');
                 document.getElementById('login-submit-btn').classList.add('hidden');
                 document.getElementById('register-submit-btn').classList.remove('hidden');
                 document.getElementById('toggle-to-reg').classList.add('hidden');
                 document.getElementById('toggle-to-login').classList.remove('hidden');
             } else {
                 document.getElementById('register-fields').classList.add('hidden');
+                confirmPasswordWrap.classList.add('hidden');
+                confirmPassword.required = false;
+                passwordRules.classList.add('hidden');
                 document.getElementById('login-submit-btn').classList.remove('hidden');
                 document.getElementById('register-submit-btn').classList.add('hidden');
                 document.getElementById('toggle-to-reg').classList.remove('hidden');
@@ -1085,16 +1164,26 @@
             const codeInput = document.getElementById('registration-verification-code');
             const verifyButton = document.getElementById('register-submit-btn');
             const phoneInput = document.getElementById('login-phone');
+            const confirmPasswordInput = document.getElementById('register-confirm-password');
+            const confirmPasswordWrap = document.getElementById('register-confirm-password-wrap');
             if (codeInput) {
                 codeInput.value = '';
                 codeInput.classList.add('hidden');
+            }
+            if (confirmPasswordInput) {
+                confirmPasswordInput.value = '';
+                confirmPasswordInput.readOnly = false;
+                confirmPasswordInput.type = 'password';
+                confirmPasswordWrap.querySelector('.password-visibility-toggle')
+                    .setAttribute('aria-pressed', 'false');
+                updatePasswordVisibilityLabels();
             }
             if (verifyButton) {
                 verifyButton.dataset.i18n = 'sendVerificationCodeBtn';
                 verifyButton.textContent = i18n[currentLang].sendVerificationCodeBtn;
             }
             if (phoneInput) phoneInput.readOnly = false;
-            ['login-password', 'reg-name'].forEach(id => {
+            ['login-password', 'reg-confirm-password', 'reg-name'].forEach(id => {
                 const input = document.getElementById(id);
                 if (input) input.readOnly = false;
             });
@@ -1553,6 +1642,7 @@
                 const normalizedPhone = normalizeIsraeliMobile(enteredPhone);
                 const phone = canonicalIsraeliMobile(enteredPhone);
                 const password = document.getElementById('login-password').value;
+                const confirmPassword = document.getElementById('reg-confirm-password').value;
                 const name = document.getElementById('reg-name').value.trim();
                 const role = document.getElementById('reg-role').value;
 
@@ -1568,10 +1658,14 @@
                     alert("נא למלא שם מלא, מספר טלפון וסיסמה להרשמה.");
                     return;
                 }
+                if (password !== confirmPassword) {
+                    alert(t.passwordMismatch);
+                    return;
+                }
 
                 const passwordErr = validatePasswordRules(password);
                 if (passwordErr) {
-                    alert("⚠️ הנחיות לבחירת סיסמה:\n\n" + passwordErr);
+                    alert(`⚠️ ${t.passwordRules}\n\n• ${passwordErr}`);
                     return;
                 }
                 try {
@@ -1588,7 +1682,7 @@
                     document.getElementById('register-submit-btn').dataset.i18n = 'verifyAndRegisterBtn';
                     document.getElementById('register-submit-btn').textContent = t.verifyAndRegisterBtn;
                     document.getElementById('login-phone').readOnly = true;
-                    ['login-password', 'reg-name'].forEach(id => {
+                    ['login-password', 'reg-confirm-password', 'reg-name'].forEach(id => {
                         document.getElementById(id).readOnly = true;
                     });
                     document.getElementById('reg-role').disabled = true;
@@ -1643,6 +1737,15 @@
                     alert("ההרשמה נשמרה, אך לא ניתן לרענן את ההתחברות. נסה להתחבר מחדש.");
                 } else if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
                     alert("שגיאה בהרשמה: מספר טלפון כבר קיים במערכת.");
+                } else if (err.code === 'functions/internal' || err.code === 'internal') {
+                    console.error("Firebase registration function failed internally:", {
+                        code: err.code,
+                        message: err.message || String(err)
+                    });
+                    const serverDetails = err.message && !/^(internal|internal error)$/i.test(err.message.trim())
+                        ? `\n\nפרטי שרת: ${err.message}`
+                        : "";
+                    alert(`אימות ה-SMS הצליח, אך שרת Firebase נכשל בהשלמת ההרשמה. המערכת תנסה להסיר את החשבון הזמני שנוצר.${serverDetails}\n\nיש לנסות שוב; אם השגיאה חוזרת, מנהל המערכת צריך לבדוק את יומני Cloud Functions עבור completeStaffRegistration.`);
                 } else {
                     alert("שגיאה בהרשמה: " + (err.message || err));
                 }
@@ -3802,7 +3905,19 @@
                     </select>
                 </div>
 
-                <input type="password" id="login-password" required data-i18n-placeholder="passPlaceholder" placeholder="סיסמה" autocomplete="new-password">
+                <div class="password-field-wrap">
+                    <input type="password" id="login-password" required data-i18n-placeholder="passPlaceholder" placeholder="סיסמה" autocomplete="new-password">
+                    <button type="button" class="password-visibility-toggle" data-target="login-password" aria-label="הצג סיסמה" title="הצג סיסמה" aria-pressed="false" onclick="togglePasswordVisibility('login-password', this)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle><path class="eye-slash" d="m3 3 18 18"></path></svg>
+                    </button>
+                </div>
+                <div id="register-confirm-password-wrap" class="password-field-wrap hidden">
+                    <input type="password" id="register-confirm-password" data-i18n-placeholder="confirmPasswordPlaceholder" placeholder="הקלד/י שוב את הסיסמה" autocomplete="new-password">
+                    <button type="button" class="password-visibility-toggle" data-target="register-confirm-password" aria-label="הצג סיסמה" title="הצג סיסמה" aria-pressed="false" onclick="togglePasswordVisibility('register-confirm-password', this)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle><path class="eye-slash" d="m3 3 18 18"></path></svg>
+                    </button>
+                </div>
+                <p id="password-rules" class="password-rules hidden" data-i18n="passwordRules">הסיסמה חייבת להכיל לפחות 8 תווים, אות גדולה ואות קטנה באנגלית, מספר וסימן (לא רווח).</p>
                 <input type="text" id="registration-verification-code" class="hidden" inputmode="numeric" autocomplete="one-time-code" maxlength="6" data-i18n-placeholder="verificationCodePlaceholder" placeholder="קוד האימות שקיבלת ב-SMS">
                 <div id="recaptcha-container"></div>
                 
