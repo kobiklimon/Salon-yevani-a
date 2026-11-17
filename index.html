@@ -1183,7 +1183,7 @@
                 verifyButton.textContent = i18n[currentLang].sendVerificationCodeBtn;
             }
             if (phoneInput) phoneInput.readOnly = false;
-            ['login-password', 'reg-confirm-password', 'reg-name'].forEach(id => {
+            ['login-password', 'register-confirm-password', 'reg-name'].forEach(id => {
                 const input = document.getElementById(id);
                 if (input) input.readOnly = false;
             });
@@ -1642,7 +1642,7 @@
                 const normalizedPhone = normalizeIsraeliMobile(enteredPhone);
                 const phone = canonicalIsraeliMobile(enteredPhone);
                 const password = document.getElementById('login-password').value;
-                const confirmPassword = document.getElementById('reg-confirm-password').value;
+                const confirmPassword = document.getElementById('register-confirm-password').value;
                 const name = document.getElementById('reg-name').value.trim();
                 const role = document.getElementById('reg-role').value;
 
@@ -1682,7 +1682,7 @@
                     document.getElementById('register-submit-btn').dataset.i18n = 'verifyAndRegisterBtn';
                     document.getElementById('register-submit-btn').textContent = t.verifyAndRegisterBtn;
                     document.getElementById('login-phone').readOnly = true;
-                    ['login-password', 'reg-confirm-password', 'reg-name'].forEach(id => {
+                    ['login-password', 'register-confirm-password', 'reg-name'].forEach(id => {
                         document.getElementById(id).readOnly = true;
                     });
                     document.getElementById('reg-role').disabled = true;
