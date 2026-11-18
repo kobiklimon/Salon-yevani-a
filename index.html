@@ -1377,7 +1377,7 @@
                     : '';
                 calendarSelect.value = currentBranchId;
             } else if (calendarSelect) {
-                calendarSelect.innerHTML = `<option value="">${i18n[currentLang].allBranches}</option>`;
+                calendarSelect.innerHTML = `<option value="" data-i18n="allBranches">${i18n[currentLang].allBranches}</option>`;
                 allBranches.forEach(branch => calendarSelect.add(new Option(branch.name || '', branch.id)));
                 calendarSelect.value = allBranches.some(branch => branch.id === selectedBranchId) ? selectedBranchId : '';
             }
@@ -1813,9 +1813,9 @@
             if (!calendarSelect) return;
             const t = i18n[currentLang];
 
-            calendarSelect.innerHTML = `<option value="">${t.allBranches}</option>`;
+            calendarSelect.innerHTML = `<option value="" data-i18n="allBranches">${t.allBranches}</option>`;
             if (reportSelect) {
-                reportSelect.innerHTML = `<option value="">${t.allBranches}</option>`;
+                reportSelect.innerHTML = `<option value="" data-i18n="allBranches">${t.allBranches}</option>`;
             }
 
             allBranches = [];
