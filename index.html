@@ -999,7 +999,8 @@
             }
             if (permission !== 'granted') return false;
 
-            const registration = await navigator.serviceWorker.register('/sw.js');
+            const serviceWorkerUrl = new URL('./sw.js', window.location.href);
+            const registration = await navigator.serviceWorker.register(serviceWorkerUrl);
             const currentToken = await getToken(messaging, {
                 serviceWorkerRegistration: registration,
                 vapidKey: firebaseVapidKey

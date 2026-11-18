@@ -11,24 +11,25 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
+const appBaseUrl = new URL('./', self.location.href);
 
 // טיפול בהתראות פוש ברקע
 messaging.onBackgroundMessage((payload) => {
     const notificationTitle = payload.notification ? payload.notification.title : 'הודעה חדשה';
     const notificationOptions = {
         body: payload.notification ? payload.notification.body : (payload.data ? payload.data.message : 'הודעה חדשה מהמערכת'),
-        icon: '/icon.png'
+        icon: new URL('icon.png', appBaseUrl).href
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // מטמון (Cache) בסיסי לתמיכה במצב אופליין
-const CACHE_NAME = 'salon-yevani-cache-v4';
+const CACHE_NAME = 'salon-yevani-cache-v5';
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/icon.png'
+    appBaseUrl.href,
+    new URL('index.html', appBaseUrl).href,
+    new URL('icon.png', appBaseUrl).href
 ];
 
 // התקנת ה-Service Worker ושמירת קבצים בזיכרון המקומי
